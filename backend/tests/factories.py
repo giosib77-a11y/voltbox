@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.db.models import Brand, Category, Product, ProductImage
+from app.services.search import build_search_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 PHONES_FILTERS: list[dict[str, Any]] = [
@@ -59,11 +60,15 @@ async def make_product(
     is_featured: bool = False,
     created_at: datetime | None = None,
     images: int = 3,
+    short_description: str = "მოკლე აღწერა",
 ) -> Product:
+    # search_text ჩაწერისას ივსება — ზუსტად ისე, როგორც seed-ში.
+    # ფაბრიკაში დუბლირება განზრახია: ტესტები რეალურ write-გზას უნდა იმეორებდნენ,
+    # თორემ ძებნა მხოლოდ ტესტებში „მუშაობდა“ ან პირიქით
     product = Product(
         slug=slug,
         name=name or slug,
-        short_description="მოკლე აღწერა",
+        short_description=short_description,
         description="სრული აღწერა",
         category_id=category.id,
         brand_id=brand.id,
@@ -77,6 +82,15 @@ async def make_product(
         is_new=is_new,
         is_featured=is_featured,
         created_at=created_at or datetime(2026, 1, 1, tzinfo=UTC),
+        search_text=build_search_text(
+            name=name or slug,
+            brand_name=brand.name,
+            category_name=category.name,
+            category_slug=category.slug,
+            short_description=short_description,
+            tags=["tag"],
+            specs=specs or {},
+        ),
     )
     db.add(product)
     await db.flush()

@@ -10,13 +10,14 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import settings
 from app.db.models import Brand, Category, Product
+from app.services import search as search_service
 
 # ძებნის გვერდზე კატეგორია აღარაა ერთი — ფილტრებად კატეგორია და ბრენდი გვრჩება
 GLOBAL_FILTERS: list[dict[str, Any]] = [
@@ -159,14 +160,9 @@ def collect_conditions(
     return conditions
 
 
-def search_condition(term: str) -> Any:
-    """დროებითი ტექსტური ძებნა — Phase 3-ში `services/search.py` ჩაანაცვლებს."""
-    pattern = f"%{term.strip().lower()}%"
-    return or_(
-        func.lower(Product.name).like(pattern),
-        func.lower(Product.short_description).like(pattern),
-        func.lower(Brand.name).like(pattern),
-    )
+def search_condition(term: str) -> Any | None:
+    """ტექსტური ძებნის პირობა — ლოგიკა `services/search.py`-შია."""
+    return search_service.search_condition(term)
 
 
 async def compute_facets(
@@ -252,8 +248,8 @@ async def list_products(
     filter_config = await resolve_filter_config(db, category_slugs, bool(search_term))
 
     extra: list[Any] = []
-    if search_term:
-        extra.append(search_condition(search_term))
+    if search_term and (term_condition := search_condition(search_term)) is not None:
+        extra.append(term_condition)
 
     conditions = collect_conditions(filter_config, query_params) + extra
 

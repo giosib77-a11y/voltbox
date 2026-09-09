@@ -93,6 +93,11 @@ class Product(UUIDPrimaryKey, Timestamps, Base):
         ARRAY(Text), nullable=False, server_default=text("'{}'::text[]")
     )
 
+    # წინასწარ ნორმალიზებული საძებნი ტექსტი (სიტყვები + ფუძეები + ტრანსლიტერაცია).
+    # ივსება `services/search.build_search_text`-ით ჩაწერისას — ნებისმიერმა
+    # მომავალმა write-გზამ ის უნდა გამოიძახოს, თორემ ინდექსი მოძველდება.
+    search_text: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+
     rating: Mapped[Decimal] = mapped_column(Numeric(2, 1), nullable=False, server_default="0")
     reviews_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
@@ -123,6 +128,12 @@ class Product(UUIDPrimaryKey, Timestamps, Base):
         # ქართულ ტექსტს Postgres-ის FTS ლექსიკონი არ აქვს, ამიტომ ძებნა
         # trigram-მსგავსებაზე დგას — ინდექსი აქვე ცხადდება, რომ მოდელი და
         # მიგრაცია ერთმანეთს არ დაშორდნენ (autogenerate drift)
+        Index(
+            "ix_products_search_text_trgm",
+            "search_text",
+            postgresql_using="gin",
+            postgresql_ops={"search_text": "gin_trgm_ops"},
+        ),
         Index(
             "ix_products_name_trgm",
             "name",

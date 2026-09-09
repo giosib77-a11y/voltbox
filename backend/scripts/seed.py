@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.db.models import Brand, Category, Product, ProductImage
 from app.db.session import SessionLocal, engine
+from app.services.search import build_search_text
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 EXPORTER = BACKEND_DIR / "scripts" / "export_mock_data.mjs"
@@ -156,6 +157,16 @@ async def upsert_products(
         product.is_new = bool(row.get("isNew"))
         product.is_active = True
         product.created_at = parse_iso(row["createdAt"])
+        # საძებნი ტექსტი ჩაწერისას ივსება — query-ს დროს გამოთვლა ინდექსს გამორთავდა
+        product.search_text = build_search_text(
+            name=row["name"],
+            brand_name=brand.name,
+            category_name=category.name,
+            category_slug=category.slug,
+            short_description=row.get("shortDescription", ""),
+            tags=list(row.get("tags", [])),
+            specs=row.get("specs", {}),
+        )
         db.add(product)
         await db.flush()
 
