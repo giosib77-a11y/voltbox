@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800" role="img" aria-label="Samsung · Samsung Galaxy Buds2 Pro">
+  <title>Samsung · Samsung Galaxy Buds2 Pro</title>
+  <defs>
+    <linearGradient id="g-hp-002-1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="hsl(209 34% 96%)"/>
+      <stop offset="1" stop-color="hsl(237 42% 88%)"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="800" fill="url(#g-hp-002-1)"/>
+  <circle cx="560" cy="600" r="290" fill="hsl(227 60% 82%)" opacity="0.55"/>
+  <g transform="translate(400 396) rotate(-14) scale(0.92)">
+    <path d="M-176 40 A176 176 0 0 1 176 40" fill="none" stroke="hsl(209 22% 26%)" stroke-width="40" stroke-linecap="round"/>
+    <rect x="-224" y="30" width="96" height="164" rx="42" fill="hsl(209 22% 26%)"/>
+    <rect x="128" y="30" width="96" height="164" rx="42" fill="hsl(209 22% 26%)"/>
+    <rect x="-206" y="52" width="60" height="120" rx="30" fill="hsl(14 72% 55%)" opacity="0.85"/>
+    <rect x="146" y="52" width="60" height="120" rx="30" fill="hsl(14 72% 55%)" opacity="0.85"/>
+  </g>
+  <g opacity="0.5">
+    <rect x="286" y="700" width="228" height="34" rx="17" fill="hsl(209 22% 26%)" opacity="0.08"/>
+    <text x="400" y="723" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20" font-weight="600" fill="hsl(209 18% 20%)">Samsung</text>
+  </g>
+</svg>

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800" role="img" aria-label="JBL · JBL Tune 520BT">
+  <title>JBL · JBL Tune 520BT</title>
+  <defs>
+    <linearGradient id="g-hp-003-0" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="hsl(198 34% 96%)"/>
+      <stop offset="1" stop-color="hsl(226 42% 88%)"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="800" fill="url(#g-hp-003-0)"/>
+  <circle cx="250" cy="200" r="250" fill="hsl(216 60% 82%)" opacity="0.55"/>
+  <g transform="translate(400 396) rotate(0) scale(1)">
+    <path d="M-176 40 A176 176 0 0 1 176 40" fill="none" stroke="hsl(198 22% 26%)" stroke-width="40" stroke-linecap="round"/>
+    <rect x="-224" y="30" width="96" height="164" rx="42" fill="hsl(198 22% 26%)"/>
+    <rect x="128" y="30" width="96" height="164" rx="42" fill="hsl(198 22% 26%)"/>
+    <rect x="-206" y="52" width="60" height="120" rx="30" fill="hsl(3 72% 55%)" opacity="0.85"/>
+    <rect x="146" y="52" width="60" height="120" rx="30" fill="hsl(3 72% 55%)" opacity="0.85"/>
+  </g>
+  <g opacity="0.5">
+    <rect x="286" y="700" width="228" height="34" rx="17" fill="hsl(198 22% 26%)" opacity="0.08"/>
+    <text x="400" y="723" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20" font-weight="600" fill="hsl(198 18% 20%)">JBL</text>
+  </g>
+</svg>

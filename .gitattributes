@@ -1,0 +1,7 @@
+# ხაზის დაბოლოებები ნორმალიზდება: repo-ში ყოველთვის LF,
+# სამუშაო დირექტორიაში — პლატფორმის ნაგულისხმევი.
+* text=auto eol=lf
+
+# ბინარული / გენერირებული — diff-ში არ იფურთხება
+package-lock.json  -diff  linguist-generated
+*.svg              text   eol=lf

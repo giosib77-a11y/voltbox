@@ -1,0 +1,64 @@
+import { defineConfig, loadEnv } from 'vite';
+import react from '@vitejs/plugin-react';
+import { fileURLToPath, URL } from 'node:url';
+
+/**
+ * ტუნელის სერვისების დომენები.
+ *
+ * Vite 5.4+ ამოწმებს `Host` header-ს (DNS-rebinding-ისგან დასაცავად) და უცნობ
+ * დომენს „Blocked request“-ით აბრუნებს. ngrok/cloudflared-ით გაზიარებისთვის
+ * ეს დომენები აშკარად უნდა იყოს დაშვებული.
+ *
+ * `true`-ს განზრახ არ ვწერთ — ის ნებისმიერ host-ს უშვებს და დაცვას აზრს უკარგავს.
+ */
+const TUNNEL_HOSTS = [
+  '.ngrok-free.app',
+  '.ngrok-free.dev',
+  '.ngrok.app',
+  '.ngrok.io',
+  '.trycloudflare.com',
+  '.loca.lt',
+];
+
+// https://vitejs.dev/config/
+export default defineConfig(({ mode }) => {
+  // `npm run dev:share` → mode === 'share': ტუნელისთვის მორგებული dev-სერვერი
+  const isShared = mode === 'share';
+
+  /**
+   * Data layer-ის გადამრთველი — ბილდის დროს.
+   *
+   * `services/api.js` აიმპორტებს ერთადერთ სპეციფიკატორს `virtual:api-impl`,
+   * რომელიც აქ იხსნება კონკრეტულ ფაილად. შედეგად მოდულების გრაფში მხოლოდ
+   * *ერთი* იმპლემენტაცია ხვდება: mock რეჟიმში `httpApi.js` საერთოდ არ არსებობს,
+   * http რეჟიმში კი `mockApi.js` და მისი 61-პროდუქტიანი ბაზა (~127 KB) იშლება.
+   *
+   * ეს tree-shaking-ზე დაყრდნობას სჯობს: Rollup `products.js`-ის მოდულის
+   * დონეზე `.map()`-ს პოტენციურ side effect-ად თვლის და ვერ აგდებს.
+   */
+  const apiMode = loadEnv(mode, process.cwd(), '').VITE_API_MODE === 'http' ? 'http' : 'mock';
+  const apiImpl = apiMode === 'http' ? './src/services/httpApi.js' : './src/services/mockApi.js';
+
+  return {
+    plugins: [react()],
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
+        'virtual:api-impl': fileURLToPath(new URL(apiImpl, import.meta.url)),
+      },
+    },
+    server: {
+      port: 5173,
+      open: false,
+      host: isShared ? true : undefined,
+      allowedHosts: TUNNEL_HOSTS,
+      // ტუნელი https-ზე მუშაობს, ამიტომ HMR-ის websocket 443-ზე უნდა წავიდეს.
+      // ლოკალურ რეჟიმში ეს არ ეხება — თორემ HMR localhost:443-ს დაუკავშირდებოდა.
+      hmr: isShared ? { protocol: 'wss', clientPort: 443 } : undefined,
+    },
+    preview: {
+      port: 4173,
+      allowedHosts: TUNNEL_HOSTS,
+    },
+  };
+});

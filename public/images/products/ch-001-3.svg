@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800" role="img" aria-label="Anker · Anker 511 Nano 30W დამტენი">
+  <title>Anker · Anker 511 Nano 30W დამტენი</title>
+  <defs>
+    <linearGradient id="g-ch-001-2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="hsl(297 34% 96%)"/>
+      <stop offset="1" stop-color="hsl(325 42% 88%)"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="800" fill="url(#g-ch-001-2)"/>
+  <circle cx="620" cy="180" r="220" fill="hsl(315 60% 82%)" opacity="0.55"/>
+  <g transform="translate(400 396) rotate(9) scale(1.08)">
+    <rect x="-140" y="-140" width="280" height="280" rx="56" fill="hsl(297 22% 26%)"/>
+    <rect x="-70" y="-236" width="30" height="106" rx="12" fill="hsl(297 20% 38%)"/>
+    <rect x="40" y="-236" width="30" height="106" rx="12" fill="hsl(297 20% 38%)"/>
+    <rect x="-58" y="60" width="116" height="26" rx="13" fill="hsl(102 72% 55%)"/>
+    <path d="M14 -74 L-42 6 h44 l-14 66 58 -84 h-46 z" fill="hsl(102 72% 55%)"/>
+  </g>
+  <g opacity="0.5">
+    <rect x="286" y="700" width="228" height="34" rx="17" fill="hsl(297 22% 26%)" opacity="0.08"/>
+    <text x="400" y="723" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20" font-weight="600" fill="hsl(297 18% 20%)">Anker</text>
+  </g>
+</svg>
