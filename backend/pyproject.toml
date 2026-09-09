@@ -70,3 +70,5 @@ asyncio_default_fixture_loop_scope = "session"
 # თორემ asyncpg-ის კავშირი სხვა event loop-იდან იკითხება და ჩავარდება
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
+# slowapi ჯერ asyncio.iscoroutinefunction-ს იყენებს — ჩვენი კოდი არაა
+filterwarnings = ["ignore:.*iscoroutinefunction.*:DeprecationWarning"]

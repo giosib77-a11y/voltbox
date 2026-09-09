@@ -5,9 +5,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
+from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -17,10 +16,8 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.errors import error_body, register_exception_handlers
 from app.core.logging import RequestContextMiddleware, configure_logging
+from app.core.rate_limit import limiter
 from app.db.session import engine
-
-# storage_uri მეხსიერებაშია; Redis-ზე გადასვლა მხოლოდ ამ ერთი არგუმენტის ცვლილებაა
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 
 @asynccontextmanager
@@ -52,6 +49,7 @@ def create_app() -> FastAPI:
 
     # middleware-ის რიგი მნიშვნელოვანია: request_id ყველაზე გარეთ უნდა იყოს,
     # რომ CORS-ისა და შეცდომების პასუხებსაც მოხვდეს
+    app.add_middleware(SlowAPIMiddleware)
     app.add_middleware(RequestContextMiddleware)
     app.add_middleware(
         CORSMiddleware,
