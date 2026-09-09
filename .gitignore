@@ -8,3 +8,12 @@ dist-ssr
 !.vscode/extensions.json
 npm-debug.log*
 yarn-error.log*
+
+# backend
+backend/.env
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/

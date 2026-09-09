@@ -1,0 +1,36 @@
+# ლოკალური დეველოპმენტის გარემო.
+# პროდაქშენში ბაზა Supabase-ია — ეს compose მხოლოდ dev/CI-სთვისაა.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: voltbox-pg
+    environment:
+      POSTGRES_USER: voltbox
+      POSTGRES_PASSWORD: voltbox
+      POSTGRES_DB: voltbox
+    ports:
+      - "55432:5432"
+    volumes:
+      - voltbox-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voltbox -d voltbox"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://voltbox:voltbox@db:5432/voltbox
+      APP_ENV: development
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    profiles: ["full"]   # `docker compose up` ნაგულისხმევად მხოლოდ ბაზას უშვებს
+
+volumes:
+  voltbox-pgdata:
