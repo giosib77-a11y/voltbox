@@ -4,22 +4,12 @@ Supabase-ის Session pooler-თან TLS სავალდებულო�
 ამიტომ connect_args დინამიურად იწყობა (`settings.requires_ssl`).
 """
 
-import ssl
 from collections.abc import AsyncGenerator
-from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
-
-
-def _connect_args() -> dict[str, Any]:
-    if not settings.requires_ssl:
-        return {}
-    # Supabase-ის სერტიფიკატი საჯარო CA-თია ხელმოწერილი — ვერიფიკაცია რჩება ჩართული
-    context = ssl.create_default_context()
-    return {"ssl": context}
-
+from app.db.ssl import build_connect_args
 
 engine = create_async_engine(
     settings.database_url,
@@ -27,7 +17,7 @@ engine = create_async_engine(
     pool_size=settings.db_pool_size,
     max_overflow=settings.db_max_overflow,
     pool_pre_ping=True,  # pooler-მა შეიძლება უმოქმედო კავშირი დახუროს
-    connect_args=_connect_args(),
+    connect_args=build_connect_args(),
 )
 
 SessionLocal = async_sessionmaker(

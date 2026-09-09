@@ -21,3 +21,5 @@ backend/.ruff_cache/
 backend/_mock.json
 backend/_mock.err
 backend/*.tmp
+
+backend/products.json

@@ -13,6 +13,7 @@ from app.core.config import settings
 # ყველა მოდელი უნდა დაიმპორტდეს, თორემ autogenerate ცხრილებს ვერ დაინახავს
 from app.db import models  # noqa: F401
 from app.db.base import Base
+from app.db.ssl import build_connect_args
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlalchemy.pool import NullPool
 
@@ -52,7 +53,7 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=NullPool,
-        connect_args={"ssl": "require"} if settings.requires_ssl else {},
+        connect_args=build_connect_args(),
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

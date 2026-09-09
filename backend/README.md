@@ -37,6 +37,52 @@ mypy app
 pytest -q
 ```
 
+## პროდუქტების დამატება
+
+ბაზა ორ ნაწილად იყოფა:
+
+| | რა არის | ცოცხალ ბაზაზე |
+|---|---|---|
+| **სტრუქტურა** — `categories`, `brands` | კონფიგია: `categories.filters` მთელ FilterSidebar-ს კვებავს | ✅ სჭირდება |
+| **პროდუქტები** | `src/data/products.js`-ის 61 ჩანაწერი სატესტოა | ❌ არ სჭირდება |
+
+```bash
+python scripts/seed.py --structure-only   # მხოლოდ კატეგორიები და ბრენდები
+python scripts/seed.py                    # + 61 სატესტო პროდუქტი (ლოკალურისთვის)
+```
+
+### რეალური პროდუქტების იმპორტი
+
+```bash
+cp scripts/products.example.json products.json     # შეავსე
+python scripts/import_products.py products.json --dry-run   # ჯერ შემოწმება
+python scripts/import_products.py products.json             # მერე ჩაწერა
+```
+
+`slug` უნიკალური გასაღებია — ხელახლა გაშვება ჩანაწერს **ანახლებს** და არ ადუბლირებს.
+
+სავალდებულო ველები: `slug`, `name`, `category` (slug-ით), `brand` (სახელით),
+`price`. დანარჩენი არასავალდებულოა — სრული ნუსხა `scripts/products.example.json`-შია.
+
+სკრიპტი ავტომატურად აგვარებს იმას, რაც ხელით შევსებისას ყველაზე ხშირად ტყდება:
+- `category_id` / `brand_id` UUID-ების ამოხსნას სახელით
+- **`search_text`-ის გამოთვლას** — მის გარეშე პროდუქტი კატალოგში ჩანს, ძებნა კი
+  ვერ პოულობს
+- სურათებს `position`-ითა და `is_primary`-ით
+
+ვალიდაცია ჯერ ყველა ჩანაწერს ამოწმებს და მხოლოდ მერე წერს — ნახევრად შესრულებული
+იმპორტი გამორიცხულია.
+
+### თუ Supabase-ის Table Editor-ით დაამატე
+
+ხელით ჩაწერილ პროდუქტს `search_text` ცარიელი დარჩება. გაასწორე:
+
+```bash
+python scripts/reindex_search.py
+```
+
+---
+
 ## Supabase
 
 `DATABASE_URL` უნდა იყოს **Session pooler**-ის URI (არა Direct, არა Transaction).

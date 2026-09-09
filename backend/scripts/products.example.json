@@ -1,0 +1,43 @@
+{
+  "_": "შაბლონი. დააკოპირე, შეავსე და გაუშვი: python scripts/import_products.py products.json",
+  "products": [
+    {
+      "slug": "samsung-galaxy-s24-256gb",
+      "name": "Samsung Galaxy S24 256GB",
+      "category": "phones",
+      "brand": "Samsung",
+      "price": 2499,
+      "oldPrice": 2799,
+      "stock": 12,
+      "shortDescription": "6.2\" AMOLED, 8GB RAM, 5G",
+      "description": "სრული აღწერა, რომელიც პროდუქტის გვერდზე „აღწერა“ ტაბში გამოჩნდება.",
+      "specs": {
+        "ram": "8 GB",
+        "storage": "256 GB",
+        "screen": "6.2\"",
+        "network": "5G",
+        "color": "შავი",
+        "warranty": "24 თვე"
+      },
+      "tags": ["5g", "amoled"],
+      "images": [
+        "/images/products/ph-001-1.svg",
+        "/images/products/ph-001-2.svg",
+        "/images/products/ph-001-3.svg"
+      ],
+      "rating": 4.6,
+      "reviewsCount": 128,
+      "isNew": true,
+      "isFeatured": true,
+      "sku": "PH-001"
+    },
+    {
+      "slug": "minimaluri-magaliti",
+      "name": "მინიმალური მაგალითი",
+      "category": "accessories",
+      "brand": "Baseus",
+      "price": 39,
+      "stock": 50
+    }
+  ]
+}

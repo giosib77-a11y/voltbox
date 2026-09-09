@@ -191,19 +191,29 @@ async def upsert_products(
 
 
 async def main() -> None:
+    """`--structure-only` — მხოლოდ კატეგორიები და ბრენდები.
+
+    ეს განსხვავება პროდაქშენისთვისაა: კატეგორიები კონფიგია (მათი `filters`
+    ველი მთელ FilterSidebar-ს კვებავს), პროდუქტები კი სატესტო მონაცემია.
+    ცოცხალ ბაზაზე პირველს ვუშვებთ, მეორეს — არა.
+    """
+    structure_only = "--structure-only" in sys.argv
     data = load_mock_data()
 
     async with SessionLocal() as db:
         categories = await upsert_categories(db, data["categories"])
         brands = await upsert_brands(db, data["brands"])
-        created, updated = await upsert_products(db, data["products"], categories, brands)
+        created = updated = 0
+        if not structure_only:
+            created, updated = await upsert_products(db, data["products"], categories, brands)
         await db.commit()
 
     await engine.dispose()
-    print(
-        f"seed complete: {len(categories)} categories, {len(brands)} brands, "
-        f"{created} products created, {updated} updated"
-    )
+    summary = f"{len(categories)} categories, {len(brands)} brands"
+    if structure_only:
+        print(f"seed complete (structure only): {summary}")
+    else:
+        print(f"seed complete: {summary}, {created} products created, {updated} updated")
 
 
 if __name__ == "__main__":

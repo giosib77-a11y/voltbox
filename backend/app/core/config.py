@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     db_echo: bool = False
     db_pool_size: int = 5
     db_max_overflow: int = 10
+    # იხ. app/db/ssl.py — რატომ არის `require` ნაგულისხმევი managed ბაზაზე
+    db_ssl_mode: Literal["disable", "require", "verify-full"] = "require"
+    db_ssl_root_cert: str = ""
 
     # --- auth -----------------------------------------------------------------
     jwt_secret: str = Field(min_length=32)
