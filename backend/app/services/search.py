@@ -189,6 +189,12 @@ async def _run(
     return list((await db.scalars(stmt)).unique().all())
 
 
+def relevance_expression(query: str) -> Any:
+    """რელევანტურობის ქულა კატალოგის სიისთვის (`?sort=relevance`)."""
+    tokens = [token for token in tokenize(query) if token not in STOPWORDS]
+    return _relevance(tokens, normalize(query))
+
+
 def search_condition(query: str) -> Any:
     """კატალოგის სიისთვის — ფილტრებთან შესაერთებელი პირობა (`?q=`)."""
     tokens = [token for token in tokenize(query) if token not in STOPWORDS]

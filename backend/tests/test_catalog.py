@@ -315,3 +315,38 @@ async def test_all_response_keys_are_camel_case(
     assert "_" not in "".join(body.keys())
     assert "shortDescription" in body
     assert "reviewsCount" in body
+
+
+async def test_filters_accept_both_the_short_and_the_full_key(
+    client: httpx.AsyncClient, catalog: dict[str, object]
+) -> None:
+    """URL-ი მოკლე სახელს აზიარებს (`ram`), httpApi კი სრულს (`specs.ram`).
+
+    ორივე უნდა მუშაობდეს — წინააღმდეგ შემთხვევაში ფილტრი ჩუმად იკარგება და
+    კლიენტი ფიქრობს, რომ გაფილტრული სია მიიღო.
+    """
+    short = await client.get("/api/v1/products", params={"category": "phones", "ram": "6 GB"})
+    full = await client.get("/api/v1/products", params={"category": "phones", "specs.ram": "6 GB"})
+
+    assert short.json()["total"] == full.json()["total"] == 2
+
+
+async def test_toggle_accepts_both_one_and_true(
+    client: httpx.AsyncClient, catalog: dict[str, object]
+) -> None:
+    one = await client.get("/api/v1/products", params={"category": "phones", "network": "1"})
+    true = await client.get(
+        "/api/v1/products", params={"category": "phones", "specs.network": "true"}
+    )
+
+    assert one.json()["total"] == true.json()["total"] == 2
+
+
+async def test_price_accepts_comma_as_well_as_dash(
+    client: httpx.AsyncClient, catalog: dict[str, object]
+) -> None:
+    # frontend-ის URL-ი დეფისს იყენებს, httpApi-ის სერიალიზატორი — მძიმეს
+    dash = await client.get("/api/v1/products", params={"category": "phones", "price": "600-3000"})
+    comma = await client.get("/api/v1/products", params={"category": "phones", "price": "600,3000"})
+
+    assert dash.json()["total"] == comma.json()["total"] == 2

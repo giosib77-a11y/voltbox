@@ -25,6 +25,7 @@ GLOBAL_FILTERS: list[dict[str, Any]] = [
     {"key": "brand", "label": "ბრენდი", "type": "checkbox"},
 ]
 
+# "relevance" აქ არ არის: ის მხოლოდ ძებნისას აქვს აზრი და ცალკე მუშავდება
 SORTABLE: dict[str, tuple[ColumnElement[Any], ...]] = {
     "price_asc": (Product.price.asc(),),
     "price_desc": (Product.price.desc(),),
@@ -140,7 +141,9 @@ def collect_conditions(
         # ამიტომ ციკლში მისი დამუშავება ფილტრს ჩუმად კარგავდა
         if key in {skip_key, "category"}:
             continue
-        raw = query_params.get(param_for(config))
+        # ორივე ფორმა მიიღება: `ram` (რასაც URL-ი აზიარებს) და `specs.ram`
+        # (რასაც httpApi-ის სერიალიზატორი აგზავნის)
+        raw = query_params.get(key) or query_params.get(param_for(config))
         if not raw:
             continue
         condition = _condition(config, raw)

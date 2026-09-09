@@ -4,7 +4,7 @@
  * ხელმოწერები *ზუსტად* ემთხვევა `mockApi.js`-ისას — გადართვა ხდება მხოლოდ
  * `.env`-ში `VITE_API_MODE=http`-ის მითითებით; არცერთი კომპონენტი არ იცვლება.
  *
- * TODO: connect backend — თითოეულ ფუნქციაში მითითებულია მოსალოდნელი endpoint.
+ * თითოეულ ფუნქციასთან მითითებულია მისი endpoint.
  */
 
 import { ApiError, AuthError, NotFoundError, ValidationError } from './errors.js';
@@ -12,6 +12,9 @@ import { STORAGE_KEYS } from '../constants/index.js';
 import { readJSON, writeJSON } from '../utils/storage.js';
 
 const BASE_URL = (import.meta.env?.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+
+/** სტუმრის შეკვეთების კონტაქტები — შეკვეთის დადასტურების გვერდისთვის. */
+const GUEST_ORDERS_KEY = 'guest-orders:v1';
 
 /** ავტორიზაციის ტოკენი — რეალურ backend-ზე httpOnly cookie სჯობს. */
 function authHeader() {
@@ -84,44 +87,44 @@ async function request(path, { method = 'GET', body, params, signal } = {}) {
 /*  კატალოგი                                                                   */
 /* -------------------------------------------------------------------------- */
 
-// TODO: connect backend — GET /products?category=&sort=&page=&limit=&q=&<filters>
+// GET /products?category=&sort=&page=&limit=&q=&<filters>
 export async function getProducts({ category, filters, sort, page, limit, q } = {}) {
   return request('/products', { params: { category, sort, page, limit, q, ...(filters || {}) } });
 }
 
-// TODO: connect backend — GET /products/:slug
+// GET /products/:slug
 export async function getProductBySlug(slug) {
   return request(`/products/${encodeURIComponent(slug)}`);
 }
 
-// TODO: connect backend — GET /products/by-id/:id
+// GET /products/by-id/:id
 export async function getProductById(id) {
   return request(`/products/by-id/${encodeURIComponent(id)}`);
 }
 
-// TODO: connect backend — GET /products/:id/related?limit=
+// GET /products/:id/related?limit=
 export async function getRelatedProducts(id, limit = 4) {
   return request(`/products/${encodeURIComponent(id)}/related`, { params: { limit } });
 }
 
-// TODO: connect backend — GET /brands
+// GET /brands
 export async function getBrands() {
   return request('/brands');
 }
 
-// TODO: connect backend — GET /categories
+// GET /categories
 // შენიშვნა: პროდუქტის პასუხში სასურველია `brandCountry` — mock იმპლემენტაცია მას
 // `data/brands.js`-იდან ამატებს, backend-მა კი თავად უნდა დააბრუნოს.
 export async function getCategories() {
   return request('/categories');
 }
 
-// TODO: connect backend — GET /home-sections
+// GET /home-sections
 export async function getHomeSections() {
   return request('/home-sections');
 }
 
-// TODO: connect backend — GET /search?q=&limit=
+// GET /search?q=&limit=
 export async function searchProducts(q, limit = 5) {
   return request('/search', { params: { q, limit } });
 }
@@ -130,60 +133,93 @@ export async function searchProducts(q, limit = 5) {
 /*  შეკვეთები                                                                  */
 /* -------------------------------------------------------------------------- */
 
-// TODO: connect backend — POST /orders
+// POST /orders
 export async function createOrder(payload) {
-  return request('/orders', { method: 'POST', body: payload });
+  // სერვერს მხოლოდ productId და qty მიაქვს — ფასს ის თავად განსაზღვრავს ბაზიდან.
+  // `snapshot` კალათის ლოკალური ქეშია; მისი გაგზავნა 400-ს იწვევს (extra="forbid"),
+  // რაც განზრახაა: ფასის გაყალბების მცდელობა ჩუმად არ უნდა ჩაიაროს.
+  const order = await request('/orders', {
+    method: 'POST',
+    body: {
+      items: payload.items.map((item) => ({ productId: item.productId, qty: item.qty })),
+      customer: payload.customer,
+      paymentMethod: payload.paymentMethod,
+    },
+  });
+  rememberGuestOrder(order.orderNumber, payload.customer?.phone);
+  return order;
 }
 
-// TODO: connect backend — GET /orders
+/**
+ * სტუმრის შეკვეთის კონტაქტს ლოკალურად ვინახავთ.
+ *
+ * შეკვეთის ნომერი თანმიმდევრობითია და გამოცნობადი, ამიტომ სერვერი მარტო ნომრით
+ * არ გასცემს შეკვეთას — სტუმარმა კონტაქტი უნდა დაამთხვიოს.
+ */
+function rememberGuestOrder(orderNumber, contact) {
+  if (!orderNumber || !contact) return;
+  const store = readJSON(GUEST_ORDERS_KEY, {});
+  writeJSON(GUEST_ORDERS_KEY, { ...store, [orderNumber]: contact });
+}
+
+// GET /orders
 export async function getOrders() {
   return request('/orders');
 }
 
-// TODO: connect backend — GET /orders/:orderNumber
+// GET /orders/:orderNumber
 export async function getOrderByNumber(orderNumber) {
-  return request(`/orders/${encodeURIComponent(orderNumber)}`);
+  const contact = readJSON(GUEST_ORDERS_KEY, {})[orderNumber];
+  return request(`/orders/${encodeURIComponent(orderNumber)}`, {
+    params: contact ? { email: contact } : undefined,
+  });
 }
 
 /* -------------------------------------------------------------------------- */
 /*  ავტორიზაცია                                                                */
 /* -------------------------------------------------------------------------- */
 
-// TODO: connect backend — POST /auth/register  → { user, token }
+// POST /auth/register  → { user, token }
 export async function register(payload) {
   const session = await request('/auth/register', { method: 'POST', body: payload });
   writeJSON(STORAGE_KEYS.auth, session);
   return session;
 }
 
-// TODO: connect backend — POST /auth/login  → { user, token }
+// POST /auth/login  → { user, token }
 export async function login(payload) {
   const session = await request('/auth/login', { method: 'POST', body: payload });
   writeJSON(STORAGE_KEYS.auth, session);
   return session;
 }
 
-// TODO: connect backend — POST /auth/logout
+// POST /auth/logout
 export async function logout() {
+  // ტოკენის ლოკალური წაშლა საკმარისი არაა — მოპარული refresh-ტოკენი
+  // სერვერზე მაინც მოქმედი დარჩებოდა
+  const session = readJSON(STORAGE_KEYS.auth, null);
   try {
-    await request('/auth/logout', { method: 'POST' });
+    await request('/auth/logout', {
+      method: 'POST',
+      body: { refreshToken: session?.refreshToken ?? null },
+    });
   } finally {
     writeJSON(STORAGE_KEYS.auth, null);
   }
   return { ok: true };
 }
 
-// TODO: connect backend — GET /auth/me
+// GET /auth/me
 export async function getProfile() {
   return request('/auth/me');
 }
 
-// TODO: connect backend — PATCH /auth/me
+// PATCH /auth/me
 export async function updateProfile(patch) {
   return request('/auth/me', { method: 'PATCH', body: patch });
 }
 
-// TODO: connect backend — POST /auth/change-password
+// POST /auth/change-password
 export async function changePassword(payload) {
   return request('/auth/change-password', { method: 'POST', body: payload });
 }
@@ -198,18 +234,18 @@ export function getSessionSync() {
 /*  მისამართები                                                                */
 /* -------------------------------------------------------------------------- */
 
-// TODO: connect backend — GET /addresses
+// GET /addresses
 export async function getAddresses() {
   return request('/addresses');
 }
 
-// TODO: connect backend — POST /addresses  |  PUT /addresses/:id
+// POST /addresses  |  PUT /addresses/:id
 export async function saveAddress(address) {
   if (address.id) return request(`/addresses/${encodeURIComponent(address.id)}`, { method: 'PUT', body: address });
   return request('/addresses', { method: 'POST', body: address });
 }
 
-// TODO: connect backend — DELETE /addresses/:id
+// DELETE /addresses/:id
 export async function deleteAddress(id) {
   return request(`/addresses/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }

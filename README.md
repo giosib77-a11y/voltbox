@@ -181,7 +181,34 @@ wrapper-ს (`request()`), ავტორიზაციის header-ს დ�
 3. ძებნა გადავიდეს სერვერზე — მაშინ `utils/search.js` მხოლოდ ერთ ადგილას წყვეტს
    გამოძახებას (`mockApi.js`), UI-ს არაფერი ეცვლება.
 
-მოკლედ: **`data/` და `mockApi.js` იშლება, `.env` იცვლება — მეტი არაფერი.**
+მოკლედ: **`.env` იცვლება — მეტი არაფერი.**
+
+### Backend უკვე არსებობს
+
+`backend/` საქაღალდეში აწყობილია FastAPI + PostgreSQL იმპლემენტაცია, რომელიც
+ზემოთ აღწერილ კონტრაქტს ასრულებს. გაშვება:
+
+```bash
+cd backend
+docker compose up -d db          # ლოკალური Postgres
+cp .env.example .env             # DATABASE_URL და JWT_SECRET
+python -m venv .venv && .venv/Scripts/python.exe -m pip install -e ".[dev]"
+alembic upgrade head
+python scripts/seed.py           # იმავე 61 პროდუქტს კითხულობს src/data/-იდან
+uvicorn app.main:app --reload    # → http://localhost:8000
+```
+
+შემდეგ frontend-ის `.env`-ში:
+
+```dotenv
+VITE_API_MODE=http
+VITE_API_BASE_URL=http://localhost:8000/api/v1
+```
+
+დეტალები — [`backend/README.md`](./backend/README.md).
+
+**გვერდითი ეფექტი:** `http` რეჟიმში mock ბაზა ბანდლში აღარ ხვდება —
+315.7 KB → **269.0 KB** (gzip 101.2 → **86.9 KB**).
 
 ---
 
