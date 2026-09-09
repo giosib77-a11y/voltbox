@@ -32,6 +32,44 @@ git commit -m "VoltBox frontend — mock data layer, WCAG AA palette, code split
 
 ## 🟠 P1 — უახლოესი ნაბიჯები
 
+### 0. monorepo-ს გასწორება: `src/` → `frontend/`  ·  ~30 წთ
+
+**პრობლემა:** backend სუფთად არის ჩაკეტილი `backend/`-ში, frontend კი repo-ს
+ძირშია გაფანტული (`src/`, `public/`, `index.html`, `package.json`,
+`vite.config.js`, `tailwind.config.js`, `postcss.config.js`, `.env`). ორი
+თანაბარმნიშვნელოვანი ნაწილი სხვადასხვა დონეზეა.
+
+**სასურველი სახე:**
+
+```
+voltbox/
+├── frontend/     src, public, package.json, vite.config…
+├── backend/      app, alembic, pyproject.toml…
+├── README.md  ASSUMPTIONS.md  ROADMAP.md
+└── .github/
+```
+
+**შესაცვლელი 5 ადგილი** (`git mv`-ით ისტორია შენარჩუნდება):
+
+| ფაილი | რა |
+|---|---|
+| `backend/scripts/export_mock_data.mjs` | `../../src/data/` → `../../frontend/src/data/` |
+| `.github/workflows/backend.yml` | `paths:` და `working-directory` |
+| `.github/workflows/` (frontend) | ახალი workflow ან paths |
+| `README.md`, `backend/README.md` | ბმულები და გზები |
+| `.gitignore` | `backend/.env` გვერდით `frontend/.env` |
+
+**რატომ ახლა და არა მოგვიანებით:** deploy-ის კონფიგურაცია (Netlify/Vercel base
+directory) ჯერ არ არსებობს. მისი დაყენების შემდეგ გასწორება ხუთის ნაცვლად
+შვიდ ადგილს შეეხება.
+
+**შემოწმება:** 110 backend-ტესტი + `npm run build` + jsdom E2E — ყველაფერი
+დაფარულია, გატეხვა მაშინვე გამოჩნდება.
+
+**ყველაზე რეალური დაბნეულობა დღეს:** ორი `.env` — `./.env` (Vite) და
+`backend/.env` (FastAPI), სხვადასხვა შიგთავსით.
+
+
 ### 2. SEO / share preview  ·  ~40 წთ
 
 **პრობლემა:** `index.html`-ში **0** Open Graph ტეგია. ბმულს უკვე უზიარებ
