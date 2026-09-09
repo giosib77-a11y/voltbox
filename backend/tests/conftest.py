@@ -5,8 +5,12 @@
 ერთმანეთისგან იზოლირებულია და ცხრილების ხელახლა შექმნა არ სჭირდებათ.
 """
 
+import asyncio
 import os
 from collections.abc import AsyncGenerator
+from pathlib import Path
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 import pytest
 
@@ -17,26 +21,37 @@ os.environ["DATABASE_URL"] = os.environ.get(
 )
 
 import httpx
-from app.db.base import Base
+from alembic import command
+from alembic.config import Config
 from app.db.session import engine, get_db
 from app.main import app
 from httpx import ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
+def _run_alembic(direction: str) -> None:
+    """Alembic სინქრონულია და env.py-ში `asyncio.run`-ს იძახებს, ამიტომ ცალკე
+    ნაკადში უნდა გაეშვას — მიმდინარე event loop-ში ჩალაგება შეუძლებელია."""
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    if direction == "up":
+        command.upgrade(config, "head")
+    else:
+        command.downgrade(config, "base")
+
+
 @pytest.fixture(scope="session", autouse=True)
 async def _create_schema() -> AsyncGenerator[None]:
-    """სქემას ტესტ-სესიის დასაწყისში ვქმნით და ბოლოს ვშლით.
+    """სქემას რეალური მიგრაციებით ვაწყობთ, არა `create_all`-ით.
 
-    `create_all` განზრახ — მიგრაციების გაშვება ყოველ სესიაზე ნელია; მიგრაციების
-    სისწორეს ცალკე ტესტი ამოწმებს (`test_migrations.py`).
+    ორი მიზეზი: (1) ექსტენსიები (citext, pg_trgm) და RLS მხოლოდ მიგრაციაშია,
+    metadata-ში არა; (2) ასე მიგრაციები ყოველ ტესტ-გაშვებაზე მოწმდება და
+    მოდელებთან დაშორება მაშინვე გამოჩნდება.
     """
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+    await asyncio.to_thread(_run_alembic, "down")
+    await asyncio.to_thread(_run_alembic, "up")
     yield
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    await asyncio.to_thread(_run_alembic, "down")
     await engine.dispose()
 
 
@@ -45,7 +60,12 @@ async def db() -> AsyncGenerator[AsyncSession]:
     """ტრანზაქციაში გახვეული სესია — ტესტის ბოლოს ყველაფერი უკან ბრუნდება."""
     connection = await engine.connect()
     transaction = await connection.begin()
-    session = async_sessionmaker(bind=connection, expire_on_commit=False)()
+    # join_transaction_mode="create_savepoint" — ტესტები, რომლებიც IntegrityError-ს
+    # ელოდებიან, სესიის ტრანზაქციას ანგრევენ; savepoint-ით გარე ტრანზაქცია ხელუხლებელი
+    # რჩება და rollback გაფრთხილების გარეშე გადის
+    session = async_sessionmaker(
+        bind=connection, expire_on_commit=False, join_transaction_mode="create_savepoint"
+    )()
     try:
         yield session
     finally:

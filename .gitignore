@@ -17,3 +17,7 @@ backend/**/__pycache__/
 backend/.pytest_cache/
 backend/.mypy_cache/
 backend/.ruff_cache/
+
+backend/_mock.json
+backend/_mock.err
+backend/*.tmp

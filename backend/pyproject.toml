@@ -46,6 +46,9 @@ ignore = ["S101", "B008", "RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S105", "S106"]
+# conftest-ში app-ის იმპორტები os.environ-ის დაყენების შემდეგ უნდა იყოს,
+# თორემ Settings ტესტ-ბაზის ნაცვლად dev-ბაზას წაიკითხავს
+"tests/conftest.py" = ["E402"]
 "alembic/*" = ["E501", "N999"]
 "scripts/*" = ["S101"]
 
