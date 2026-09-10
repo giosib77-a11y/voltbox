@@ -20,6 +20,28 @@ const TUNNEL_HOSTS = [
   '.loca.lt',
 ];
 
+/**
+ * API-ს proxy — `/api/*` ლოკალურ backend-ზე გადამისამართდება.
+ *
+ * ორი პრობლემას ხსნის ერთდროულად:
+ *
+ * 1. **გაზიარება.** ngrok მხოლოდ frontend-ის პორტს გამოაქვს. სტუმრის
+ *    ბრაუზერისთვის `localhost:8000` მისივე კომპიუტერია — API-ს ვერ ნახავდა.
+ *    proxy-ით მოთხოვნა იმავე ტუნელით მიდის და სერვერზე გადამისამართდება.
+ * 2. **CORS.** ბრაუზერისთვის მოთხოვნა იმავე origin-ზეა, ამიტომ preflight
+ *    საერთოდ არ ხდება და `CORS_ORIGINS`-ში ტუნელის დომენის დამატება არ სჭირდება.
+ *
+ * გასააქტიურებლად `.env`-ში `VITE_API_BASE_URL` **შედარებითი** უნდა იყოს
+ * (`/api/v1`). აბსოლუტური მისამართისას (`http://localhost:8000/api/v1`)
+ * ბრაუზერი პირდაპირ მიდის და proxy-ს გვერდს უვლის.
+ */
+const API_PROXY = {
+  '/api': {
+    target: 'http://127.0.0.1:8000',
+    changeOrigin: true,
+  },
+};
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // `npm run dev:share` → mode === 'share': ტუნელისთვის მორგებული dev-სერვერი
@@ -63,10 +85,12 @@ export default defineConfig(({ mode }) => {
       // ტუნელი https-ზე მუშაობს, ამიტომ HMR-ის websocket 443-ზე უნდა წავიდეს.
       // ლოკალურ რეჟიმში ეს არ ეხება — თორემ HMR localhost:443-ს დაუკავშირდებოდა.
       hmr: isShared ? { protocol: 'wss', clientPort: 443 } : undefined,
+      proxy: API_PROXY,
     },
     preview: {
       port: 4173,
       allowedHosts: TUNNEL_HOSTS,
+      proxy: API_PROXY,
     },
   };
 });
