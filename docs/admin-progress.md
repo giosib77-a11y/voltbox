@@ -29,7 +29,7 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 
 ## Current phase
 
-**Phase 0 — Discovery** (in progress)
+**Phase 0 — Discovery** ✅ complete → starting Phase 1
 
 ---
 
@@ -44,27 +44,199 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 
 ## Discovery
 
-_(Phase 0 findings go here)_
+Baseline verified before any change: **110 pytest passed**, ruff `All checks passed!`,
+mypy `Success: no issues found in 44 source files`, and `alembic upgrade head` +
+`downgrade -1` + `upgrade head` all clean on the local disposable DB.
+Supabase confirmed untouched afterwards (6 categories, 0 products).
 
----
+### 1. Discrepancies with "Project context"
+
+| Brief says | Reality |
+|---|---|
+| add `low_stock_threshold` DEFAULT 5 "if missing" | **Already exists**, `server_default="3"` (matches the frontend `LOW_STOCK_THRESHOLD`). Do **not** add it or change the default. |
+| validation errors are 422 | **Project returns 400.** `register_exception_handlers` deliberately rewrites FastAPI's 422 to 400 because the frontend contract expects it. |
+| list responses `{items, total, page, page_size}` | **Project uses `{items, total, page, totalPages, limit, facets}`** (`core/pagination.py`). The query param is `limit`, not `page_size`. |
+| `Address.address` | The column is `address_line`. |
+| checkout "supports Idempotency-Key" | Correct, and a replay **returns the existing order** rather than a 409. |
+| `Product` has `rating`, `reviews_count` | Present, but **there is no reviews table** - they are static seeded columns with no source to recompute from. |
+
+Everything else in "Project context" checked out.
+
+### 2. `users.role` and `get_current_user`
+
+- `role: Mapped[str] = mapped_column(String(20), nullable=False, server_default="customer")`.
+  **Plain VARCHAR, no CHECK constraint, no native PG enum.** Adding `"admin"` needs no migration.
+- `get_current_user` (`app/core/deps.py`) **already loads the user from the DB and checks
+  `is_active`**, so `require_admin` only has to add the role check. The "demoted admin keeps
+  access until the token expires" hole does not exist in this codebase.
+- `bearer_scheme = HTTPBearer(auto_error=False)`; missing credentials raise `UnauthorizedError`
+  -> **401**, not 403. The generic protection test can assert 401.
+
+### 3. Order statuses
+
+- `ORDER_STATUSES = ("pending","confirmed","processing","shipped","delivered","cancelled")`
+  in `app/db/models/orders.py`, stored as `String(20)` with a **CHECK constraint**, not a PG enum.
+  **No `ALTER TYPE` / `autocommit_block` complexity.** The values match the brief's graph exactly.
+- `orders.status` server_default is `"pending"`.
+
+### 4. Token handling
+
+- The frontend keeps the whole session in **`localStorage` under `auth:v1`**:
+  `{ user, token, refreshToken, expiresAt }`. Both tokens are readable from JavaScript.
+  **Recorded as a risk** (see "Open items"); not changed in this run, per the brief.
+- Backend `refresh()` **rotates**: the used token gets `revoked_at` and a new pair is issued.
+- **No reuse detection**: replaying a revoked token returns 401 but does not revoke the rest
+  of that user's token family. Recorded under "Open items".
+- `revoke_all(db, user_id)` **already exists** in `app/services/auth.py` - reuse it for
+  `demote-user` (Phase 1.3) and for blocking a customer (Phase 4). No new code needed.
+
+### 5. `categories.filters` structure
+
+```json
+[{ "key": "brand",           "label": "ბრენდი", "type": "checkbox" },
+ { "key": "specs.ram",       "label": "ოპერატიული მეხსიერება", "type": "checkbox" },
+ { "key": "specs.network",   "label": "5G", "type": "toggle", "match": "5G" },
+ { "key": "specs.fastCharge","label": "სწრაფი დატენვა", "type": "toggle", "match": true },
+ { "key": "specs.color",     "label": "ფერი", "type": "swatch" }]
+```
+
+- `key` is `"brand"` or `"specs.<specKey>"` - this is exactly the link to product `specs` keys.
+- `type` is one of `checkbox | toggle | swatch`. `match` appears **only** on `toggle` and is
+  a string **or** a boolean.
+- Read by `app/services/catalog.py` (`param_for`, `collect_conditions`, `compute_facets`) and
+  by the frontend `FilterSidebar` / `paramForFilter`.
+- `GLOBAL_FILTERS` (category + brand) is the fallback when a category defines none.
+- The Pydantic validation model in Phase 2.3 must mirror this exactly - inventing a new shape
+  would break the storefront.
+
+### 6. `search_text` maintenance
+
+- **Application code only** - `app.services.search.build_search_text(...)`. No trigger and no
+  generated column (deliberate: the value depends on `brands` and `categories` rows, which a
+  Postgres generated column cannot see).
+- Called today from `scripts/seed.py`, `scripts/import_products.py`, `scripts/reindex_search.py`
+  and `tests/factories.py`. **There is no app-layer write path yet**, so every admin write
+  endpoint must call it, and it needs the product's `brand.name`, `category.name` and
+  `category.slug` loaded.
+
+### 7. Checkout flow
+
+- One transaction. `_lock_products` locks in two steps: `SELECT products.id ... ORDER BY id
+  FOR UPDATE`, then a full load. Two steps are required because `Product.brand`/`category`
+  are `lazy="joined"` and Postgres refuses `FOR UPDATE` on the nullable side of an outer join.
+- **Locking is already ascending by id** - the brief's deadlock requirement is already met; keep it.
+- Prices always come from the DB; a client-sent price is impossible (`ApiRequest` forbids extras).
+- Stock decrement is a separate atomic `UPDATE ... WHERE stock >= :qty` with a `rowcount != 1` check.
+- **Inactive products are already rejected** (`if product is None or not product.is_active`).
+  Because archiving will also set `is_active = false`, archived products are covered for free.
+- Idempotency: a matching `orders.idempotency_key` returns the existing order.
+- `order.cancel()` exists in the service and restocks with a plain `UPDATE`, **but no route
+  calls it** - it is currently dead code. Phase 3 will route it through the state machine and
+  the inventory service.
+- The order-item image snapshot picks `min(position)`, **not `is_primary`**. Minor
+  inconsistency, recorded under "Open items".
+
+### 8. `product_images`
+
+- Ordering column is `position` (int, default 0); the relationship uses
+  `order_by="ProductImage.position"`.
+- One primary per product is enforced by a **partial unique index**
+  `uq_product_images_one_primary ON product_images (product_id) WHERE is_primary`.
+  The brief's "unset, flush, then set" requirement is therefore real and necessary.
+- `ON DELETE CASCADE` from products.
+
+### 9. API conventions
+
+- Prefix `settings.api_v1_prefix` = `/api/v1`; routers assembled in `app/api/v1/router.py`.
+- Error envelope: `{"error": {"code": "SCREAMING_SNAKE", "message": "...", "details": ...}}`
+  plus an `X-Request-ID` response header.
+- `AppError` subclasses: `NotFoundError` 404, `ValidationError` **400**, `UnauthorizedError` 401,
+  `ForbiddenError` 403, `ConflictError` 409.
+- All schemas derive from `ApiModel` / `ApiRequest` (`app/schemas/base.py`):
+  `alias_generator=to_camel`, `populate_by_name=True`; requests **already** set `extra="forbid"`.
+- Sorting is already whitelisted through a `SORTABLE` dict of column expressions in
+  `app/services/catalog.py` - follow that pattern for admin sorting.
+- The frontend picks its implementation at **build time** via `vite.config.js`
+  `resolve.alias['virtual:api-impl']`, driven by `VITE_API_MODE`.
+
+### 10. Reviews
+
+- **No reviews table.** `products.rating` (`Numeric(2,1)`, CHECK 0-5) and
+  `products.reviews_count` are seeded static values. Keeping them read-only in the admin API
+  is correct - there is nothing to recompute them from.
+
+### 11. Things in the brief that do not fit this codebase
+
+1. **422 -> 400** for validation (see §1). Following the project.
+2. **`page_size` -> `limit`**, and list responses also carry `totalPages` and `facets` (see §1).
+3. **`low_stock_threshold` already exists with default 3.** Not adding it, not changing it.
+4. **The frontend has no ESLint/Vitest at all** - devDependencies are only Vite, Tailwind,
+   PostCSS and React types. Phase 1.4 starts from zero, so there is no pre-existing lint
+   baseline to preserve.
+5. **No `STORE_TIMEZONE` setting** in `app/core/config.py` (`currency = "GEL"` does exist).
+   `supabase_project_ref` and `supabase_service_role_key` exist but are empty, and there is
+   **no bucket setting** - Phase 2.5 must add one.
+6. **Scripts parse `sys.argv` by hand**, not argparse (`scripts/import_products.py`). The admin
+   CLI needs named options plus `getpass`, so argparse is the better fit; recorded as a decision.
 
 ## Decisions to review
 
-1. **Migrations run against a separate local DB, not `voltbox_test`.**
-   Chosen: `voltbox_mig` on the local Docker Postgres for `upgrade`/`downgrade`
-   checks, so migration experiments never race the test database.
-   Why: `backend/.env` points at Supabase; a bare `alembic` command would hit
-   production. Alternative considered: temporarily editing `.env` — rejected,
-   too easy to forget to revert.
+Most important first.
+
+1. **Validation errors stay 400, not the 422 the brief asks for.**
+   The project rewrites FastAPI's 422 to 400 on purpose (`core/errors.py`) because the
+   frontend contract branches on it. The brief says existing conventions win. All other
+   codes match the brief (401/403/404/409).
+
+2. **Pagination keeps the project's shape.** `{items, total, page, totalPages, limit, facets}`
+   with a `limit` param, not `{items, total, page, page_size}`. Same rule.
+
+3. **`low_stock_threshold` is left at default 3.** It already exists and mirrors the
+   frontend's `LOW_STOCK_THRESHOLD`. Changing it to the brief's 5 would silently alter which
+   products the storefront shows as low stock.
+
+4. **Migrations run against `voltbox_mig`, a separate local DB.**
+   `backend/.env` points at Supabase, so a bare `alembic` command would hit production.
+   Every migration command in this run sets `DATABASE_URL` explicitly. Alternative
+   considered: temporarily editing `.env` - rejected, too easy to forget to revert.
+
+5. **Admin CLI will use `argparse`,** although existing scripts parse `sys.argv` by hand.
+   The CLI needs named options and `getpass`; hand parsing would be worse here. The existing
+   scripts are not touched.
+
+6. **`require_admin` adds only a role check.** `get_current_user` already loads the user from
+   the DB and verifies `is_active`, so the brief's "check the database on every request"
+   requirement is satisfied by composing on top of it rather than duplicating the query.
 
 ---
 
 ## Open items
 
-_(bugs found outside scope, deferred work)_
+Found during discovery, outside this task's scope - not silently fixed.
+
+1. **Refresh tokens have no reuse detection.** Replaying a revoked token returns 401 but does
+   not revoke the rest of the family, so a stolen token cannot be detected. `app/services/auth.py`.
+2. **Both tokens live in `localStorage`** (`auth:v1`), readable by any script on the page. An
+   admin panel raises the cost of any XSS. The brief says not to change the mechanism in this run.
+3. **`order.cancel()` is dead code** - implemented but no route calls it. Phase 3 will supersede it.
+4. **Order item image snapshots use `min(position)`, not `is_primary`.** If a product's primary
+   image is not also position 0, the order shows a different image than the product page.
+5. **`rating` / `reviews_count` have no source.** No reviews table; the values are seeded and
+   can never be recomputed.
 
 ---
 
 ## Last check results
 
-_(actual summary lines from ruff / mypy / pytest / eslint / vitest / builds)_
+Baseline at `fc2b933`, before any change (all run locally):
+
+```
+pytest    110 passed in 11.84s        (TEST_DATABASE_URL -> local voltbox_test)
+ruff      All checks passed!
+ruff fmt  62 files already formatted
+mypy      Success: no issues found in 44 source files
+alembic   upgrade head / downgrade -1 / upgrade head  -> 0002 (head)   (local voltbox_mig)
+frontend  build mock 315.68 kB / http 269.04 kB, no warnings
+eslint    not installed yet (Phase 1.4)
+vitest    not installed yet (Phase 1.4)
+```
