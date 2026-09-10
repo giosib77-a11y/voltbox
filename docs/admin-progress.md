@@ -29,7 +29,7 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 
 ## Current phase
 
-**Phase 2 — Catalog** (2.1–2.3 done, 2.4 products API in progress)
+**Phase 2 — Catalog** (2.1–2.5 done, 2.6 catalog UI in progress)
 
 ---
 
@@ -50,6 +50,8 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 - [x] 2.1 migration 0003 — `archived_at`, `inventory_movements`, `admin_audit_log`, backfill
 - [x] 2.2 `services/inventory.adjust_stock` — sole write path; checkout + cancel routed through it
 - [x] 2.3 categories/brands API, `services/slug.py`, `services/audit.py`
+- [x] 2.4 products API — list/get/create/patch/archive/unarchive/duplicate
+- [x] 2.5 product images — `StorageBackend` protocol, Supabase + in-memory fake
 
 ---
 
@@ -258,6 +260,17 @@ Found during discovery, outside this task's scope - not silently fixed.
    image is not also position 0, the order shows a different image than the product page.
 5. **`rating` / `reviews_count` have no source.** No reviews table; the values are seeded and
    can never be recomputed.
+
+6. **Two more undeclared dependencies found and fixed** (`python-multipart`,
+   and `httpx` which was a dev-only extra although `services/storage.py` imports
+   it at runtime). Same class as `email-validator`. The `image` CI job now covers
+   this, but it only catches import-time failures - a dependency used lazily
+   inside a rarely-taken branch would still slip through.
+
+7. **Supabase Storage is not exercised against the real service.** All image
+   tests run against `InMemoryStorage`. `SupabaseStorage` is written but has
+   never made a live call; the bucket does not exist yet. Creating it (public
+   read, backend-only write) is a manual step recorded in the README.
 
 ---
 
