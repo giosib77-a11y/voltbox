@@ -103,9 +103,14 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 |---|---|
 | frontend | `cd frontend && npm run build` |
 | backend | `cd backend && ruff check . && ruff format --check . && mypy app && pytest -q` |
+| backend-ის იმიჯი | `cd backend && docker build -t voltbox-api:check .` |
 
 იგივეს ამოწმებს CI — [`.github/workflows/`](./.github/workflows/). frontend
 ორივე რეჟიმში (`mock` და `http`) აშენდება, backend კი ცოცხალ Postgres-ზე გადის.
+
+იმიჯი განზრახ ცალკე მოწმდება: ის მხოლოდ `[project.dependencies]`-ს იღებს,
+`.venv` კი `.[dev]`-საც — ამ სხვაობაში ერთხელ უკვე დაიმალა ბაგი, რომელსაც
+110 მწვანე ტესტი ვერ ხედავდა ([ASSUMPTIONS.md §8.11](./ASSUMPTIONS.md)).
 
 ---
 

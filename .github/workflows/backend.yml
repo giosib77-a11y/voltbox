@@ -56,3 +56,30 @@ jobs:
 
       - name: Migrations apply to an empty database
         run: alembic upgrade head
+
+  # ცალკე job, განზრახ. ზემოთა `quality` დამოკიდებულებებს `.[dev]`-ით აყენებს —
+  # ანუ dev-extra-ებთანაც ერთად. პროდაქშენის იმიჯი კი მხოლოდ
+  # `[project.dependencies]`-ს იღებს. სწორედ ამ სხვაობაში დაიმალა
+  # `email-validator`: ლოკალურ venv-ში ძველი ინსტალაციიდან იყო შემორჩენილი,
+  # ამიტომ ლოკალურად ყველაფერი მწვანე ჩანდა — სუფთა გარემოში კი
+  # `import app.main` ImportError-ით ვარდებოდა.
+  image:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the production image
+        run: docker build -t voltbox-api:ci .
+
+      - name: The app must import and expose its full API surface
+        env:
+          DATABASE_URL: postgresql://u:p@h:5432/d
+          JWT_SECRET: ci-only-secret-value-that-is-long-enough-32
+        run: |
+          docker run --rm -e DATABASE_URL -e JWT_SECRET voltbox-api:ci python -c "
+          import app.main as m
+          paths = m.app.openapi()['paths']
+          print(f'{len(paths)} paths')
+          assert len(paths) >= 19, f'expected at least 19 paths, got {len(paths)}'
+          "

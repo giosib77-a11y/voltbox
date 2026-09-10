@@ -41,6 +41,14 @@ mypy app
 pytest -q
 ```
 
+პროდაქშენის იმიჯი ცალკე უნდა შემოწმდეს — ის მხოლოდ `[project.dependencies]`-ს
+იღებს, `.venv` კი `.[dev]`-საც. სხვაობა რეალურ ბაგს მალავდა (იხ. ASSUMPTIONS §8.11):
+
+```bash
+docker build -t voltbox-api:check .
+docker run --rm -e DATABASE_URL=postgresql://u:p@h:5432/d   -e JWT_SECRET=0123456789012345678901234567890123456789   voltbox-api:check python -c "import app.main as m; print(len(m.app.openapi()['paths']), 'paths')"
+```
+
 ## პროდუქტების დამატება
 
 ბაზა ორ ნაწილად იყოფა:
