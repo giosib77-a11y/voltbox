@@ -29,7 +29,7 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 
 ## Current phase
 
-**Phase 1 — Foundations** ✅ complete → starting Phase 2
+**Phase 2 — Catalog** (2.1–2.3 done, 2.4 products API in progress)
 
 ---
 
@@ -46,6 +46,10 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 - [x] 1.3 backend authorization — `require_admin`, `admin_router`, `GET /admin/me`,
       generic protection test, `scripts/manage_admin.py`
 - [x] 1.5 admin shell — `RequireAdmin`, `AdminLayout`, `AdminLogin`, separate chunk
+- [x] Phase 1 gate (commit `468bc71`)
+- [x] 2.1 migration 0003 — `archived_at`, `inventory_movements`, `admin_audit_log`, backfill
+- [x] 2.2 `services/inventory.adjust_stock` — sole write path; checkout + cancel routed through it
+- [x] 2.3 categories/brands API, `services/slug.py`, `services/audit.py`
 
 ---
 
@@ -214,6 +218,30 @@ Most important first.
 6. **`require_admin` adds only a role check.** `get_current_user` already loads the user from
    the DB and verifies `is_active`, so the brief's "check the database on every request"
    requirement is satisfied by composing on top of it rather than duplicating the query.
+
+7. **`low_stock_threshold` left at 3, not the brief's 5.** It already exists and
+   mirrors the frontend constant; changing it would silently alter which products
+   the storefront shows as low stock.
+
+8. **`clock_timestamp()` for ledger and audit `created_at`.** `now()` is the
+   transaction start time, so every movement written by one checkout would share
+   a timestamp and the history could not be ordered. Found by a failing test.
+
+9. **Audit snapshots skip `id`, `created_at`, `updated_at`.** Two reasons:
+   `updated_at` would appear in the diff of every edit and bury the real change,
+   and reading it right after a flush triggers a lazy refresh that raises
+   MissingGreenlet under async SQLAlchemy.
+
+10. **An explicit duplicate slug is 409; a generated one gets a suffix.**
+    Renaming what the author typed produces a URL they did not choose; when they
+    expressed no preference, a suffix is the helpful answer.
+
+11. **Category nesting capped at 2 levels** (`MAX_CATEGORY_DEPTH`). The storefront
+    renders one level of children; anything deeper would be unreachable in the UI.
+
+12. **Georgian transliteration collapses aspirated pairs** (თ/ტ → t, ქ/კ → k,
+    ფ/პ → p, ჩ/ჭ → ch, ც/წ → ts). The national romanization distinguishes them
+    with apostrophes, which cannot appear in a URL.
 
 ---
 
