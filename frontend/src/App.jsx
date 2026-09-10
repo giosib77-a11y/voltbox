@@ -49,6 +49,7 @@ function adminChildren() {
   const AdminLayout = lazy(() => import('./admin/AdminLayout.jsx'));
   const AdminDashboard = lazy(() => import('./admin/pages/AdminDashboard.jsx'));
   const RequireAdmin = lazy(() => import('./admin/RequireAdmin.jsx'));
+  const AdminSessionProvider = lazy(() => import('./admin/AdminSessionContext.jsx'));
   const ProductList = lazy(() => import('./admin/pages/ProductList.jsx'));
   const ProductForm = lazy(() => import('./admin/pages/ProductForm.jsx'));
   const CategoryList = lazy(() => import('./admin/pages/CategoryList.jsx'));
@@ -62,22 +63,30 @@ function adminChildren() {
   return [
     { path: 'login', element: <AdminLogin /> },
     {
-      element: <RequireAdmin />,
+      // ადმინობის შემოწმება ერთხელ ხდება აქ და ყველას უზიარდება. აქამდე მას
+      // სამი კომპონენტი ცალ-ცალკე აკეთებდა — სამი იდენტური მოთხოვნა ყოველ
+      // გახსნაზე, და პანელი სამივეს ელოდებოდა დახატვამდე.
+      element: <AdminSessionProvider />,
       children: [
         {
-          element: <AdminLayout />,
+          element: <RequireAdmin />,
           children: [
-            { index: true, element: <AdminDashboard /> },
-            { path: 'products', element: <ProductList /> },
-            { path: 'products/new', element: <ProductForm /> },
-            { path: 'products/:id', element: <ProductForm /> },
-            { path: 'categories', element: <CategoryList /> },
-            { path: 'brands', element: <BrandList /> },
-            { path: 'orders', element: <OrderList /> },
-            { path: 'orders/:id', element: <OrderDetail /> },
-            { path: 'inventory', element: <InventoryList /> },
-            { path: 'customers', element: <CustomerList /> },
-            { path: 'customers/:id', element: <CustomerDetail /> },
+            {
+              element: <AdminLayout />,
+              children: [
+                { index: true, element: <AdminDashboard /> },
+                { path: 'products', element: <ProductList /> },
+                { path: 'products/new', element: <ProductForm /> },
+                { path: 'products/:id', element: <ProductForm /> },
+                { path: 'categories', element: <CategoryList /> },
+                { path: 'brands', element: <BrandList /> },
+                { path: 'orders', element: <OrderList /> },
+                { path: 'orders/:id', element: <OrderDetail /> },
+                { path: 'inventory', element: <InventoryList /> },
+                { path: 'customers', element: <CustomerList /> },
+                { path: 'customers/:id', element: <CustomerDetail /> },
+              ],
+            },
           ],
         },
       ],

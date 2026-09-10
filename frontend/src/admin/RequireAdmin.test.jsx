@@ -11,15 +11,23 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import RequireAdmin from './RequireAdmin.jsx';
+import AdminSessionProvider from './AdminSessionContext.jsx';
 import { __resetSessionStateForTests, writeSession } from '../services/session.js';
 
-/** Renders the guard at /admin/x with a stub page behind it. */
+/**
+ * Renders the guard at /admin/x with a stub page behind it.
+ *
+ * The provider sits above the guard, exactly as it does in App.jsx: the admin
+ * check happens once there and is shared, so RequireAdmin only reads the result.
+ */
 function renderGuard() {
   return render(
     <MemoryRouter initialEntries={['/admin/x']}>
       <Routes>
-        <Route path="/admin" element={<RequireAdmin />}>
-          <Route path="x" element={<div>ადმინის გვერდი</div>} />
+        <Route path="/admin" element={<AdminSessionProvider />}>
+          <Route element={<RequireAdmin />}>
+            <Route path="x" element={<div>ადმინის გვერდი</div>} />
+          </Route>
         </Route>
         <Route path="/admin/login" element={<div>ადმინის შესვლა</div>} />
       </Routes>

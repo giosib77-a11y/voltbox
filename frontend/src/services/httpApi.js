@@ -115,7 +115,18 @@ export async function getOrderByNumber(orderNumber) {
 
 // POST /auth/register  → { user, token }
 export async function register(payload) {
-  const session = await request('/auth/register', { method: 'POST', body: payload });
+  // მხოლოდ ის ველები, რასაც API იღებს. ფორმა `confirmPassword`-საც ატარებს —
+  // ის ვალიდაციისთვისაა და სერვერს არ სჭირდება. `ApiRequest`-ს `extra="forbid"`
+  // აქვს, ამიტომ მისი გაგზავნა 400-ს იწვევდა: რეგისტრაცია საერთოდ არ მუშაობდა.
+  const session = await request('/auth/register', {
+    method: 'POST',
+    body: {
+      firstName: payload.firstName,
+      lastName: payload.lastName,
+      email: payload.email,
+      password: payload.password,
+    },
+  });
   writeSession(session);
   return session;
 }

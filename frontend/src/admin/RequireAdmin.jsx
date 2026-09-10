@@ -11,7 +11,7 @@
 
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
-import { useAdminSession } from './useAdminSession.js';
+import { useAdminSession } from './AdminSessionContext.jsx';
 import AdminForbidden from './pages/AdminForbidden.jsx';
 
 export default function RequireAdmin() {

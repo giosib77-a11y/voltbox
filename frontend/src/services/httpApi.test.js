@@ -207,3 +207,28 @@ describe('error messages the shopper sees', () => {
     });
   });
 });
+
+describe('register payload', () => {
+  it('sends only the fields the API accepts', async () => {
+    global.fetch = vi.fn(async () => reply({ user: { id: 'u1' }, token: 't' }));
+
+    // The form carries confirmPassword for its own validation. The API sets
+    // extra=forbid, so passing it through answered 400 and registration was
+    // simply broken for every visitor.
+    await httpApi.register({
+      firstName: 'ანა',
+      lastName: 'წერეთელი',
+      email: 'ana@example.ge',
+      password: 'supersecret1',
+      confirmPassword: 'supersecret1',
+    });
+
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body).toEqual({
+      firstName: 'ანა',
+      lastName: 'წერეთელი',
+      email: 'ana@example.ge',
+      password: 'supersecret1',
+    });
+  });
+});

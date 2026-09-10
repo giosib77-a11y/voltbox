@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 import * as api from '../services/api.js';
-import { useAdminSession } from './useAdminSession.js';
+import { useAdminSession } from './AdminSessionContext.jsx';
 
 /** Sections rendered in the sidebar. Grows as later phases add pages. */
 const NAV = [
@@ -43,7 +43,9 @@ export default function AdminLayout() {
     try {
       await api.logout();
     } finally {
-      navigate('/admin/login', { replace: true });
+      // მაღაზიაში, არა შესვლის ფორმაზე. გასვლის შემდეგ პაროლის ხელახლა
+      // მოთხოვნა ისე გამოიყურება, თითქოს გასვლა ვერ მოხერხდა.
+      navigate('/', { replace: true });
     }
   }
 
