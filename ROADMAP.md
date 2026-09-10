@@ -56,6 +56,46 @@ voltbox/
 
 ## 🟠 P1 — უახლოესი ნაბიჯები
 
+### 1a. `/auth/refresh` — ტოკენის განახლება  ·  ~40 წთ
+
+**პრობლემა:** backend-ს refresh-ტოკენის სრული როტაცია აქვს (`POST /auth/refresh`,
+SHA-256-ით დაჰეშილი შენახვა, ერთჯერადი გამოყენება). frontend მას **არასოდეს
+იძახებს** — `refreshToken` მხოლოდ logout-ზე იგზავნება.
+
+```
+ACCESS_TOKEN_TTL_MINUTES=30      ← ამის შემდეგ ყველა დაცული მოთხოვნა 401-ია
+REFRESH_TOKEN_TTL_DAYS=30        ← ეს კი ჯიბეშია და გამოუყენებელი
+```
+
+**სიმპტომი:** 30 წუთის შემდეგ header კვლავ „შესულს“ აჩვენებს, `/account/*` კი
+შეცდომას აგდებს. `AuthError` `services/`-ის გარეთ არსად არ იჭერს, ამიტომ სესია
+არც სუფთად იხურება — შუალედური, გაუგებარი მდგომარეობა რჩება.
+
+**რა უნდა გაკეთდეს:** `httpApi.js`-ის `request()`-ში 401-ზე ერთხელ სცადოს
+`/auth/refresh`, ახალი ტოკენით გაიმეოროს მოთხოვნა, ჩავარდნაზე კი სესია სუფთად
+დახუროს. პარალელური 401-ები ერთ refresh-ზე უნდა დაელოდონ (single-flight),
+თორემ როტაცია ერთმანეთს გააუქმებს.
+
+**შესვლის წერტილი:** [httpApi.js:48](frontend/src/services/httpApi.js#L48)
+`request()`, [AuthContext.jsx](frontend/src/context/AuthContext.jsx).
+
+
+### 1b. `Idempotency-Key` checkout-ზე  ·  ~15 წთ
+
+**პრობლემა:** backend-ს `orders.idempotency_key` უნიკალური სვეტი და header-ის
+პარამეტრი აქვს — ორჯერ გაგზავნილი შეკვეთა იმავე პასუხს აბრუნებს. frontend
+header-ს **არ აგზავნის**, ანუ დაცვა ჩართული არასოდესაა.
+
+**სიმპტომი:** ნელ კავშირზე „შეკვეთის გაფორმებაზე“ ორჯერ დაჭერა ორ შეკვეთას ქმნის
+და მარაგს ორჯერ ჭამს.
+
+**რა უნდა გაკეთდეს:** `createOrder`-ში `crypto.randomUUID()` კალათის სესიაზე
+ერთხელ დაგენერირდეს (არა ყოველ ცდაზე — თორემ აზრი ეკარგება) და header-ად წავიდეს.
+
+**შესვლის წერტილი:** [httpApi.js](frontend/src/services/httpApi.js) `createOrder`,
+[orders.py:62](backend/app/api/v1/routes/orders.py#L62).
+
+
 ### 2. SEO / share preview  ·  ~40 წთ
 
 **პრობლემა:** `index.html`-ში **0** Open Graph ტეგია. ბმულს უკვე უზიარებ
