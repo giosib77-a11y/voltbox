@@ -19,7 +19,7 @@ from app.db.models.inventory import (
     REASONS_REQUIRING_NOTE,
     InventoryMovement,
 )
-from app.db.models.orders import ORDER_STATUSES, Order, OrderItem
+from app.db.models.orders import ORDER_STATUSES, Order, OrderItem, OrderStatusHistory
 from app.db.models.users import (
     ROLE_ADMIN,
     ROLE_CUSTOMER,
@@ -51,6 +51,7 @@ __all__ = [
     "InventoryMovement",
     "Order",
     "OrderItem",
+    "OrderStatusHistory",
     "Product",
     "ProductImage",
     "RefreshToken",

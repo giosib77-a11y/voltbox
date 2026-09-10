@@ -24,6 +24,10 @@ dependencies = [
     # FastAPI needs this for multipart/form-data; without it an UploadFile
     # parameter raises at import time, not at request time.
     "python-multipart>=0.0.20",
+    # zoneinfo has no timezone database of its own. Linux usually has system
+    # tz files, Windows never does, and a slim container may not either - so
+    # STORE_TIMEZONE would raise ZoneInfoNotFoundError depending on the host.
+    "tzdata>=2025.2",
     # Runtime, not dev: services/storage.py calls Supabase Storage over HTTP.
     # It used to be a dev-only extra, which meant the production image would
     # have imported it successfully in tests and crashed in the container.

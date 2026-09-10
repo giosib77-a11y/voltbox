@@ -7,10 +7,12 @@
 """
 
 import uuid
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -74,6 +76,34 @@ class Order(UUIDPrimaryKey, Timestamps, Base):
         ),
         Index("ix_orders_user_id_created_at", "user_id", text("created_at DESC")),
     )
+
+
+class OrderStatusHistory(UUIDPrimaryKey, Base):
+    """One row per status change - who moved the order, when, and why.
+
+    Separate from admin_audit_log on purpose: an order's timeline is something
+    the admin UI renders, and two records of one event drift apart eventually.
+    """
+
+    __tablename__ = "order_status_history"
+
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False
+    )
+    from_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    to_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    # SET NULL, not CASCADE: deleting the account must not erase what it did.
+    changed_by: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    note: Mapped[str | None] = mapped_column(Text)
+    # clock_timestamp(), not now(): several transitions can land in one
+    # transaction and must stay orderable.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("clock_timestamp()"), nullable=False
+    )
+
+    __table_args__ = (Index("ix_order_status_history_order", "order_id", text("created_at")),)
 
 
 class OrderItem(UUIDPrimaryKey, Base):

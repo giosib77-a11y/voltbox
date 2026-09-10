@@ -13,7 +13,16 @@ tests/test_admin_auth.py enumerates the router to prove nothing slips through.
 
 from fastapi import APIRouter, Depends
 
-from app.api.v1.routes.admin import brands, categories, images, me, products
+from app.api.v1.routes.admin import (
+    brands,
+    categories,
+    dashboard,
+    images,
+    inventory,
+    me,
+    orders,
+    products,
+)
 from app.core.deps import require_admin
 
 admin_router = APIRouter(
@@ -27,5 +36,8 @@ admin_router.include_router(categories.router)
 admin_router.include_router(brands.router)
 admin_router.include_router(products.router)
 admin_router.include_router(images.router)
+admin_router.include_router(orders.router)
+admin_router.include_router(inventory.router)
+admin_router.include_router(dashboard.router)
 
 __all__ = ["admin_router"]
