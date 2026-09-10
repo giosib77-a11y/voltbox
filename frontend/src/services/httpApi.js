@@ -7,9 +7,16 @@
  * თითოეულ ფუნქციასთან მითითებულია მისი endpoint.
  */
 
-import { ApiError, AuthError, NotFoundError, ValidationError } from './errors.js';
-import { STORAGE_KEYS } from '../constants/index.js';
+import { ApiError, AuthError, ConflictError, NotFoundError, ValidationError } from './errors.js';
 import { readJSON, writeJSON } from '../utils/storage.js';
+import {
+  clearSession,
+  getAccessToken,
+  isAuthPath,
+  readSession,
+  refreshSession,
+  writeSession,
+} from './session.js';
 
 const BASE_URL = (import.meta.env?.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
@@ -18,8 +25,24 @@ const GUEST_ORDERS_KEY = 'guest-orders:v1';
 
 /** ავტორიზაციის ტოკენი — რეალურ backend-ზე httpOnly cookie სჯობს. */
 function authHeader() {
-  const session = readJSON(STORAGE_KEYS.auth, null);
-  return session?.token ? { Authorization: `Bearer ${session.token}` } : {};
+  const token = getAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
+ * Pulls message / code / details out of the backend's error envelope.
+ *
+ * The API always answers `{"error": {code, message, details}}`. The flat shape
+ * is tolerated too so the client keeps working if an error ever comes from a
+ * proxy or a middleware that does not use the envelope.
+ */
+function parseError(payload) {
+  const envelope = payload?.error ?? payload ?? null;
+  return {
+    message: envelope?.message || 'მოთხოვნის დამუშავება ვერ მოხერხდა',
+    code: envelope?.code || null,
+    details: envelope?.details ?? null,
+  };
 }
 
 /** query ობიექტი → search string (მასივები მძიმით). */
@@ -43,9 +66,18 @@ function toQuery(params = {}) {
   return qs ? `?${qs}` : '';
 }
 
-/** ერთიანი fetch wrapper — შეცდომებს იმავე კლასებად აქცევს, რასაც mock. */
-async function request(path, { method = 'GET', body, params, signal } = {}) {
+/**
+ * ერთიანი fetch wrapper — შეცდომებს იმავე კლასებად აქცევს, რასაც mock.
+ *
+ * 401-ზე ერთხელ ცდილობს access-ტოკენის განახლებას და მოთხოვნას იმეორებს.
+ * `retried` შიდა დროშაა: მეორე 401 უკვე ნამდვილად უფლების პრობლემაა და არა
+ * ვადაგასული ტოკენი — თორემ განახლება-გამეორების უსასრულო ციკლი დაიწყებოდა.
+ */
+async function request(path, options = {}) {
+  const { method = 'GET', body, params, signal, headers: extraHeaders, retried = false } = options;
   const url = `${BASE_URL}${path}${toQuery(params)}`;
+
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
 
   let response;
   try {
@@ -53,14 +85,23 @@ async function request(path, { method = 'GET', body, params, signal } = {}) {
       method,
       signal,
       headers: {
-        'Content-Type': 'application/json',
+        // FormData-ს boundary-ს ბრაუზერი თვითონ აყენებს — ხელით მითითება ტეხს
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         Accept: 'application/json',
         ...authHeader(),
+        ...(extraHeaders || {}),
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
     });
   } catch (cause) {
     throw new ApiError('სერვერთან კავშირი ვერ დამყარდა', 0, cause);
+  }
+
+  // ვადაგასული ტოკენი: ერთი განახლება ყველა პარალელური მოთხოვნისთვის საერთოა
+  // (`refreshSession` single-flight-ია), მერე თითოეული ზუსტად ერთხელ მეორდება.
+  if (response.status === 401 && !retried && !isAuthPath(path)) {
+    const token = await refreshSession();
+    if (token) return request(path, { ...options, retried: true });
   }
 
   if (response.status === 204) return null;
@@ -74,13 +115,14 @@ async function request(path, { method = 'GET', body, params, signal } = {}) {
 
   if (response.ok) return payload;
 
-  const message = payload?.message || 'მოთხოვნის დამუშავება ვერ მოხერხდა';
+  const { message, code, details } = parseError(payload);
   if (response.status === 404) throw new NotFoundError(message);
+  if (response.status === 409) throw new ConflictError(message, { code, details });
   if (response.status === 401 || response.status === 403) throw new AuthError(message);
   if (response.status === 422 || response.status === 400) {
-    throw new ValidationError(message, payload?.errors || null);
+    throw new ValidationError(message, { code, details });
   }
-  throw new ApiError(message, response.status, payload);
+  throw new ApiError(message, response.status, { code, details });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -182,14 +224,14 @@ export async function getOrderByNumber(orderNumber) {
 // POST /auth/register  → { user, token }
 export async function register(payload) {
   const session = await request('/auth/register', { method: 'POST', body: payload });
-  writeJSON(STORAGE_KEYS.auth, session);
+  writeSession(session);
   return session;
 }
 
 // POST /auth/login  → { user, token }
 export async function login(payload) {
   const session = await request('/auth/login', { method: 'POST', body: payload });
-  writeJSON(STORAGE_KEYS.auth, session);
+  writeSession(session);
   return session;
 }
 
@@ -197,14 +239,14 @@ export async function login(payload) {
 export async function logout() {
   // ტოკენის ლოკალური წაშლა საკმარისი არაა — მოპარული refresh-ტოკენი
   // სერვერზე მაინც მოქმედი დარჩებოდა
-  const session = readJSON(STORAGE_KEYS.auth, null);
+  const session = readSession();
   try {
     await request('/auth/logout', {
       method: 'POST',
       body: { refreshToken: session?.refreshToken ?? null },
     });
   } finally {
-    writeJSON(STORAGE_KEYS.auth, null);
+    clearSession();
   }
   return { ok: true };
 }
@@ -226,7 +268,7 @@ export async function changePassword(payload) {
 
 /** სესიის სინქრონული აღდგენა — ტოკენი ლოკალურად ინახება. */
 export function getSessionSync() {
-  const session = readJSON(STORAGE_KEYS.auth, null);
+  const session = readSession();
   return session?.user ? session : null;
 }
 

@@ -29,3 +29,11 @@ export class AuthError extends ApiError {
     this.name = 'AuthError';
   }
 }
+
+/** 409 — უნიკალურობის ან მდგომარეობის კონფლიქტი (SKU, slug, მარაგი, სტატუსი). */
+export class ConflictError extends ApiError {
+  constructor(message = 'ოპერაცია ეწინააღმდეგება არსებულ მონაცემებს', details = null) {
+    super(message, 409, details);
+    this.name = 'ConflictError';
+  }
+}
