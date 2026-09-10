@@ -9,13 +9,13 @@
  * confirmed against GET /admin/me, never against the stored session.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, Store } from 'lucide-react';
 
 import * as api from '../../services/api.js';
 import { getAdminProfile } from '../adminApi.js';
-import { clearSession } from '../../services/session.js';
+import { clearSession, readSession } from '../../services/session.js';
 
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
@@ -26,6 +26,24 @@ export default function AdminLogin() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const next = params.get('next') || '/admin';
+
+  // უკვე შესულს პაროლი აღარ უნდა ვკითხოთ. ამის გარეშე მაღაზიიდან პანელში
+  // შესვლა ზოგჯერ შესვლის ფორმაზე გვაბრუნებდა და ისე გამოიყურებოდა, თითქოს
+  // სესია დაიკარგა.
+  useEffect(() => {
+    let cancelled = false;
+    if (!readSession()?.token) return undefined;
+    getAdminProfile()
+      .then(() => {
+        if (!cancelled) navigate(next, { replace: true });
+      })
+      .catch(() => {
+        // არ არის ადმინი ან სესია ვადაგასულია — ფორმა რჩება.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, next]);
 
   async function handleSubmit(event) {
     event.preventDefault();

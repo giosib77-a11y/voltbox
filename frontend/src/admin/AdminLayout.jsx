@@ -8,9 +8,10 @@
  * work tool feel broken, so new entries are added as their pages land.
  */
 
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Boxes,
+  ExternalLink,
   LayoutDashboard,
   LogOut,
   Package,
@@ -39,12 +40,17 @@ export default function AdminLayout() {
   const { admin } = useAdminSession();
   const navigate = useNavigate();
 
+  /**
+   * ანგარიშიდან სრული გასვლა — refresh-ტოკენი სერვერზეც უქმდება.
+   *
+   * პანელის დატოვება ცალკე ღილაკია („მაღაზიაში"). აქამდე ერთადერთი
+   * გასასვლელი ეს იყო და ის მთელ სესიას ხურავდა: პანელიდან გამოსვლა
+   * მაღაზიიდანაც გამოგდებდა და ხელახლა შესვლა გჭირდებოდა.
+   */
   async function handleLogout() {
     try {
       await api.logout();
     } finally {
-      // მაღაზიაში, არა შესვლის ფორმაზე. გასვლის შემდეგ პაროლის ხელახლა
-      // მოთხოვნა ისე გამოიყურება, თითქოს გასვლა ვერ მოხერხდა.
       navigate('/', { replace: true });
     }
   }
@@ -86,14 +92,25 @@ export default function AdminLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-between gap-3 border-b border-ink-200 bg-white px-4">
           <span className="truncate text-sm text-ink-600">{fullName || admin?.email}</span>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 rounded-lg border border-ink-300 px-3 py-1.5 text-sm text-ink-700 hover:bg-ink-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-500"
-          >
-            <LogOut className="h-4 w-4" aria-hidden="true" />
-            გასვლა
-          </button>
+          <div className="flex items-center gap-2">
+            {/* პანელის დატოვება სესიის დახურვის გარეშე — ყველაზე ხშირი ქმედება */}
+            <Link
+              to="/"
+              className="flex items-center gap-1.5 rounded-lg border border-ink-300 px-3 py-1.5 text-sm text-ink-700 hover:bg-ink-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-500"
+            >
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+              მაღაზიაში
+            </Link>
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="ანგარიშიდან სრული გასვლა"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-ink-600 hover:bg-danger-50 hover:text-danger-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-500"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+              ანგარიშიდან გასვლა
+            </button>
+          </div>
         </header>
 
         <main className="min-w-0 flex-1 p-4 md:p-6">
