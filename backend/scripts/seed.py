@@ -30,8 +30,9 @@ from sqlalchemy.orm import lazyload
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.db.models import Brand, Category, Product, ProductImage
+from app.db.models import REASON_INITIAL, Brand, Category, Product, ProductImage
 from app.db.session import SessionLocal, engine
+from app.services.inventory import adjust_stock
 from app.services.search import build_search_text
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -148,7 +149,6 @@ async def upsert_products(
         product.brand = brand
         product.price = to_decimal(row["price"]) or Decimal("0")
         product.old_price = to_decimal(row.get("oldPrice"))
-        product.stock = int(row.get("stock", 0))
         product.specs = row.get("specs", {})
         product.tags = list(row.get("tags", []))
         product.rating = to_decimal(row.get("rating")) or Decimal("0")
@@ -169,6 +169,14 @@ async def upsert_products(
         )
         db.add(product)
         await db.flush()
+
+        # მარაგი ერთადერთი გზით — `adjust_stock`-ით. პირდაპირი `product.stock = N`
+        # ledger-ში ხვრელს ტოვებდა: პროდუქტს მარაგი ჰქონდა და ვერცერთი ჩანაწერი
+        # ვერ ხსნიდა საიდან. სხვაობა ხელახლა seed-ისასაც სწორად იწერება.
+        desired = int(row.get("stock", 0))
+        delta = desired - product.stock
+        if delta:
+            await adjust_stock(db, product.id, delta, REASON_INITIAL)
 
         # სურათებს ყოველ ჯერზე თავიდან ვწერთ — რიგი და is_primary რომ არ აირიოს.
         # bulk DELETE განზრახ: `product.images`-ზე მიმართვა lazy-load-ს იწვევდა და

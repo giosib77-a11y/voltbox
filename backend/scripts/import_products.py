@@ -32,8 +32,9 @@ from sqlalchemy.orm import lazyload
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.db.models import Brand, Category, Product, ProductImage
+from app.db.models import REASON_INITIAL, Brand, Category, Product, ProductImage
 from app.db.session import SessionLocal, engine
+from app.services.inventory import adjust_stock
 from app.services.search import build_search_text
 
 REQUIRED = ("slug", "name", "category", "brand", "price")
@@ -126,7 +127,6 @@ async def import_one(db: AsyncSession, row: dict[str, Any], *, allow_create_bran
     product.brand_id = brand.id
     product.price = to_decimal(row["price"], "price", slug) or Decimal("0")
     product.old_price = to_decimal(row.get("oldPrice"), "oldPrice", slug)
-    product.stock = int(row.get("stock", 0))
     product.low_stock_threshold = int(row.get("lowStockThreshold", 3))
     product.specs = dict(row.get("specs", {}))
     product.tags = list(row.get("tags", []))
@@ -150,6 +150,14 @@ async def import_one(db: AsyncSession, row: dict[str, Any], *, allow_create_bran
 
     db.add(product)
     await db.flush()
+
+    # მარაგი ერთადერთი გზით — `adjust_stock`-ით, რომ ledger სრული იყოს.
+    # სხვაობას ვწერთ და არა აბსოლუტურ მნიშვნელობას: ხელახლა იმპორტისას
+    # კორექტირება ჩანაწერად აისახება და არა ჩუმ გადაწერად.
+    desired = int(row.get("stock", 0))
+    delta = desired - product.stock
+    if delta:
+        await adjust_stock(db, product.id, delta, REASON_INITIAL)
 
     images = [str(url) for url in row.get("images", []) if url]
     if images:

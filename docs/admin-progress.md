@@ -330,6 +330,18 @@ Found during discovery, outside this task's scope - not silently fixed.
 9. **Category `position` is editable but there is no drag-to-reorder.** The
    dialog exposes the number; a nicer control was out of scope.
 
+10. **`seed.py` and `import_products.py` wrote `products.stock` directly** — found
+    while setting up a local database to log into the panel. The 61 seeded
+    products had stock and **zero** ledger rows, which is precisely the gap the
+    single-write-path rule exists to prevent. Both now write the *difference*
+    through `adjust_stock` with reason `initial`, so re-running an import records
+    a correction instead of silently overwriting. Verified: 61 products,
+    57 movements (four have stock 0), ledger reconciles.
+
+    No automated test guards this: the scripts are not exercised by pytest. A
+    check that every product's stock equals the sum of its movements would be
+    the right guard and is not written yet.
+
 ---
 
 ## Last check results
