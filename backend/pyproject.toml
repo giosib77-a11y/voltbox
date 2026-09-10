@@ -52,7 +52,8 @@ select = ["E", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF", "ASYNC", "S"]
 ignore = ["S101", "B008", "RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S105", "S106"]
+# S105/S106/S107: test fixtures use literal passwords on purpose.
+"tests/*" = ["S105", "S106", "S107"]
 # conftest-ში app-ის იმპორტები os.environ-ის დაყენების შემდეგ უნდა იყოს,
 # თორემ Settings ტესტ-ბაზის ნაცვლად dev-ბაზას წაიკითხავს
 "tests/conftest.py" = ["E402"]

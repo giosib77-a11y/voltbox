@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from app.db.models import Brand, Category, Product, ProductImage
+from app.core.security import create_access_token, hash_password
+from app.db.models import ROLE_CUSTOMER, Brand, Category, Product, ProductImage, User
 from app.services.search import build_search_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -105,3 +106,35 @@ async def make_product(
         )
     await db.flush()
     return product
+
+
+async def make_user(
+    db: AsyncSession,
+    *,
+    email: str = "user@example.ge",
+    role: str = ROLE_CUSTOMER,
+    is_active: bool = True,
+    password: str = "supersecret1",
+) -> User:
+    """A user with any role or active flag, without going through registration.
+
+    Registration deliberately cannot produce an admin, and it is rate limited,
+    so tests that need one build it here instead.
+    """
+    user = User(
+        email=email.lower(),
+        password_hash=hash_password(password),
+        first_name="ტესტ",
+        last_name="მომხმარებელი",
+        role=role,
+        is_active=is_active,
+    )
+    db.add(user)
+    await db.flush()
+    return user
+
+
+def auth_header(user: User) -> dict[str, str]:
+    """Bearer header for a user, skipping the login round trip."""
+    token, _ = create_access_token(user.id)
+    return {"Authorization": f"Bearer {token}"}

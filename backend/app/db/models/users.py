@@ -14,6 +14,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, Timestamps, UUIDPrimaryKey
 
+# Roles are a plain VARCHAR, not a native PG enum, so adding one later needs no
+# migration. Kept as constants because comparing to a bare string in a dozen
+# places is how an authorization check eventually gets misspelled.
+ROLE_CUSTOMER = "customer"
+ROLE_ADMIN = "admin"
+ROLES = (ROLE_CUSTOMER, ROLE_ADMIN)
+
 
 class User(UUIDPrimaryKey, Timestamps, Base):
     __tablename__ = "users"

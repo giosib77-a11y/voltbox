@@ -49,6 +49,29 @@ docker build -t voltbox-api:check .
 docker run --rm -e DATABASE_URL=postgresql://u:p@h:5432/d   -e JWT_SECRET=0123456789012345678901234567890123456789   voltbox-api:check python -c "import app.main as m; print(len(m.app.openapi()['paths']), 'paths')"
 ```
 
+## ადმინისტრატორები
+
+ადმინი **მხოლოდ** ბრძანების ხაზიდან იქმნება. საჯარო რეგისტრაცია `role`-ს არ
+იღებს (`RegisterRequest`-ს ასეთი ველი არ აქვს და `ApiRequest` უცნობ ველებს
+კრძალავს), ასე რომ თავის თავს ვერავინ დააწინაურებს.
+
+```bash
+python scripts/manage_admin.py create-admin --email you@voltbox.ge --first-name გიორგი
+python scripts/manage_admin.py promote-user --email someone@voltbox.ge
+python scripts/manage_admin.py demote-user  --email someone@voltbox.ge
+```
+
+პაროლი **არასოდეს არის არგუმენტი** — ის shell-ის ისტორიაში, `ps`-ის გამონატანსა
+და CI-ის ლოგებში დარჩებოდა. სკრიპტი მას ინტერაქტიულად კითხულობს, ან
+`VOLTBOX_ADMIN_PASSWORD`-იდან (მაგ. CI-სთვის).
+
+`demote-user` როლთან ერთად **ყველა refresh-ტოკენს აუქმებს**. ამის გარეშე
+დაქვეითებული ადმინი 30 დღემდე შეძლებდა ახალი access-ტოკენების აღებას.
+წვდომა მაშინვე ითიშება — `require_admin` როლს ყოველ მოთხოვნაზე ბაზიდან
+კითხულობს და არა JWT-ის შიგთავსიდან.
+
+---
+
 ## პროდუქტების დამატება
 
 ბაზა ორ ნაწილად იყოფა:
