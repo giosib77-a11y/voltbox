@@ -9,13 +9,18 @@
  */
 
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, LogOut, Store } from 'lucide-react';
+import { Boxes, LayoutDashboard, LogOut, Package, Store, Tags } from 'lucide-react';
 
 import * as api from '../services/api.js';
 import { useAdminSession } from './useAdminSession.js';
 
 /** Sections rendered in the sidebar. Grows as later phases add pages. */
-const NAV = [{ to: '/admin', label: 'მიმოხილვა', icon: LayoutDashboard, end: true }];
+const NAV = [
+  { to: '/admin', label: 'მიმოხილვა', icon: LayoutDashboard, end: true },
+  { to: '/admin/products', label: 'პროდუქტები', icon: Package },
+  { to: '/admin/categories', label: 'კატეგორიები', icon: Boxes },
+  { to: '/admin/brands', label: 'ბრენდები', icon: Tags },
+];
 
 export default function AdminLayout() {
   const { admin } = useAdminSession();

@@ -29,7 +29,7 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 
 ## Current phase
 
-**Phase 2 — Catalog** (2.1–2.5 done, 2.6 catalog UI in progress)
+**Phase 2 — Catalog** ✅ complete → starting Phase 3
 
 ---
 
@@ -52,6 +52,7 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 - [x] 2.3 categories/brands API, `services/slug.py`, `services/audit.py`
 - [x] 2.4 products API — list/get/create/patch/archive/unarchive/duplicate
 - [x] 2.5 product images — `StorageBackend` protocol, Supabase + in-memory fake
+- [x] 2.6 catalog UI — products list/form, specs editor, images, categories, brands
 
 ---
 
@@ -245,6 +246,23 @@ Most important first.
     ფ/პ → p, ჩ/ჭ → ch, ც/წ → ts). The national romanization distinguishes them
     with apostrophes, which cannot appear in a URL.
 
+13. **No `react-hook-form` / `zod`.** The brief allows them, but the storefront
+    already validates with `useState` + explicit checks (`Checkout.jsx`). Two
+    form paradigms in one codebase costs more than the library saves, and it
+    avoids three dependencies. Server errors are mapped to fields by hand in
+    `fieldErrorsFrom`.
+
+14. **`lazy()` calls live inside `adminChildren()`**, not at module scope. Since
+    `VITE_API_MODE` is substituted at build time, the mock branch is dead code
+    and Rollup drops every admin chunk - verified: a mock build contains only
+    `AdminUnavailable`.
+
+15. **Money is sent as the typed string**, never parsed in the browser. Parsing
+    is how `10.10` becomes `10.099999999999999`. A test asserts it.
+
+16. **`useBlocker` needs a data router**, so ProductForm's tests use
+    `createMemoryRouter` + `RouterProvider` rather than `MemoryRouter`.
+
 ---
 
 ## Open items
@@ -272,24 +290,31 @@ Found during discovery, outside this task's scope - not silently fixed.
    never made a live call; the bucket does not exist yet. Creating it (public
    read, backend-only write) is a manual step recorded in the README.
 
+8. **jsdom's `AbortSignal` is not undici's.** When React Router's data router
+   navigates after a successful save, it builds a `Request` that Node's fetch
+   rejects. It surfaces as an unhandled rejection, not a test failure, but it
+   turns the run's exit code into 1. Worked around in the one test that
+   navigates; a project-wide fix would need a polyfill in `vitest.setup.js`.
+
+9. **Category `position` is editable but there is no drag-to-reorder.** The
+   dialog exposes the number; a nicer control was out of scope.
+
 ---
 
 ## Last check results
 
-End of Phase 1 (all run locally):
+End of Phase 2 (all run locally):
 
 ```
 ruff        All checks passed!
-ruff fmt    67 files already formatted
-mypy        Success: no issues found in 47 source files
-pytest      119 passed in 12.94s          (110 pre-existing + 9 admin auth)
-alembic     upgrade head / downgrade -1 / upgrade head -> 0002 (head)   [local voltbox_mig]
-eslint      0 errors, 4 warnings          (react-refresh, Context files - see decisions)
-vitest      17 passed (3 files)
-build mock  316.24 kB   (baseline 315.68; +0.56 for AdminBoundary)
-build http  271.93 kB   (baseline 269.04; +2.89 for the shared httpClient + boundary)
+ruff fmt    87 files already formatted
+mypy        Success: no issues found in 62 source files
+pytest      274 passed in 42.74s
+alembic     0003 upgrade / downgrade -1 / upgrade  -> head    [local voltbox_mig]
+            backfill verified against real rows: stock 7/0/41 reconciles exactly
+docker      image builds; app imports inside the container, 33 paths
+eslint      0 errors, 5 warnings   (react-refresh in Context files - see decisions)
+vitest      22 passed (4 files), exit 0
+build mock  316.26 kB   (admin fully eliminated - only AdminUnavailable survives)
+build http  273.69 kB   (admin ships as 8 separate chunks, largest 17.1 kB)
 ```
-
-Admin chunking verified in the build output: in `http` mode the admin ships as
-6 separate chunks (largest 5.4 kB); in `mock` mode only `AdminUnavailable`
-survives - the other five are eliminated as dead code.
