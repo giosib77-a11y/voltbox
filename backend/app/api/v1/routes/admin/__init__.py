@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends
 from app.api.v1.routes.admin import (
     brands,
     categories,
+    customers,
     dashboard,
     images,
     inventory,
@@ -39,5 +40,6 @@ admin_router.include_router(images.router)
 admin_router.include_router(orders.router)
 admin_router.include_router(inventory.router)
 admin_router.include_router(dashboard.router)
+admin_router.include_router(customers.router)
 
 __all__ = ["admin_router"]

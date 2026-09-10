@@ -118,6 +118,53 @@ python scripts/reindex_search.py
 
 ---
 
+## ადმინ პანელი
+
+### გარემოს ცვლადები
+
+```dotenv
+STORE_TIMEZONE=Asia/Tbilisi          # ნაგულისხმევი; "დღეს" ამ სარტყელში ითვლება
+SUPABASE_PROJECT_REF=                # სურათებისთვის; ცარიელი = ლოკალური fake
+SUPABASE_SERVICE_ROLE_KEY=           # მხოლოდ backend-ზე, არასოდეს ბრაუზერში
+SUPABASE_STORAGE_BUCKET=product-images
+MAX_IMAGE_BYTES=5242880              # 5 MB
+```
+
+### Storage-ის bucket
+
+Supabase → Storage → New bucket, სახელი `product-images`, **Public** მონიშნული.
+
+საჯარო განზრახაა: ხელმოწერილი URL-ები იწურება, შეკვეთის პოზიციები კი სურათის
+მისამართს snapshot-ად ინახავენ — ორწლიანი შეკვეთის გატეხილი ბმული აღდგენას აღარ
+ექვემდებარება. ჩაწერა მხოლოდ backend-ს შეუძლია service-role გასაღებით; ბრაუზერს
+ის არასოდეს ხედავს.
+
+გასაღებების გარეშეც მუშაობს — `get_storage()` მეხსიერების fake-ზე გადადის და
+პანელი ლოკალურად ისე ეშვება, თითქოს bucket არსებობს.
+
+### პირველი ადმინი
+
+```bash
+python scripts/manage_admin.py create-admin --email you@voltbox.ge --first-name გიორგი
+```
+
+მერე frontend-ში `/admin/login`.
+
+### ლოკალურად გაშვება
+
+```bash
+# 1. backend
+uvicorn app.main:app --reload
+
+# 2. frontend — .env-ში VITE_API_MODE=http და VITE_API_BASE_URL=/api/v1
+cd ../frontend && npm run dev
+```
+
+`/api/v1` შედარებითი გზაა და Vite-ის proxy-ზე გადის — ასე ადმინი ngrok-ითაც
+მუშაობს და CORS საერთოდ არ ერევა.
+
+---
+
 ## Supabase
 
 `DATABASE_URL` უნდა იყოს **Session pooler**-ის URI (არა Direct, არა Transaction).

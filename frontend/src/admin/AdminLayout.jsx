@@ -17,6 +17,7 @@ import {
   ReceiptText,
   Store,
   Tags,
+  Users,
   Warehouse,
 } from 'lucide-react';
 
@@ -31,6 +32,7 @@ const NAV = [
   { to: '/admin/brands', label: 'ბრენდები', icon: Tags },
   { to: '/admin/orders', label: 'შეკვეთები', icon: ReceiptText },
   { to: '/admin/inventory', label: 'მარაგი', icon: Warehouse },
+  { to: '/admin/customers', label: 'მომხმარებლები', icon: Users },
 ];
 
 export default function AdminLayout() {

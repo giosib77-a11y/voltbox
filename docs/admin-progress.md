@@ -29,7 +29,7 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 
 ## Current phase
 
-**Phase 3 — Orders, inventory, dashboard** ✅ complete → starting Phase 4
+**Phase 4 — Customers** ✅ complete. All phases done; final report written.
 
 ---
 
@@ -58,6 +58,8 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 - [x] 3.2 orders API and UI
 - [x] 3.3 inventory API and UI
 - [x] 3.4 dashboard (SQL aggregates, store timezone)
+- [x] Phase 3 gate (commit `bc09d43`)
+- [x] Phase 4 customers — list, detail, block/unblock, README docs
 
 ---
 
@@ -283,6 +285,15 @@ Most important first.
 20. **Top products looks back 30 days and reads order item snapshots**, not the
     products table - an item sold under an old name still belongs to that sale.
 
+21. **Admins cannot be blocked from the panel, and nobody can block themselves.**
+    Administrators are managed with the CLI, where demotion is a deliberate act;
+    recovering from locking yourself out needs shell access to the server.
+
+22. **Money is serialised as a JSON string** (Pydantic's default for `Decimal`),
+    not a float. Both consumers already accept either form - the storefront's
+    `formatNumber` and the admin's `money()` both call `Number(value)`. A float
+    would round 10.10 to 10.099999999999999.
+
 ---
 
 ## Open items
@@ -323,17 +334,17 @@ Found during discovery, outside this task's scope - not silently fixed.
 
 ## Last check results
 
-End of Phase 3 (all run locally):
+End of Phase 4 - the final run (all local):
 
 ```
 ruff        All checks passed!
-ruff fmt    96 files already formatted
-mypy        Success: no issues found in 69 source files
-pytest      353 passed in 26.45s
-alembic     0004 upgrade / downgrade -1 / upgrade -> head   [local voltbox_mig]
-docker      image builds; 40 paths; ZoneInfo('Asia/Tbilisi') resolves inside it
-eslint      0 errors, 9 warnings   (react-refresh in Context + admin statuses file)
+ruff fmt    100 files already formatted
+mypy        Success: no issues found in 72 source files
+pytest      372 passed in 27.93s
+alembic     upgrade head -> 0004 (head); every migration reversed and reapplied
+docker      image builds; app imports in the container; 40 paths (pre-Phase-4)
+eslint      0 errors, 9 warnings   (react-refresh: Context files + admin statuses)
 vitest      22 passed (4 files), exit 0
 build mock  316.26 kB   (no admin chunks at all)
-build http  274.45 kB   (admin ships as 12 separate chunks)
+build http  274.82 kB   (admin ships as 14 separate chunks)
 ```

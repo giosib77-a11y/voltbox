@@ -188,3 +188,23 @@ export async function listMovements(productId, params = {}) {
 export async function getDashboard() {
   return request('/admin/dashboard');
 }
+
+/* ----------------------------------------------------------- customers --- */
+
+// GET /admin/customers?page=&limit=&q=&isActive=
+export async function listCustomers(params = {}) {
+  return request('/admin/customers', { params });
+}
+
+// GET /admin/customers/:id
+export async function getCustomer(id) {
+  return request(`/admin/customers/${encodeURIComponent(id)}`);
+}
+
+// POST /admin/customers/:id/active
+export async function setCustomerActive(id, isActive) {
+  return request(`/admin/customers/${encodeURIComponent(id)}/active`, {
+    method: 'POST',
+    body: { isActive },
+  });
+}

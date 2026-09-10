@@ -56,6 +56,8 @@ function adminChildren() {
   const OrderList = lazy(() => import('./admin/pages/OrderList.jsx'));
   const OrderDetail = lazy(() => import('./admin/pages/OrderDetail.jsx'));
   const InventoryList = lazy(() => import('./admin/pages/InventoryList.jsx'));
+  const CustomerList = lazy(() => import('./admin/pages/CustomerList.jsx'));
+  const CustomerDetail = lazy(() => import('./admin/pages/CustomerDetail.jsx'));
 
   return [
     { path: 'login', element: <AdminLogin /> },
@@ -74,6 +76,8 @@ function adminChildren() {
             { path: 'orders', element: <OrderList /> },
             { path: 'orders/:id', element: <OrderDetail /> },
             { path: 'inventory', element: <InventoryList /> },
+            { path: 'customers', element: <CustomerList /> },
+            { path: 'customers/:id', element: <CustomerDetail /> },
           ],
         },
       ],

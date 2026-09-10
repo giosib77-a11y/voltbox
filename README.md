@@ -120,6 +120,7 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 |---|---|
 | საიდან მოდის მონაცემები? | `frontend/src/services/api.js` — ერთადერთი კონტრაქტი UI-სთვის |
 | როგორ ემატება ახალი კატეგორია? | `frontend/src/data/categories.js` + `categories.filters` → FilterSidebar თვითონ აეწყობა |
-| როგორ ემატება რეალური პროდუქტი? | `cd backend && python scripts/import_products.py products.json` |
+| როგორ ემატება რეალური პროდუქტი? | ადმინ პანელიდან (`/admin/products`), ან `cd backend && python scripts/import_products.py products.json` |
 | რატომ ასეა და არა სხვანაირად? | [ASSUMPTIONS.md](./ASSUMPTIONS.md) |
 | რა დარჩა გასაკეთებელი? | [ROADMAP.md](./ROADMAP.md) |
+| როგორ მუშაობს ადმინ პანელი? | [docs/admin-brief.md](./docs/admin-brief.md) · [backend/README.md](./backend/README.md#ადმინ-პანელი) |
