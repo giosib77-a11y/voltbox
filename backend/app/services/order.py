@@ -7,8 +7,10 @@
      პროდუქტს სხვადასხვა რიგით ბლოკავს, ურთიერთბლოკირებას (deadlock) გამოიწვევს.
   2. ფასი *ყოველთვის* ბაზიდან მოდის. კლიენტის გამოგზავნილი ფასი არსად არ
      გამოიყენება — ეს ფასის გაყალბების ვექტორია.
-  3. მარაგი ატომურად ჩამოიწერება პირობით `WHERE stock >= :qty`. `rowcount != 1`
-     ნიშნავს, რომ ვიღაცამ დაგვასწრო — ტრანზაქცია ჩავარდება.
+  3. მარაგს მხოლოდ `services/inventory.adjust_stock` ცვლის — ის row-ს ბლოკავს,
+     უარყოფით შედეგს კრძალავს და `inventory_movements`-ში ჩანაწერს წერს.
+     ერთადერთი write-გზა იმიტომ, რომ ledger-ი სრული იყოს: სადმე დამალული
+     UPDATE ისტორიაში ხვრელს ტოვებს, რომელიც თვეების მერე გამოჩნდება.
   4. სახელი, slug, სურათი და ფასი შეკვეთაში snapshot-ად ინახება: მოგვიანებით
      ფასის ცვლილება ისტორიას არ უნდა გადაწეროს.
 """
@@ -19,13 +21,21 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import CursorResult, select, text, update
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.errors import ConflictError, NotFoundError, ValidationError
-from app.db.models import Order, OrderItem, Product, User
+from app.db.models import (
+    REASON_ORDER_CANCELLED,
+    REASON_ORDER_PLACED,
+    Order,
+    OrderItem,
+    Product,
+    User,
+)
+from app.services.inventory import adjust_stock
 
 MAX_QUANTITY = 99
 
@@ -126,7 +136,10 @@ async def create_order(
     for product_id in sorted(quantities):
         qty = quantities[product_id]
         product = products.get(product_id)
-        if product is None or not product.is_active:
+        # Archiving also clears is_active, so the first condition already covers
+        # it; archived_at is checked too so the rule survives if that ever
+        # changes. A product can be retired while it sits in someone's cart.
+        if product is None or not product.is_active or product.archived_at is not None:
             raise NotFoundError(
                 "Product not found",
                 code="PRODUCT_NOT_FOUND",
@@ -165,22 +178,6 @@ async def create_order(
     subtotal = money(subtotal)
     shipping = calc_shipping(subtotal)
 
-    # მარაგის ატომური ჩამოწერა. row უკვე დაბლოკილია, მაგრამ პირობა მაინც რჩება —
-    # ის ბაზის დონეზე იცავს იმ შემთხვევასაც, თუ ბლოკირება ოდესმე მოიხსნება
-    for product_id in sorted(quantities):
-        result: CursorResult[Any] = await db.execute(  # type: ignore[assignment]
-            update(Product)
-            .where(Product.id == product_id, Product.stock >= quantities[product_id])
-            .values(stock=Product.stock - quantities[product_id])
-        )
-        # rowcount != 1 ნიშნავს, რომ ვიღაცამ დაგვასწრო და მარაგი აღარ ჰყოფნის
-        if result.rowcount != 1:
-            raise ConflictError(
-                "Not enough stock",
-                code="INSUFFICIENT_STOCK",
-                details={"productId": str(product_id)},
-            )
-
     order = Order(
         order_number=await _next_order_number(db),
         user_id=user.id if user else None,
@@ -203,7 +200,23 @@ async def create_order(
         items=order_items,
     )
     db.add(order)
+    # flush ჯერ — `order.id` მოძრაობებს სჭირდებათ, რომ ledger-ში ჩანდეს
+    # რომელმა შეკვეთამ ჩამოწერა მარაგი.
     await db.flush()
+
+    # მარაგი ერთადერთი გზით იცვლება — `inventory.adjust_stock`-ით: ის row-ს
+    # ბლოკავს, უარყოფით შედეგზე 409-ს აგდებს და ledger-ში ჩანაწერს წერს.
+    # თანმიმდევრობა კვლავ id-ით დალაგებულია — ორმა პარალელურმა შეკვეთამ ერთი
+    # და იგივე პროდუქტები ერთი რიგით უნდა დაბლოკოს, თორემ deadlock.
+    for product_id in sorted(quantities):
+        await adjust_stock(
+            db,
+            product_id,
+            -quantities[product_id],
+            REASON_ORDER_PLACED,
+            order_id=order.id,
+        )
+
     return order
 
 
@@ -240,16 +253,25 @@ async def get_by_number(
     raise NotFoundError("Order not found", code="ORDER_NOT_FOUND")
 
 
-async def cancel(db: AsyncSession, order: Order) -> Order:
-    """გაუქმება მარაგს აბრუნებს — სხვაგვარად ჩამოწერილი ერთეულები დაიკარგება."""
+async def cancel(db: AsyncSession, order: Order, *, actor_id: UUID | None = None) -> Order:
+    """გაუქმება მარაგს აბრუნებს — სხვაგვარად ჩამოწერილი ერთეულები დაიკარგება.
+
+    ⚠️ გამომძახებელმა შეკვეთის row უნდა დაბლოკოს (`FOR UPDATE`) მანამდე, თორემ
+    ორმა პარალელურმა გაუქმებამ მარაგი ორჯერ დააბრუნებს. Phase 3-ის
+    სტატუსების მანქანა სწორედ ამას აკეთებს.
+    """
     if order.status in {"shipped", "delivered", "cancelled"}:
         raise ConflictError("Order can no longer be cancelled", code="ORDER_NOT_CANCELLABLE")
 
-    for item in order.items:
-        await db.execute(
-            update(Product)
-            .where(Product.id == item.product_id)
-            .values(stock=Product.stock + item.quantity)
+    # id-ით დალაგებული — იგივე წესი, რაც შექმნისას
+    for item in sorted(order.items, key=lambda i: i.product_id):
+        await adjust_stock(
+            db,
+            item.product_id,
+            item.quantity,
+            REASON_ORDER_CANCELLED,
+            actor_id=actor_id,
+            order_id=order.id,
         )
     order.status = "cancelled"
     await db.flush()

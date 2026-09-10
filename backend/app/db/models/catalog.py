@@ -9,11 +9,13 @@
 """
 
 import uuid
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -104,6 +106,12 @@ class Product(UUIDPrimaryKey, Timestamps, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     is_featured: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     is_new: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+
+    # Archived is not the same as inactive. `is_active = false` hides a product
+    # temporarily (a draft, out of season); archiving retires it for good.
+    # Archiving also sets is_active = false, so every storefront query that
+    # already filters on is_active keeps working untouched.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     category: Mapped[Category] = relationship(back_populates="products", lazy="joined")
     brand: Mapped[Brand] = relationship(back_populates="products", lazy="joined")

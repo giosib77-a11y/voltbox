@@ -4,7 +4,21 @@ Alembic-ის autogenerate-ს ყველა მოდელი ერთ ა
 თორემ ცხრილებს ვერ დაინახავს.
 """
 
+from app.db.models.audit import AdminAuditLog
 from app.db.models.catalog import Brand, Category, Product, ProductImage
+from app.db.models.inventory import (
+    MANUAL_REASONS,
+    MOVEMENT_REASONS,
+    REASON_CORRECTION,
+    REASON_INITIAL,
+    REASON_MANUAL,
+    REASON_ORDER_CANCELLED,
+    REASON_ORDER_PLACED,
+    REASON_RESTOCK,
+    REASON_RETURN,
+    REASONS_REQUIRING_NOTE,
+    InventoryMovement,
+)
 from app.db.models.orders import ORDER_STATUSES, Order, OrderItem
 from app.db.models.users import (
     ROLE_ADMIN,
@@ -16,13 +30,25 @@ from app.db.models.users import (
 )
 
 __all__ = [
+    "MANUAL_REASONS",
+    "MOVEMENT_REASONS",
     "ORDER_STATUSES",
+    "REASONS_REQUIRING_NOTE",
+    "REASON_CORRECTION",
+    "REASON_INITIAL",
+    "REASON_MANUAL",
+    "REASON_ORDER_CANCELLED",
+    "REASON_ORDER_PLACED",
+    "REASON_RESTOCK",
+    "REASON_RETURN",
     "ROLES",
     "ROLE_ADMIN",
     "ROLE_CUSTOMER",
     "Address",
+    "AdminAuditLog",
     "Brand",
     "Category",
+    "InventoryMovement",
     "Order",
     "OrderItem",
     "Product",
