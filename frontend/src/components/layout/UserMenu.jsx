@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LogOut, MapPin, Package, User, UserCircle2 } from 'lucide-react';
+import { LayoutDashboard, LogOut, MapPin, Package, User, UserCircle2 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth.js';
 
 /**
@@ -71,6 +71,21 @@ export default function UserMenu() {
             </p>
             <p className="truncate text-xs text-ink-500">{user?.email}</p>
           </div>
+
+          {/* ადმინს პანელამდე მისასვლელი გზა უნდა ჰქონდეს — თორემ /admin
+              მხოლოდ იმას აქვს, ვინც მისამართი დაიმახსოვრა. `isAdmin` სესიიდან
+              მოდის; უფლებას მაინც სერვერი წყვეტს ყოველ მოთხოვნაზე. */}
+          {user?.isAdmin ? (
+            <Link
+              to="/admin"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 border-b border-ink-100 px-3 py-2 text-sm font-medium text-accent-800 transition-colors hover:bg-accent-50"
+            >
+              <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
+              ადმინ პანელი
+            </Link>
+          ) : null}
 
           {LINKS.map((link) => (
             <Link

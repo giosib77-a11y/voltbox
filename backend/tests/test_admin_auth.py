@@ -155,3 +155,46 @@ async def test_a_normal_registration_creates_a_customer(client: httpx.AsyncClien
 async def test_the_role_column_defaults_to_customer(db: AsyncSession) -> None:
     user = await make_user(db, email="default-role@example.ge")
     assert user.role == ROLE_CUSTOMER
+
+
+async def test_the_session_tells_an_admin_that_they_are_one(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """The storefront needs this to draw a link to the panel.
+
+    Without it an administrator who signs in through the shop has no way to
+    discover /admin at all - the address is only known to whoever memorised it.
+    """
+    admin = await make_user(db, email="flagged@voltbox.ge", role=ROLE_ADMIN)
+
+    response = await client.get("/api/v1/auth/me", headers=auth_header(admin))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["isAdmin"] is True
+    # A capability flag, not the taxonomy: the role string stays server-side.
+    assert "role" not in body
+
+
+async def test_a_customer_session_is_not_flagged_as_admin(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    customer = await make_user(db, email="unflagged@example.ge")
+
+    body = (await client.get("/api/v1/auth/me", headers=auth_header(customer))).json()
+
+    assert body["isAdmin"] is False
+
+
+async def test_the_flag_follows_a_promotion(client: httpx.AsyncClient, db: AsyncSession) -> None:
+    user = await make_user(db, email="promoted@example.ge")
+    assert (await client.get("/api/v1/auth/me", headers=auth_header(user))).json()[
+        "isAdmin"
+    ] is False
+
+    user.role = ROLE_ADMIN
+    await db.flush()
+
+    # Read from the row on every request, so it cannot go stale in a token.
+    body = (await client.get("/api/v1/auth/me", headers=auth_header(user))).json()
+    assert body["isAdmin"] is True

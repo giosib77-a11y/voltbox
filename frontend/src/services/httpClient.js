@@ -22,6 +22,22 @@ function authHeader() {
 }
 
 /**
+ * Georgian text for the error codes whose server message is not user-facing.
+ *
+ * `code` is the stable part of the contract and `message` is written for a
+ * developer reading a log. Everything the UI is in is Georgian, so the few
+ * codes a shopper can actually trigger get a sentence that says what happened
+ * and what to do about it.
+ */
+const CODE_MESSAGES = {
+  RATE_LIMITED: 'ძალიან ბევრი მცდელობა იყო. დაელოდეთ ერთ წუთს და სცადეთ ხელახლა.',
+  ADMIN_REQUIRED: 'ამ გვერდზე წვდომა მხოლოდ ადმინისტრატორს აქვს.',
+  ACCOUNT_DISABLED: 'ანგარიში დაბლოკილია. დაუკავშირდით მაღაზიას.',
+  INVALID_TOKEN: 'სესიის ვადა ამოიწურა. გთხოვთ, ხელახლა შეხვიდეთ.',
+  EMAIL_ALREADY_EXISTS: 'ამ ელ. ფოსტით მომხმარებელი უკვე რეგისტრირებულია.',
+};
+
+/**
  * Pulls message / code / details out of the backend's error envelope.
  *
  * The API always answers `{"error": {code, message, details}}`. The flat shape
@@ -30,9 +46,11 @@ function authHeader() {
  */
 function parseError(payload) {
   const envelope = payload?.error ?? payload ?? null;
+  const code = envelope?.code || null;
   return {
-    message: envelope?.message || 'მოთხოვნის დამუშავება ვერ მოხერხდა',
-    code: envelope?.code || null,
+    message:
+      CODE_MESSAGES[code] || envelope?.message || 'მოთხოვნის დამუშავება ვერ მოხერხდა',
+    code,
     details: envelope?.details ?? null,
   };
 }

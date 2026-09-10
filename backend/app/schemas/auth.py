@@ -61,6 +61,9 @@ class UserOut(ApiModel):
     last_name: str
     email: str
     phone: str | None
+    # A capability flag, not the role. The storefront draws a link to the admin
+    # panel when it is true; every admin request is still authorized server-side.
+    is_admin: bool = False
     created_at: datetime
 
 

@@ -39,6 +39,18 @@ class User(UUIDPrimaryKey, Timestamps, Base):
         back_populates="user", cascade="all, delete-orphan", lazy="selectin"
     )
 
+    @property
+    def is_admin(self) -> bool:
+        """Whether this account may use the admin panel.
+
+        Exposed to the client as a capability flag so the storefront can show a
+        link to the panel. The role string itself stays server-side: the client
+        needs to know *that* it may, not the taxonomy behind it. Authorization
+        is still decided by require_admin on every request - this flag only
+        decides whether a menu item is drawn.
+        """
+        return self.role == ROLE_ADMIN
+
 
 class Address(UUIDPrimaryKey, Timestamps, Base):
     """მისამართი.

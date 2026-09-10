@@ -180,3 +180,30 @@ describe('createOrder idempotency', () => {
     });
   });
 });
+
+describe('error messages the shopper sees', () => {
+  it('replaces the developer-facing rate limit text with Georgian', async () => {
+    // The server message is written for a log; everything the UI is in is
+    // Georgian, and "Too many requests" does not say how long to wait.
+    global.fetch = vi.fn(async () =>
+      reply(
+        { error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' } },
+        429,
+      ),
+    );
+
+    await expect(httpApi.getProfile()).rejects.toMatchObject({
+      message: 'ძალიან ბევრი მცდელობა იყო. დაელოდეთ ერთ წუთს და სცადეთ ხელახლა.',
+    });
+  });
+
+  it('keeps the server message for codes it does not know', async () => {
+    global.fetch = vi.fn(async () =>
+      reply({ error: { code: 'SOMETHING_NEW', message: 'a specific explanation' } }, 400),
+    );
+
+    await expect(httpApi.getProfile()).rejects.toMatchObject({
+      message: 'a specific explanation',
+    });
+  });
+});
