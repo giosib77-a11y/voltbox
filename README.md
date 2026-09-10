@@ -72,8 +72,15 @@ cp .env.example .env                       # DATABASE_URL, JWT_SECRET
 python -m venv .venv
 .venv/Scripts/python.exe -m pip install -e ".[dev]"    # Windows
 alembic upgrade head
-python scripts/seed.py --structure-only    # კატეგორიები + ბრენდები
+python scripts/seed.py                     # სტრუქტურა + 61 სატესტო პროდუქტი
 uvicorn app.main:app --reload              # → http://localhost:8000/docs
+```
+
+ცოცხალ (Supabase) ბაზაზე კი — `--structure-only`, რომ სატესტო პროდუქტები
+არ მოხვდეს:
+
+```bash
+python scripts/seed.py --structure-only
 ```
 
 ### ორივე ერთად

@@ -4,7 +4,8 @@
   · `brand` და `category` სტრიქონებია (სახელი / slug), არა ჩალაგებული ობიექტები
   · `images` სტრიქონების მასივია, არა {url, alt, position} ობიექტების
   · წარმოებული ველები (hasDiscount, inStock, ...) ყოველთვის მოდის სერვერიდან
-იხ. `src/types.js` და `src/components/product/ProductCard.jsx`.
+იხ. `../frontend/src/types.js` და
+`../frontend/src/components/product/ProductCard.jsx`.
 """
 
 from datetime import datetime

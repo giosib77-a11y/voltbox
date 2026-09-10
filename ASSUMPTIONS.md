@@ -269,6 +269,16 @@ GENERATED სვეტად არ გამოდის — შიგთავ
 ცხრილებს ცლიან. Supabase-ზე გადასვლა მხოლოდ `DATABASE_URL`-ის ცვლილებაა;
 `config.py` სქემასა და `?sslmode=`-ს თავად ასწორებს.
 
+**8.10. ruff/mypy-ის target 3.13-ია, თუმცა `requires-python` 3.14.**
+`target-version = "py314"` სცადა და უარვყავი: ruff format მაშინ
+`except (ValueError, TypeError):`-ს PEP 758-ის `except ValueError, TypeError:`-ად
+გადაწერს სამ ფაილში. სინტაქსი 3.14-ზე ვალიდურია, მაგრამ Python 2-ის
+`except E, name:`-ს ჰგავს (სადაც `name` ცვლადია, არა მეორე ტიპი) — კითხვადობის
+რეალური ზარალი ნულოვანი მოგებისთვის. იმავე target-ზე UP037 SQLAlchemy-ის
+`Mapped["Product"]` forward reference-ებსაც ბრჭყალებს ხდის და mapping-ს PEP 649-ის
+დაგვიანებულ გამოთვლაზე დაამოკიდებდა. უფრო დაბალი target ამოწმებს ყველაფერს, რასაც
+მაღალი — უბრალოდ ახალ იდიომებს არ თავაზობს.
+
 ---
 
 ## 9. Repo-ს განლაგება

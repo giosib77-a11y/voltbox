@@ -1,6 +1,6 @@
 """კატალოგი — კატეგორიები, ბრენდები, პროდუქტები, სურათები.
 
-⚠️ სქემა frontend-ის კონტრაქტს მისდევს (`src/types.js`), რაც ნიშნავს რამდენიმე
+⚠️ სქემა frontend-ის კონტრაქტს მისდევს (`../frontend/src/types.js`), რაც ნიშნავს რამდენიმე
 სვეტს, რომელიც საწყის ტექნიკურ დავალებაში არ იყო:
   · categories.icon, categories.filters — FilterSidebar სრულად ამ კონფიგზეა აგებული
   · products.short_description, is_new, reviews_count — ბარათებზე ჩანს

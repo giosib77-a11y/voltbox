@@ -2,9 +2,9 @@ name: frontend
 
 on:
   push:
-    paths: ["frontend/**", ".github/workflows/frontend.yml"]
+    paths: ["frontend/**", "backend/scripts/export_mock_data.mjs", ".github/workflows/frontend.yml"]
   pull_request:
-    paths: ["frontend/**", ".github/workflows/frontend.yml"]
+    paths: ["frontend/**", "backend/scripts/export_mock_data.mjs", ".github/workflows/frontend.yml"]
 
 defaults:
   run:
@@ -38,3 +38,41 @@ jobs:
           VITE_API_MODE: ${{ matrix.api-mode }}
           VITE_API_BASE_URL: http://localhost:8000/api/v1
         run: npm run build
+
+  # frontend-სა და backend-ს შორის ერთადერთი პირდაპირი დამოკიდებულება:
+  # `backend/scripts/export_mock_data.mjs` პირდაპირ აიმპორტებს
+  # `frontend/src/data/*.js`-ს. `products.js`-ში export-ის სახელის შეცვლა
+  # frontend-ის ბილდს არ ტეხს — ტყდება მხოლოდ seed, თანაც მოგვიანებით.
+  # ეს ნაკერი აქ იმიტომ მოწმდება, რომ სწორედ frontend-ის ცვლილება ტეხს მას.
+  mock-export:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Export mock data for the backend seed
+        run: node backend/scripts/export_mock_data.mjs > mock.json
+
+      - name: Validate the exported shape
+        run: |
+          node -e '
+            const d = JSON.parse(require("fs").readFileSync("mock.json", "utf8"));
+            for (const k of ["products", "categories", "brands"]) {
+              if (!Array.isArray(d[k]) || d[k].length === 0) {
+                throw new Error(`${k}: expected a non-empty array, got ${JSON.stringify(d[k])}`);
+              }
+            }
+            for (const f of ["id", "slug", "name", "price", "category", "brand"]) {
+              if (!(f in d.products[0])) throw new Error(`product is missing "${f}"`);
+            }
+            console.log(
+              `ok — ${d.products.length} products, ${d.categories.length} categories, ${d.brands.length} brands`
+            );
+          '

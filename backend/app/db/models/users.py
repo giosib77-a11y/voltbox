@@ -1,7 +1,7 @@
 """მომხმარებლები, მისამართები და refresh-ტოკენები.
 
 frontend-ის `User` ტიპს `firstName` + `lastName` აქვს (და არა ერთიანი `full_name`),
-ამიტომ სქემაც ასეა — იხ. `src/types.js`.
+ამიტომ სქემაც ასეა — იხ. `../frontend/src/types.js`.
 """
 
 import uuid

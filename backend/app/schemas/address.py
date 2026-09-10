@@ -1,6 +1,6 @@
 """მისამართების სქემები.
 
-ველების ნაკრები frontend-ის ფორმას მისდევს (`src/pages/Account/Addresses.jsx`):
+ველების ნაკრები frontend-ის ფორმას მისდევს (`../frontend/src/pages/Account/Addresses.jsx`):
 label, city, address, isDefault. DB-ის დამატებითი სვეტები (fullName, phone,
 apartment, postalCode) არასავალდებულოა და მომავალი გაფართოებისთვისაა.
 """

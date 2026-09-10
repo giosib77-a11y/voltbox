@@ -5,6 +5,9 @@
 !.vscode/extensions.json
 
 # ── frontend (Node / Vite) ──────────────────────────────────────────────
+# ძირში `package.json` განზრახ არ დევს (იხ. ASSUMPTIONS.md §9.2), მაგრამ
+# შემთხვევით გაშვებული `npm install` მაინც არ უნდა მოხვდეს git-ში.
+node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
@@ -28,3 +31,6 @@ backend/_mock.json
 backend/_mock.err
 backend/*.tmp
 backend/products.json
+
+# export_mock_data.mjs-ის გამონატანი (CI-ში და ხელით გაშვებისას)
+mock.json

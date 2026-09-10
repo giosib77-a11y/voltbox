@@ -36,6 +36,11 @@ packages = ["app"]
 
 [tool.ruff]
 line-length = 100
+# განზრახ ჩამორჩება `requires-python`-ს (3.14). py314-ზე ruff format
+# `except (A, B):`-ს PEP 758-ის `except A, B:`-ად გადაწერს — ეს Python 2-ის
+# `except E, name:`-ს ჰგავს და მხოლოდ 3.14+-ზე მუშაობს. UP037 კი SQLAlchemy-ის
+# `Mapped["Product"]` forward reference-ებს ბრჭყალებს ხდის.
+# კონსერვატიული target ორივეს კეტავს და შემოწმებას არაფერს აკლებს.
 target-version = "py313"
 src = ["app", "tests"]
 
@@ -53,6 +58,7 @@ ignore = ["S101", "B008", "RUF001", "RUF002", "RUF003"]
 "scripts/*" = ["S101"]
 
 [tool.mypy]
+# იგივე მიზეზი, რაც ruff-ის target-version-თან
 python_version = "3.13"
 strict = true
 files = ["app"]

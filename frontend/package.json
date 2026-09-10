@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "description": "VoltBox — ელექტრონიკის აქსესუარების ონლაინ-მაღაზია (Frontend)",
   "scripts": {
     "dev": "vite",
