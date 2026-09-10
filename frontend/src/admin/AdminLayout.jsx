@@ -9,7 +9,16 @@
  */
 
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Boxes, LayoutDashboard, LogOut, Package, Store, Tags } from 'lucide-react';
+import {
+  Boxes,
+  LayoutDashboard,
+  LogOut,
+  Package,
+  ReceiptText,
+  Store,
+  Tags,
+  Warehouse,
+} from 'lucide-react';
 
 import * as api from '../services/api.js';
 import { useAdminSession } from './useAdminSession.js';
@@ -20,6 +29,8 @@ const NAV = [
   { to: '/admin/products', label: 'პროდუქტები', icon: Package },
   { to: '/admin/categories', label: 'კატეგორიები', icon: Boxes },
   { to: '/admin/brands', label: 'ბრენდები', icon: Tags },
+  { to: '/admin/orders', label: 'შეკვეთები', icon: ReceiptText },
+  { to: '/admin/inventory', label: 'მარაგი', icon: Warehouse },
 ];
 
 export default function AdminLayout() {

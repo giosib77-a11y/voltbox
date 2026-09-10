@@ -29,7 +29,7 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 
 ## Current phase
 
-**Phase 2 — Catalog** ✅ complete → starting Phase 3
+**Phase 3 — Orders, inventory, dashboard** ✅ complete → starting Phase 4
 
 ---
 
@@ -53,6 +53,11 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 - [x] 2.4 products API — list/get/create/patch/archive/unarchive/duplicate
 - [x] 2.5 product images — `StorageBackend` protocol, Supabase + in-memory fake
 - [x] 2.6 catalog UI — products list/form, specs editor, images, categories, brands
+- [x] Phase 2 gate (commit `2360791`)
+- [x] 3.1 order state machine + `order_status_history` (migration 0004)
+- [x] 3.2 orders API and UI
+- [x] 3.3 inventory API and UI
+- [x] 3.4 dashboard (SQL aggregates, store timezone)
 
 ---
 
@@ -263,6 +268,21 @@ Most important first.
 16. **`useBlocker` needs a data router**, so ProductForm's tests use
     `createMemoryRouter` + `RouterProvider` rather than `MemoryRouter`.
 
+17. **`allowedTransitions` is sent with every order.** The UI renders only those
+    buttons and never holds a copy of the graph - two copies of a state machine
+    drift apart.
+
+18. **The order row is locked before its status is read.** Two admins clicking
+    Cancel simultaneously would otherwise both see `pending`, both pass the
+    check and both restock.
+
+19. **`tzdata` is a declared dependency.** `zoneinfo` carries no database:
+    Linux usually has system tz files, Windows never does, a slim container may
+    not. Found by five failing dashboard tests.
+
+20. **Top products looks back 30 days and reads order item snapshots**, not the
+    products table - an item sold under an old name still belongs to that sale.
+
 ---
 
 ## Open items
@@ -303,18 +323,17 @@ Found during discovery, outside this task's scope - not silently fixed.
 
 ## Last check results
 
-End of Phase 2 (all run locally):
+End of Phase 3 (all run locally):
 
 ```
 ruff        All checks passed!
-ruff fmt    87 files already formatted
-mypy        Success: no issues found in 62 source files
-pytest      274 passed in 42.74s
-alembic     0003 upgrade / downgrade -1 / upgrade  -> head    [local voltbox_mig]
-            backfill verified against real rows: stock 7/0/41 reconciles exactly
-docker      image builds; app imports inside the container, 33 paths
-eslint      0 errors, 5 warnings   (react-refresh in Context files - see decisions)
+ruff fmt    96 files already formatted
+mypy        Success: no issues found in 69 source files
+pytest      353 passed in 26.45s
+alembic     0004 upgrade / downgrade -1 / upgrade -> head   [local voltbox_mig]
+docker      image builds; 40 paths; ZoneInfo('Asia/Tbilisi') resolves inside it
+eslint      0 errors, 9 warnings   (react-refresh in Context + admin statuses file)
 vitest      22 passed (4 files), exit 0
-build mock  316.26 kB   (admin fully eliminated - only AdminUnavailable survives)
-build http  273.69 kB   (admin ships as 8 separate chunks, largest 17.1 kB)
+build mock  316.26 kB   (no admin chunks at all)
+build http  274.45 kB   (admin ships as 12 separate chunks)
 ```

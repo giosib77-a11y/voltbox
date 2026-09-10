@@ -141,3 +141,50 @@ export async function updateBrand(id, patch) {
 export async function deleteBrand(id) {
   return request(`/admin/brands/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
+
+/* -------------------------------------------------------------- orders --- */
+
+// GET /admin/orders?page=&limit=&q=&status=&dateFrom=&dateTo=
+export async function listOrders(params = {}) {
+  return request('/admin/orders', { params });
+}
+
+// GET /admin/orders/:id
+export async function getOrder(id) {
+  return request(`/admin/orders/${encodeURIComponent(id)}`);
+}
+
+// POST /admin/orders/:id/status
+export async function changeOrderStatus(id, to, note) {
+  return request(`/admin/orders/${encodeURIComponent(id)}/status`, {
+    method: 'POST',
+    body: { to, note: note || null },
+  });
+}
+
+/* ----------------------------------------------------------- inventory --- */
+
+// GET /admin/inventory?page=&limit=&q=&only=
+export async function listInventory(params = {}) {
+  return request('/admin/inventory', { params });
+}
+
+// POST /admin/inventory/:productId/adjust
+export async function adjustStock(productId, payload) {
+  return request(`/admin/inventory/${encodeURIComponent(productId)}/adjust`, {
+    method: 'POST',
+    body: payload,
+  });
+}
+
+// GET /admin/inventory/:productId/movements
+export async function listMovements(productId, params = {}) {
+  return request(`/admin/inventory/${encodeURIComponent(productId)}/movements`, { params });
+}
+
+/* ----------------------------------------------------------- dashboard --- */
+
+// GET /admin/dashboard
+export async function getDashboard() {
+  return request('/admin/dashboard');
+}

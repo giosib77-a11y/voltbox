@@ -53,6 +53,9 @@ function adminChildren() {
   const ProductForm = lazy(() => import('./admin/pages/ProductForm.jsx'));
   const CategoryList = lazy(() => import('./admin/pages/CategoryList.jsx'));
   const BrandList = lazy(() => import('./admin/pages/BrandList.jsx'));
+  const OrderList = lazy(() => import('./admin/pages/OrderList.jsx'));
+  const OrderDetail = lazy(() => import('./admin/pages/OrderDetail.jsx'));
+  const InventoryList = lazy(() => import('./admin/pages/InventoryList.jsx'));
 
   return [
     { path: 'login', element: <AdminLogin /> },
@@ -68,6 +71,9 @@ function adminChildren() {
             { path: 'products/:id', element: <ProductForm /> },
             { path: 'categories', element: <CategoryList /> },
             { path: 'brands', element: <BrandList /> },
+            { path: 'orders', element: <OrderList /> },
+            { path: 'orders/:id', element: <OrderDetail /> },
+            { path: 'inventory', element: <InventoryList /> },
           ],
         },
       ],
