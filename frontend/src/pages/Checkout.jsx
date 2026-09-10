@@ -10,6 +10,7 @@ import CartSummary from '../components/cart/CartSummary.jsx';
 import ProductImage from '../components/common/ProductImage.jsx';
 import { useCart } from '../hooks/useCart.js';
 import { useAuth } from '../hooks/useAuth.js';
+import { useIdempotencyKey } from '../hooks/useIdempotencyKey.js';
 import { useToast } from '../hooks/useToast.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import * as api from '../services/api.js';
@@ -44,6 +45,25 @@ export default function Checkout() {
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
+  // ერთი შეკვეთის მცდელობის იდენტიფიკატორი. ხელახლა მხოლოდ მაშინ გენერირდება,
+  // როცა თავად შეკვეთა იცვლება — ორმაგი დაჭერა და timeout-ის შემდეგი ცდა
+  // იმავე გასაღებით მიდის, ამიტომ სერვერი მეორე შეკვეთას არ ქმნის.
+  const attemptSignature = useMemo(
+    () =>
+      JSON.stringify({
+        items: items.map((item) => [item.productId, item.qty]),
+        firstName: values.firstName.trim(),
+        lastName: values.lastName.trim(),
+        phone: digitsOnly(values.phone),
+        city: values.city,
+        address: values.address.trim(),
+        comment: values.comment.trim(),
+        paymentMethod: values.paymentMethod,
+      }),
+    [items, values],
+  );
+  const [idempotencyKey, resetIdempotencyKey] = useIdempotencyKey(attemptSignature);
+
   // ავტორიზებულის მონაცემებით წინასწარი შევსება
   useEffect(() => {
     if (!user) return;
@@ -72,6 +92,8 @@ export default function Checkout() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    // ღილაკი `loading`-ითაც იბლოკება, მაგრამ Enter-ით გაგზავნა მას გვერდს უვლის
+    if (submitting) return;
     const nextErrors = validateForm(values, CHECKOUT_FIELDS);
     setErrors(nextErrors);
     setTouched(Object.fromEntries(CHECKOUT_FIELDS.map((field) => [field, true])));
@@ -96,8 +118,10 @@ export default function Checkout() {
           comment: values.comment.trim(),
         },
         paymentMethod: values.paymentMethod,
+        idempotencyKey,
       });
 
+      resetIdempotencyKey();
       clear();
       navigate(`/checkout/success/${order.orderNumber}`, { replace: true });
     } catch (error) {

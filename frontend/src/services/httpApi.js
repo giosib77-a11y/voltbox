@@ -182,6 +182,9 @@ export async function createOrder(payload) {
   // რაც განზრახაა: ფასის გაყალბების მცდელობა ჩუმად არ უნდა ჩაიაროს.
   const order = await request('/orders', {
     method: 'POST',
+    // Idempotency-Key header-ია და არა ველი: body-ს `extra="forbid"` აქვს და
+    // უცნობი ველი 400-ს გამოიწვევდა
+    headers: payload.idempotencyKey ? { 'Idempotency-Key': payload.idempotencyKey } : undefined,
     body: {
       items: payload.items.map((item) => ({ productId: item.productId, qty: item.qty })),
       customer: payload.customer,

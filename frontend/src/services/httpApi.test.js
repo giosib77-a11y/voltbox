@@ -137,3 +137,46 @@ describe('error envelope', () => {
     });
   });
 });
+
+describe('createOrder idempotency', () => {
+  it('sends the key as a header and repeats it verbatim on a retry', async () => {
+    const seen = [];
+    global.fetch = vi.fn(async (url, options) => {
+      seen.push(options.headers['Idempotency-Key']);
+      if (seen.length === 1) throw new TypeError('network down');
+      return reply({ orderNumber: 'VB-20260910-0001' });
+    });
+
+    const payload = {
+      items: [{ productId: 'p1', qty: 2, snapshot: { price: 10 } }],
+      customer: { phone: '555123456' },
+      paymentMethod: 'cash',
+      idempotencyKey: 'key-abc',
+    };
+
+    // First attempt fails at the network layer, the user retries with the same key.
+    await expect(httpApi.createOrder(payload)).rejects.toMatchObject({ status: 0 });
+    const order = await httpApi.createOrder(payload);
+
+    expect(order.orderNumber).toBe('VB-20260910-0001');
+    expect(seen).toEqual(['key-abc', 'key-abc']);
+  });
+
+  it('never puts the key in the body, which forbids unknown fields', async () => {
+    global.fetch = vi.fn(async () => reply({ orderNumber: 'VB-1' }));
+
+    await httpApi.createOrder({
+      items: [{ productId: 'p1', qty: 1 }],
+      customer: { phone: '555123456' },
+      paymentMethod: 'cash',
+      idempotencyKey: 'key-xyz',
+    });
+
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body).toEqual({
+      items: [{ productId: 'p1', qty: 1 }],
+      customer: { phone: '555123456' },
+      paymentMethod: 'cash',
+    });
+  });
+});

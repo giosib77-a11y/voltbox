@@ -216,6 +216,8 @@ function generateOrderNumber() {
  * @param {object} payload { items, customer, paymentMethod }
  */
 export async function createOrder(payload) {
+  // `payload.idempotencyKey` აქ განზრახ იგნორირდება: mock ერთ ჩანართშია და
+  // ორმაგი გაგზავნის რბოლა არ არსებობს. ხელმოწერა httpApi-სას ემთხვევა.
   await delay();
   const items = Array.isArray(payload?.items) ? payload.items : [];
   if (!items.length) throw new ValidationError('კალათა ცარიელია');
