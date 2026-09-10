@@ -1,6 +1,13 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{js,jsx}'],
+  // `relative: true` — glob-ები ამ ფაილის მიმართ იხსნება და არა
+  // `process.cwd()`-ის მიმართ. ამის გარეშე repo-ს ძირიდან გაშვებული ბილდი
+  // ვერცერთ კლასს ვერ იპოვის და CSS თითქმის ცარიელი გამოვა — warning-ით,
+  // მაგრამ შეცდომის გარეშე.
+  content: {
+    relative: true,
+    files: ['./index.html', './src/**/*.{js,jsx}'],
+  },
   theme: {
     extend: {
       /* ------------------------------------------------------------------

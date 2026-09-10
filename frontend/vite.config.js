@@ -36,10 +36,18 @@ export default defineConfig(({ mode }) => {
    * ეს tree-shaking-ზე დაყრდნობას სჯობს: Rollup `products.js`-ის მოდულის
    * დონეზე `.map()`-ს პოტენციურ side effect-ად თვლის და ვერ აგდებს.
    */
-  const apiMode = loadEnv(mode, process.cwd(), '').VITE_API_MODE === 'http' ? 'http' : 'mock';
+  // monorepo-ში ბრძანება repo-ს ძირიდანაც შეიძლება გაეშვას
+  // (`vite build --config frontend/vite.config.js`). `process.cwd()` მაშინ
+  // არასწორ დირექტორიას მიუთითებდა: `.env` ვერ მოიძებნებოდა და
+  // `VITE_API_MODE=http` ჩუმად `mock`-ად წაიკითხებოდა — შეცდომის გარეშე,
+  // უბრალოდ არასწორი ბანდლით. კონფიგის საკუთარი დირექტორია ყოველთვის სწორია.
+  const rootDir = fileURLToPath(new URL('.', import.meta.url));
+  const apiMode = loadEnv(mode, rootDir, '').VITE_API_MODE === 'http' ? 'http' : 'mock';
   const apiImpl = apiMode === 'http' ? './src/services/httpApi.js' : './src/services/mockApi.js';
 
   return {
+    root: rootDir,
+    envDir: rootDir,
     plugins: [react()],
     resolve: {
       alias: {

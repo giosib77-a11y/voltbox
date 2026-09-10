@@ -10,65 +10,51 @@
 
 ---
 
-## 🔴 P0 — ეს დღესვე ღირს
+## ✅ დახურული
 
-### 1. Git
+### ~~1. Git~~  ·  ✅ შესრულებულია
 
-პროექტი ვერსიების კონტროლის გარეშეა. დაგროვდა **ხუთი** სერიოზული ცვლილება
-(WCAG პალიტრა, `virtual:api-impl` alias, code splitting, ფორმატირების ფუნქციები,
-ბოლო ძებნები) — უკან დაბრუნების საშუალების გარეშე.
+`github.com/giosib77-a11y/voltbox`, branch `main`.
 
-```bash
-git init
-git add .
-git commit -m "VoltBox frontend — mock data layer, WCAG AA palette, code splitting"
+`frontend/.env` განზრახ **არ** არის იგნორირებული — მასში საიდუმლო არაფერია და
+გადამრთველად გვჭირდება. `backend/.env` კი იგნორირებულია — შეიცავს ბაზის
+პაროლს და `JWT_SECRET`-ს.
+
+---
+
+### ~~0. monorepo-ს გასწორება: `src/` → `frontend/`~~  ·  ✅ შესრულებულია (2026-09-10)
+
+frontend repo-ს ძირიდან `frontend/`-ში გადავიდა `git mv`-ით — ისტორია
+შენარჩუნებულია. სამუშაო ხე ახლა:
+
+```
+voltbox/
+├── frontend/   src, public, scripts, index.html, package.json, vite.config.js, .env
+├── backend/    app, alembic, scripts, tests, pyproject.toml, .env
+├── .github/workflows/   frontend.yml + backend.yml
+└── README.md  ASSUMPTIONS.md  ROADMAP.md
 ```
 
-`.gitignore` უკვე გამზადებულია (`node_modules`, `dist`, `.env.local`).
-`.env` განზრახ **არ** არის იგნორირებული — მასში საიდუმლო არაფერია და
-გადამრთველად გვჭირდება.
+**რა შეიცვალა კოდში:**
+
+| ფაილი | ცვლილება |
+|---|---|
+| `backend/scripts/export_mock_data.mjs` | `../../src/data/` → `../../frontend/src/data/` |
+| `frontend/vite.config.js` | `loadEnv(mode, process.cwd())` → `envDir` (კონფიგის საკუთარი დირექტორია) |
+| `.gitignore` | გზები `frontend/`-ითა და `backend/`-ით პრეფიქსირებული |
+| `.github/workflows/frontend.yml` | ახალი — `npm ci` + ბილდი matrix-ით (`mock` \| `http`) |
+| `README.md` | გაიყო: ძირში monorepo-ს მიმოხილვა, დეტალები `frontend/README.md`-ში |
+| `ASSUMPTIONS.md` | ახალი §9 — რატომ ასეა განლაგებული |
+
+`frontend/vite.config.js`-ის relative გზები (`./src`, `./index.html`) კონფიგის
+ფაილის მიმართაა და მასთან ერთად გადავიდა — შესწორება არ დასჭირდა.
+
+დეტალები: [ASSUMPTIONS.md §9](./ASSUMPTIONS.md).
+
 
 ---
 
 ## 🟠 P1 — უახლოესი ნაბიჯები
-
-### 0. monorepo-ს გასწორება: `src/` → `frontend/`  ·  ~30 წთ
-
-**პრობლემა:** backend სუფთად არის ჩაკეტილი `backend/`-ში, frontend კი repo-ს
-ძირშია გაფანტული (`src/`, `public/`, `index.html`, `package.json`,
-`vite.config.js`, `tailwind.config.js`, `postcss.config.js`, `.env`). ორი
-თანაბარმნიშვნელოვანი ნაწილი სხვადასხვა დონეზეა.
-
-**სასურველი სახე:**
-
-```
-voltbox/
-├── frontend/     src, public, package.json, vite.config…
-├── backend/      app, alembic, pyproject.toml…
-├── README.md  ASSUMPTIONS.md  ROADMAP.md
-└── .github/
-```
-
-**შესაცვლელი 5 ადგილი** (`git mv`-ით ისტორია შენარჩუნდება):
-
-| ფაილი | რა |
-|---|---|
-| `backend/scripts/export_mock_data.mjs` | `../../src/data/` → `../../frontend/src/data/` |
-| `.github/workflows/backend.yml` | `paths:` და `working-directory` |
-| `.github/workflows/` (frontend) | ახალი workflow ან paths |
-| `README.md`, `backend/README.md` | ბმულები და გზები |
-| `.gitignore` | `backend/.env` გვერდით `frontend/.env` |
-
-**რატომ ახლა და არა მოგვიანებით:** deploy-ის კონფიგურაცია (Netlify/Vercel base
-directory) ჯერ არ არსებობს. მისი დაყენების შემდეგ გასწორება ხუთის ნაცვლად
-შვიდ ადგილს შეეხება.
-
-**შემოწმება:** 110 backend-ტესტი + `npm run build` + jsdom E2E — ყველაფერი
-დაფარულია, გატეხვა მაშინვე გამოჩნდება.
-
-**ყველაზე რეალური დაბნეულობა დღეს:** ორი `.env` — `./.env` (Vite) და
-`backend/.env` (FastAPI), სხვადასხვა შიგთავსით.
-
 
 ### 2. SEO / share preview  ·  ~40 წთ
 
@@ -88,7 +74,7 @@ directory) ჯერ არ არსებობს. მისი დაყე�
 (JS არ ეშვება). სრული გადაწყვეტა prerender-ია (`vite-plugin-ssg`) — ეს უკვე
 დიდი ცვლილებაა და დავალების non-goal-ში (SSR) ხვდება.
 
-**შესვლის წერტილი:** [index.html](index.html), [src/hooks/useDocumentTitle.js](src/hooks/useDocumentTitle.js)
+**შესვლის წერტილი:** [index.html](frontend/index.html), [src/hooks/useDocumentTitle.js](frontend/src/hooks/useDocumentTitle.js)
 
 ### 3. Vitest — ტესტები  ·  ~1 სთ
 
@@ -107,7 +93,7 @@ directory) ჯერ არ არსებობს. მისი დაყე�
 (`virtual:api-impl` alias) — Vitest-ის კონფიგში იგივე alias უნდა გამეორდეს,
 ან ტესტებმა პირდაპირ `mockApi.js` აიღონ.
 
-**შესვლის წერტილი:** [src/utils/search.js](src/utils/search.js), [ASSUMPTIONS.md](ASSUMPTIONS.md) §3
+**შესვლის წერტილი:** [src/utils/search.js](frontend/src/utils/search.js), [ASSUMPTIONS.md](ASSUMPTIONS.md) §3
 
 ### 4. ESLint + Prettier  ·  ~30 წთ
 
@@ -132,7 +118,7 @@ directory) ჯერ არ არსებობს. მისი დაყე�
 - `/account/wishlist` გვერდი
 - `STORAGE_KEYS.wishlist = 'wishlist:v1'`
 
-**შესვლის წერტილი:** [src/hooks/useRecentSearches.js](src/hooks/useRecentSearches.js) — იგივე ნიმუში
+**შესვლის წერტილი:** [src/hooks/useRecentSearches.js](frontend/src/hooks/useRecentSearches.js) — იგივე ნიმუში
 
 ### 6. ბოლოს ნანახი პროდუქტები  ·  ~45 წთ
 
@@ -198,11 +184,11 @@ SPA-სთვის საჭიროა fallback: Netlify → `public/_redirec
 
 თუ ეს ძალიან მუქად მოგეჩვენება, არსებობს **ვარიანტი B**: კაშკაშა ფონი
 რჩება, ტექსტი მუქდება — `ink-900` `accent-500`-ზე = **6.20:1** (უფრო მაღალი
-კონტრასტიც კი). ცვლილება — 5 წუთი, [Badge.jsx](src/components/common/Badge.jsx) `discount` ტონი.
+კონტრასტიც კი). ცვლილება — 5 წუთი, [Badge.jsx](frontend/src/components/common/Badge.jsx) `discount` ტონი.
 
 ### 16. i18n
 
-ტექსტები უკვე თავმოყრილია [constants/index.js](src/constants/index.js)-ში
+ტექსტები უკვე თავმოყრილია [constants/index.js](frontend/src/constants/index.js)-ში
 (`TEXT`, `SPEC_LABELS`, `HOME_SECTION_TITLES`, `DELIVERY_INFO`), ამიტომ
 ლექსიკონად გადაქცევა კომპონენტების შეხების გარეშე შეიძლება.
 
@@ -258,8 +244,8 @@ React + Router = **41%** და ყოველთვის ჩამოდი�
 ## ⚠️ რაც უნდა გახსოვდეს კოდში შესვლისას
 
 **1. `virtual:api-impl` სუფთა Node-ით არ იხსნება.**
-[api.js](src/services/api.js) იმპლემენტაციას ბილდის დროს ირჩევს
-([vite.config.js](vite.config.js)-ის `resolve.alias`). ტესტ-სკრიპტებში ან
+[api.js](frontend/src/services/api.js) იმპლემენტაციას ბილდის დროს ირჩევს
+([vite.config.js](frontend/vite.config.js)-ის `resolve.alias`). ტესტ-სკრიპტებში ან
 Vitest-ში იგივე alias ხელით უნდა გადაეცეს. მიზეზი — [ASSUMPTIONS.md](ASSUMPTIONS.md) §6.1.
 
 **2. `api.js`-ში რეჟიმის შემოწმებას გამოთვლა არ უნდა დაემატოს.**
@@ -273,17 +259,18 @@ data layer-ში (`brandCountry`), და არა კომპონენტ
 **4. Header `SearchBar`-ს ორჯერ ირენდერებს** (desktop + mobile).
 ნებისმიერი ახალი `localStorage`-state იმავე პრობლემას შეეჯახება, რაც ბოლო
 ძებნებს — ჩაწერამდე storage-ის ხელახლა წაკითხვა საჭიროა.
-იხ. [hooks/useRecentSearches.js](src/hooks/useRecentSearches.js).
+იხ. [hooks/useRecentSearches.js](frontend/src/hooks/useRecentSearches.js).
 
 **5. ახალი კატეგორიის დამატება კომპონენტს არ საჭიროებს** — მხოლოდ ჩანაწერი
-[data/categories.js](src/data/categories.js)-ში + აიქონი
-[CategoryIcon.jsx](src/components/common/CategoryIcon.jsx)-ში.
+[data/categories.js](frontend/src/data/categories.js)-ში + აიქონი
+[CategoryIcon.jsx](frontend/src/components/common/CategoryIcon.jsx)-ში.
 
 ---
 
 ## 🚀 როგორ გავუშვათ და გავუზიაროთ
 
 ```bash
+cd frontend
 npm install
 npm run dev            # ლოკალური მუშაობა → localhost:5173
 

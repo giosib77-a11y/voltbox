@@ -6,8 +6,8 @@
  *
  * გამოძახება:  node scripts/export_mock_data.mjs > out.json
  */
-import { products } from '../../src/data/products.js';
-import { categories } from '../../src/data/categories.js';
-import { brands } from '../../src/data/brands.js';
+import { products } from '../../frontend/src/data/products.js';
+import { categories } from '../../frontend/src/data/categories.js';
+import { brands } from '../../frontend/src/data/brands.js';
 
 process.stdout.write(JSON.stringify({ products, categories, brands }, null, 0));

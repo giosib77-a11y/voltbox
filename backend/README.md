@@ -3,6 +3,10 @@
 FastAPI + PostgreSQL REST API for the VoltBox store. Replaces the frontend's mock
 data layer without any component changes — only `VITE_API_MODE=http`.
 
+> monorepo-ს ნაწილი. ზოგადი მიმოხილვა — [`../README.md`](../README.md),
+> კლიენტის მხარე — [`../frontend/README.md`](../frontend/README.md).
+> ყველა ქვემოთ მოცემული ბრძანება `backend/`-იდან სრულდება.
+
 ## Quick start
 
 ```bash
@@ -44,7 +48,7 @@ pytest -q
 | | რა არის | ცოცხალ ბაზაზე |
 |---|---|---|
 | **სტრუქტურა** — `categories`, `brands` | კონფიგია: `categories.filters` მთელ FilterSidebar-ს კვებავს | ✅ სჭირდება |
-| **პროდუქტები** | `src/data/products.js`-ის 61 ჩანაწერი სატესტოა | ❌ არ სჭირდება |
+| **პროდუქტები** | `../frontend/src/data/products.js`-ის 61 ჩანაწერი სატესტოა | ❌ არ სჭირდება |
 
 ```bash
 python scripts/seed.py --structure-only   # მხოლოდ კატეგორიები და ბრენდები
@@ -99,4 +103,7 @@ python scripts/reindex_search.py
 | `app/api/v1/routes/` | თხელი router-ები — ვალიდაცია და სერვისის გამოძახება |
 | `app/services/` | ბიზნეს-ლოგიკა: ფული, მარაგი, უფლებები |
 | `alembic/` | მიგრაციები |
-| `scripts/seed.py` | 61 mock პროდუქტის ჩატვირთვა |
+| `scripts/seed.py` | სტრუქტურა (+ სურვილისამებრ 61 mock პროდუქტი) |
+| `scripts/import_products.py` | რეალური პროდუქტების იმპორტი JSON-იდან |
+| `scripts/export_mock_data.mjs` | კითხულობს `../frontend/src/data/*.js`-ს seed-ისთვის |
+| `tests/` | 110 ტესტი (pytest + ცოცხალი Postgres) |
