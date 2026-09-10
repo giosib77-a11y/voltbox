@@ -29,7 +29,7 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 
 ## Current phase
 
-**Phase 0 — Discovery** ✅ complete → starting Phase 1
+**Phase 1 — Foundations** ✅ complete → starting Phase 2
 
 ---
 
@@ -39,6 +39,13 @@ Never run a bare `alembic` command in `backend/` while `.env` points at Supabase
 - [x] Setup 2 — working tree checked: clean at `fc2b933`, nothing of the user's at risk
 - [x] Setup 3 — branch `feature/admin-panel` created from `main`
 - [x] Setup 4 — this file created
+- [x] Phase 0 — discovery (commit `fe0a02e`)
+- [x] 1.4 frontend tooling — eslint 9 flat config + vitest/jsdom/RTL, CI `quality` job
+- [x] 1.1 token refresh — `services/session.js` single-flight, retry-once in `request()`
+- [x] 1.2 checkout `Idempotency-Key` — `useIdempotencyKey`, sent as a header
+- [x] 1.3 backend authorization — `require_admin`, `admin_router`, `GET /admin/me`,
+      generic protection test, `scripts/manage_admin.py`
+- [x] 1.5 admin shell — `RequireAdmin`, `AdminLayout`, `AdminLogin`, separate chunk
 
 ---
 
@@ -228,15 +235,20 @@ Found during discovery, outside this task's scope - not silently fixed.
 
 ## Last check results
 
-Baseline at `fc2b933`, before any change (all run locally):
+End of Phase 1 (all run locally):
 
 ```
-pytest    110 passed in 11.84s        (TEST_DATABASE_URL -> local voltbox_test)
-ruff      All checks passed!
-ruff fmt  62 files already formatted
-mypy      Success: no issues found in 44 source files
-alembic   upgrade head / downgrade -1 / upgrade head  -> 0002 (head)   (local voltbox_mig)
-frontend  build mock 315.68 kB / http 269.04 kB, no warnings
-eslint    not installed yet (Phase 1.4)
-vitest    not installed yet (Phase 1.4)
+ruff        All checks passed!
+ruff fmt    67 files already formatted
+mypy        Success: no issues found in 47 source files
+pytest      119 passed in 12.94s          (110 pre-existing + 9 admin auth)
+alembic     upgrade head / downgrade -1 / upgrade head -> 0002 (head)   [local voltbox_mig]
+eslint      0 errors, 4 warnings          (react-refresh, Context files - see decisions)
+vitest      17 passed (3 files)
+build mock  316.24 kB   (baseline 315.68; +0.56 for AdminBoundary)
+build http  271.93 kB   (baseline 269.04; +2.89 for the shared httpClient + boundary)
 ```
+
+Admin chunking verified in the build output: in `http` mode the admin ships as
+6 separate chunks (largest 5.4 kB); in `mock` mode only `AdminUnavailable`
+survives - the other five are eliminated as dead code.

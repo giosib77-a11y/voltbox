@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 
 import Layout from './components/layout/Layout.jsx';
 import RequireAuth from './components/layout/RequireAuth.jsx';
+import AdminBoundary from './admin/AdminBoundary.jsx';
 
 /**
  * გვერდები იტვირთება მოთხოვნისამებრ (`React.lazy`) — Vite თითოეულს ცალკე
@@ -28,12 +29,57 @@ const Addresses = lazy(() => import('./pages/Account/Addresses.jsx'));
 const ChangePassword = lazy(() => import('./pages/Account/ChangePassword.jsx'));
 
 /**
+ * ადმინის მარშრუტები.
+ *
+ * ყველა `lazy()` განზრახ ამ ფუნქციის შიგნითაა და არა მოდულის დონეზე:
+ * `import.meta.env.VITE_API_MODE` ბილდის დროს კონსტანტად ჩანაცვლდება, ამიტომ
+ * mock-ბილდში ქვემოთა ტოტი მკვდარი კოდია და Rollup მასთან ერთად ადმინის
+ * `import()`-ებსაც აგდებს — მაღაზიის ბილდში ადმინის chunk-ები საერთოდ არ ჩნდება.
+ *
+ * ადმინი მხოლოდ `http` რეჟიმში მუშაობს: ის რეალურ მონაცემებს მართავს და mock-ზე
+ * მისი გაყალბება ვერაფერს დაამტკიცებდა მარაგისა და აუდიტის წესებზე.
+ */
+function adminChildren() {
+  if (import.meta.env?.VITE_API_MODE !== 'http') {
+    const AdminUnavailable = lazy(() => import('./admin/pages/AdminUnavailable.jsx'));
+    return [{ path: '*', element: <AdminUnavailable /> }];
+  }
+
+  const AdminLogin = lazy(() => import('./admin/pages/AdminLogin.jsx'));
+  const AdminLayout = lazy(() => import('./admin/AdminLayout.jsx'));
+  const AdminDashboard = lazy(() => import('./admin/pages/AdminDashboard.jsx'));
+  const RequireAdmin = lazy(() => import('./admin/RequireAdmin.jsx'));
+
+  return [
+    { path: 'login', element: <AdminLogin /> },
+    {
+      element: <RequireAdmin />,
+      children: [
+        {
+          element: <AdminLayout />,
+          children: [{ index: true, element: <AdminDashboard /> }],
+        },
+      ],
+    },
+  ];
+}
+
+const adminRoutes = {
+  path: '/admin',
+  // საკუთარი Suspense — მაღაზიის Layout-ს ადმინი არ იყენებს
+  element: <AdminBoundary />,
+  children: adminChildren(),
+};
+
+/**
  * მარშრუტების ერთადერთი აღწერა.
  * გვერდები lazy-ია; Layout და RequireAuth — არა (ყოველთვის საჭიროა).
  * `future` ალმები v7-ის ქცევას რთავს — ამით dev-console სუფთა რჩება.
  */
 const router = createBrowserRouter(
   [
+    // ადმინს მაღაზიის Layout (header/footer) არ სჭირდება — ცალკე ხეა
+    adminRoutes,
     {
       path: '/',
       element: <Layout />,

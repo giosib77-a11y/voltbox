@@ -16,7 +16,7 @@ import { calcDiscountPercent } from '../utils/format.js';
 import { readJSON, writeJSON } from '../utils/storage.js';
 import { DEFAULT_SORT, LOW_STOCK_THRESHOLD, PAGE_SIZE, STORAGE_KEYS } from '../constants/index.js';
 import { calcTotals } from '../utils/pricing.js';
-import { ApiError, AuthError, NotFoundError, ValidationError } from './errors.js';
+import { AuthError, NotFoundError, ValidationError } from './errors.js';
 
 /* -------------------------------------------------------------------------- */
 /*  დამხმარეები                                                                */
@@ -423,4 +423,4 @@ export async function deleteAddress(id) {
 
 /** დიაგნოსტიკისთვის — რომელი იმპლემენტაცია მუშაობს. */
 export const implementation = 'mock';
-export { ApiError, AuthError, NotFoundError, ValidationError };
+export { ApiError, AuthError, ConflictError, NotFoundError, ValidationError } from './errors.js';
