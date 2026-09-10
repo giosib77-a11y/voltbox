@@ -18,13 +18,22 @@ dependencies = [
     "argon2-cffi>=25.1",
     "slowapi>=0.1.9",
     "orjson>=3.10",
+    # Uploaded images are verified by actually decoding them - the extension
+    # and the client-declared MIME type are both attacker-controlled.
+    "pillow>=11.0",
+    # FastAPI needs this for multipart/form-data; without it an UploadFile
+    # parameter raises at import time, not at request time.
+    "python-multipart>=0.0.20",
+    # Runtime, not dev: services/storage.py calls Supabase Storage over HTTP.
+    # It used to be a dev-only extra, which meant the production image would
+    # have imported it successfully in tests and crashed in the container.
+    "httpx>=0.28",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
-    "httpx>=0.28",
     "ruff>=0.9",
     "mypy>=1.14",
 ]

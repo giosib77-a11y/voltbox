@@ -52,6 +52,17 @@ class Settings(BaseSettings):
     # --- Supabase Storage (არასავალდებულო — სურათებისთვის) --------------------
     supabase_project_ref: str = ""
     supabase_service_role_key: str = ""
+    # Public on purpose: signed URLs expire, which would break storefront pages
+    # and the image URLs snapshotted into past orders.
+    supabase_storage_bucket: str = "product-images"
+
+    # Business-day boundaries ("today", date filters) are computed here, not in
+    # UTC - an order placed at 01:00 Tbilisi time belongs to that day, not to
+    # the previous one.
+    store_timezone: str = "Asia/Tbilisi"
+
+    max_image_bytes: int = 5 * 1024 * 1024
+    max_image_pixels: int = 50_000_000
 
     @field_validator("database_url")
     @classmethod

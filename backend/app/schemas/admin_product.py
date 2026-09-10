@@ -232,6 +232,16 @@ class ProductPage(ApiModel):
     limit: int
 
 
+class ImageOrderRequest(ApiRequest):
+    """The full ordering, not a partial one.
+
+    A partial list would leave the remaining images at stale positions and the
+    final order would depend on the id tiebreaker rather than on intent.
+    """
+
+    image_ids: list[UUID] = Field(min_length=1, max_length=12)
+
+
 class StockAdjustRequest(ApiRequest):
     change: Annotated[int, Field(description="Positive adds stock, negative removes it")]
     reason: str = Field(max_length=32)
