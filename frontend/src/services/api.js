@@ -15,7 +15,8 @@
  * ორივე ფაილს იდენტური ხელმოწერები აქვს, ამიტომ UI-სთვის სხვაობა უხილავია.
  * გამოუყენებელი იმპლემენტაცია ბანდლში საერთოდ არ ხვდება.
  */
-// eslint-disable-next-line import/no-unresolved
+// `virtual:api-impl` არაა ფაილი — მას `vite.config.js` ხსნის alias-ით ბილდის
+// დროს. სტატიკური ანალიზატორები მას ვერ გაჰყვებიან და ეს მოსალოდნელია.
 import * as impl from 'virtual:api-impl';
 
 /** @type {typeof import('./mockApi.js')} */

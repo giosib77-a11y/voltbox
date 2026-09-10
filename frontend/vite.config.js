@@ -92,5 +92,13 @@ export default defineConfig(({ mode }) => {
       allowedHosts: TUNNEL_HOSTS,
       proxy: API_PROXY,
     },
+    test: {
+      // jsdom — კომპონენტების ტესტებს DOM სჭირდებათ
+      environment: 'jsdom',
+      globals: true,
+      setupFiles: [fileURLToPath(new URL('./vitest.setup.js', import.meta.url))],
+      include: ['src/**/*.test.{js,jsx}'],
+      restoreMocks: true,
+    },
   };
 });
