@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://localhost:4173"
     trusted_hosts: str = "*"
 
+    # --- rate limiting --------------------------------------------------------
+    # Empty means in-process counters. Those are per worker, so with the two
+    # gunicorn workers the Dockerfile starts, "5 logins per minute" silently
+    # becomes ten. Set REDIS_URL for any deployment that runs more than one
+    # process; see app/core/rate_limit.py for what happens when Redis is down.
+    redis_url: str = ""
+
     # --- business rules (frontend-თან სინქრონში) ------------------------------
     shipping_free_threshold: int = 150
     shipping_flat_fee: int = 5

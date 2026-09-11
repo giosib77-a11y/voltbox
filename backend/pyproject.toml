@@ -17,6 +17,11 @@ dependencies = [
     "pyjwt>=2.10",
     "argon2-cffi>=25.1",
     "slowapi>=0.1.9",
+    # Shared rate-limit counters. The Dockerfile runs two workers, so
+    # without a shared store each keeps its own and the configured limit is
+    # doubled. limits raises ConfigurationError at startup if a redis://
+    # URI is configured and this package is missing.
+    "redis>=5.0",
     "orjson>=3.10",
     # Uploaded images are verified by actually decoding them - the extension
     # and the client-declared MIME type are both attacker-controlled.

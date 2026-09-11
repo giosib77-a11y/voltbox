@@ -26,9 +26,19 @@ jobs:
           --health-cmd "pg_isready -U voltbox"
           --health-interval 5s --health-timeout 3s --health-retries 10
 
+      # The cross-worker rate limit assertion needs a real shared store;
+      # in-process counters cannot demonstrate the property being tested.
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
     env:
       TEST_DATABASE_URL: postgresql://voltbox:voltbox@localhost:5432/voltbox_test
       DATABASE_URL: postgresql://voltbox:voltbox@localhost:5432/voltbox_test
+      TEST_REDIS_URL: redis://localhost:6379/1
       JWT_SECRET: ci-only-secret-value-that-is-long-enough-32
       APP_ENV: test
 

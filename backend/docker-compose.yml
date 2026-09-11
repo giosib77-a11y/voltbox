@@ -18,14 +18,33 @@ services:
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: voltbox-redis
+    # მთვლელები არ არის მონაცემი, რომელიც უნდა გადარჩეს — persistence გამორთულია.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    # პორტი host-ზე ისევე გამოგვაქვს, როგორც ბაზისა: ტესტები host-იდან ეშვება.
+    # არასტანდარტული ნომერი, რომ ლოკალურ Redis-ს არ დაეჯახოს.
+    ports:
+      - "56379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   api:
     build: .
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://voltbox:voltbox@db:5432/voltbox
       APP_ENV: development
+      # ორი worker-ის მთვლელები საერთო უნდა იყოს, თორემ ლიმიტი ორმაგდება
+      REDIS_URL: redis://redis:6379/0
     env_file:
       - .env
     ports:
