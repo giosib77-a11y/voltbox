@@ -1,7 +1,7 @@
 """Product management for the admin panel.
 
 What it does: the admin's filtered product listing, plus create, update,
-archive, unarchive and duplicate.
+archive, unarchive, duplicate and delete.
 Where it fits: called by app/api/v1/routes/admin/products.py; shares slug
 generation with categories and brands, and never writes stock itself - that
 belongs to services/inventory.py.
@@ -23,12 +23,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
-from app.db.models import REASON_INITIAL, Brand, Category, Product
+from app.db.models import REASON_INITIAL, Brand, Category, OrderItem, Product
 from app.services import audit
+from app.services.admin_image import discard_objects
 from app.services.inventory import adjust_stock, stock_status
 from app.services.search import build_search_text
 from app.services.search_text import normalize
 from app.services.slug import slugify, unique_slug
+from app.services.storage import StorageBackend
 
 #: Sorting is a whitelist, never a column name taken from the query string.
 SORTABLE: dict[str, tuple[ColumnElement[Any], ...]] = {
@@ -391,6 +393,57 @@ async def unarchive_product(db: AsyncSession, product_id: uuid.UUID) -> Product:
     product.is_active = False
     await db.flush()
     return product
+
+
+async def delete_product(
+    db: AsyncSession, storage: StorageBackend, product_id: uuid.UUID
+) -> dict[str, Any]:
+    """Permanently remove a product, with its images and its stock ledger.
+
+    Refuses the moment the product appears in an order: `order_items.product_id`
+    is ON DELETE RESTRICT, because what a customer actually bought must not be
+    rewritten by a later tidy-up. The 409 names how many orders are in the way,
+    and the answer there is archiving.
+
+    For everything else - a product typed in twice, a draft that never went
+    live, a test row - deleting is the honest operation. Archiving those would
+    leave rows nobody will ever look at again.
+
+    `inventory_movements` and `product_images` are ON DELETE CASCADE. A product
+    that never sold has no stock history worth keeping, and the audit row this
+    delete writes outlives the product either way.
+
+    Returns a snapshot of what was removed, for that audit record.
+    """
+    product = await db.get(Product, product_id, options=[selectinload(Product.images)])
+    if product is None:
+        raise NotFoundError("Product not found", code="PRODUCT_NOT_FOUND")
+
+    ordered = await db.scalar(
+        select(func.count()).select_from(OrderItem).where(OrderItem.product_id == product_id)
+    )
+    if ordered:
+        raise ConflictError(
+            "This product appears in orders and can only be archived",
+            code="PRODUCT_IN_USE",
+            details={"ordersCount": int(ordered)},
+        )
+
+    snapshot = {
+        "slug": product.slug,
+        "name": product.name,
+        "sku": product.sku,
+        "stock": product.stock,
+    }
+    urls = [image.url for image in product.images]
+
+    await db.delete(product)
+    await db.flush()
+
+    # Only after the row is gone: a failed delete must not leave the product
+    # pointing at files that no longer exist.
+    await discard_objects(db, storage, urls)
+    return snapshot
 
 
 async def duplicate_product(

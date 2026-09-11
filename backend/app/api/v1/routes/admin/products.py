@@ -1,4 +1,4 @@
-"""Admin product endpoints: list, get, create, update, archive, duplicate.
+"""Admin product endpoints: list, get, create, update, archive, duplicate, delete.
 
 What it does: the HTTP layer for managing products from the admin panel.
 Where it fits: thin routes over services/admin_product.py and
@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.core.config import settings
 from app.core.deps import AdminUser, Db
@@ -22,8 +22,11 @@ from app.schemas.admin_product import (
     ProductUpdate,
 )
 from app.services import admin_product, audit
+from app.services.storage import StorageBackend, get_storage
 
 router = APIRouter(prefix="/products", tags=["admin"])
+
+Storage = Annotated[StorageBackend, Depends(get_storage)]
 
 
 def _client_ip(request: Request) -> str | None:
@@ -175,3 +178,21 @@ async def duplicate_product(
     )
     await db.commit()
     return ProductAdminOut.model_validate(await admin_product.get_product(db, copy.id))
+
+
+@router.delete("/{product_id}", summary="Delete a product", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_product(
+    request: Request, db: Db, admin: AdminUser, storage: Storage, product_id: UUID
+) -> None:
+    """Permanent. Answers 409 PRODUCT_IN_USE for a product that has been ordered."""
+    removed = await admin_product.delete_product(db, storage, product_id)
+    await audit.record(
+        db,
+        actor_id=admin.id,
+        action="product.delete",
+        entity_type="product",
+        entity_id=str(product_id),
+        changes=removed,
+        ip=_client_ip(request),
+    )
+    await db.commit()

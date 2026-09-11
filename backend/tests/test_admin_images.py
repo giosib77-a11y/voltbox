@@ -282,3 +282,23 @@ async def test_uploading_to_a_missing_product_is_404(
     response = await _upload(client, headers, str(uuid.uuid4()))
 
     assert response.status_code == 404
+
+
+async def test_deleting_a_product_takes_its_stored_objects_with_it(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    product_id: str,
+    storage: InMemoryStorage,
+) -> None:
+    """Deleting the product must not leave files behind in the bucket.
+
+    Nothing ever points at them again, so they would be invisible cost forever.
+    """
+    await _upload(client, headers, product_id)
+    await _upload(client, headers, product_id, filename="second.png")
+    assert len(storage.objects) == 2
+
+    response = await client.delete(f"{ADMIN}/products/{product_id}", headers=headers)
+
+    assert response.status_code == 204
+    assert storage.objects == {}

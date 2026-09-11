@@ -56,6 +56,11 @@ export async function unarchiveProduct(id) {
   return request(`/admin/products/${encodeURIComponent(id)}/unarchive`, { method: 'POST' });
 }
 
+// DELETE /admin/products/:id - permanent; 409 PRODUCT_IN_USE if it was ordered
+export async function deleteProduct(id) {
+  return request(`/admin/products/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
 // POST /admin/products/:id/duplicate
 export async function duplicateProduct(id) {
   return request(`/admin/products/${encodeURIComponent(id)}/duplicate`, { method: 'POST' });

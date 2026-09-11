@@ -2,17 +2,20 @@
 
 What it covers: the rules that keep the catalogue coherent - SKU and slug
 uniqueness, price sanity, stock only through the ledger, archiving as something
-distinct from deactivating, and above all that the search index is refreshed on
-every write path.
+distinct from deactivating, deleting as something distinct from both, and above
+all that the search index is refreshed on every write path.
 
 That last one is the failure this codebase is most exposed to: a product with a
 stale search_text appears in the catalogue and is simply never found, with no
 error anywhere.
 """
 
+import uuid
+
 import httpx
 import pytest
-from app.db.models import ROLE_ADMIN, InventoryMovement, Product
+from app.db.models import ROLE_ADMIN, AdminAuditLog, InventoryMovement, Product
+from app.services import order as order_service
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -385,3 +388,96 @@ async def test_a_product_response_never_exposes_the_search_index(
     # write to it by hand and desynchronise the index.
     assert "searchText" not in body
     assert "search_text" not in body
+
+
+CUSTOMER = {
+    "firstName": "გიორგი",
+    "lastName": "ბერიძე",
+    "phone": "555123456",
+    "city": "თბილისი",
+    "address": "ჭავჭავაძის გამზირი 42",
+    "email": "giorgi@example.ge",
+}
+
+
+async def test_deleting_a_product_removes_it_and_its_stock_ledger(
+    client: httpx.AsyncClient, headers: dict[str, str], context: dict[str, str], db: AsyncSession
+) -> None:
+    created = await client.post(f"{ADMIN}/products", headers=headers, json=payload(context))
+    product_id = created.json()["id"]
+
+    response = await client.delete(f"{ADMIN}/products/{product_id}", headers=headers)
+
+    assert response.status_code == 204
+    assert (await client.get(f"{ADMIN}/products/{product_id}", headers=headers)).status_code == 404
+    assert await db.get(Product, uuid.UUID(product_id)) is None
+    # inventory_movements is ON DELETE CASCADE. A product that never sold has no
+    # stock history worth keeping once the product itself is gone.
+    movements = await db.scalars(
+        select(InventoryMovement).where(InventoryMovement.product_id == uuid.UUID(product_id))
+    )
+    assert list(movements.all()) == []
+
+
+async def test_a_product_that_has_been_ordered_cannot_be_deleted(
+    client: httpx.AsyncClient, headers: dict[str, str], context: dict[str, str], db: AsyncSession
+) -> None:
+    """order_items.product_id is ON DELETE RESTRICT for a reason.
+
+    Deleting a sold product would rewrite what a customer actually bought. The
+    409 has to say so clearly enough that the caller reaches for archiving.
+    """
+    created = await client.post(
+        f"{ADMIN}/products", headers=headers, json=payload(context, isActive=True)
+    )
+    product_id = created.json()["id"]
+    await order_service.create_order(
+        db,
+        items=[(uuid.UUID(product_id), 1)],
+        customer=dict(CUSTOMER),
+        payment_method="cash",
+        user=None,
+    )
+
+    response = await client.delete(f"{ADMIN}/products/{product_id}", headers=headers)
+
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "PRODUCT_IN_USE"
+    assert error["details"]["ordersCount"] == 1
+    assert (await client.get(f"{ADMIN}/products/{product_id}", headers=headers)).status_code == 200
+    # Archiving is the way out, and it still works.
+    assert (
+        await client.post(f"{ADMIN}/products/{product_id}/archive", headers=headers)
+    ).status_code == 200
+
+
+async def test_deleting_an_unknown_product_is_a_404(
+    client: httpx.AsyncClient, headers: dict[str, str]
+) -> None:
+    response = await client.delete(f"{ADMIN}/products/{uuid.uuid4()}", headers=headers)
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "PRODUCT_NOT_FOUND"
+
+
+async def test_the_audit_row_outlives_the_deleted_product(
+    client: httpx.AsyncClient, headers: dict[str, str], context: dict[str, str], db: AsyncSession
+) -> None:
+    """The product row is gone, so the audit entry has to carry what it was."""
+    created = await client.post(
+        f"{ADMIN}/products", headers=headers, json=payload(context, sku="GONE-1")
+    )
+    product_id = created.json()["id"]
+
+    await client.delete(f"{ADMIN}/products/{product_id}", headers=headers)
+
+    entry = await db.scalar(
+        select(AdminAuditLog).where(
+            AdminAuditLog.action == "product.delete",
+            AdminAuditLog.entity_id == product_id,
+        )
+    )
+    assert entry is not None
+    assert entry.changes["sku"] == "GONE-1"
+    assert entry.changes["slug"] == "iphone-15-pro"

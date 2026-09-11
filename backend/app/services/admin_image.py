@@ -12,8 +12,9 @@ see set_primary.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
@@ -152,12 +153,25 @@ async def delete_image(
         remaining[0].is_primary = True
     await db.flush()
 
-    # Order items snapshot the image URL. Deleting the object would turn a past
-    # order's thumbnail into a broken link, so the row goes and the file stays.
-    referenced = await db.scalar(
-        select(func.count()).select_from(OrderItem).where(OrderItem.image_url == url)
+    await discard_objects(db, storage, [url])
+
+
+async def discard_objects(db: AsyncSession, storage: StorageBackend, urls: Sequence[str]) -> None:
+    """Delete the stored objects behind `urls`, keeping any an order still shows.
+
+    Order items snapshot the image URL, so removing the object would turn a past
+    order's thumbnail into a broken link. Those files stay; the rest go.
+    """
+    wanted = [url for url in urls if url]
+    if not wanted:
+        return
+
+    referenced = set(
+        (await db.scalars(select(OrderItem.image_url).where(OrderItem.image_url.in_(wanted)))).all()
     )
-    if not referenced:
+    for url in wanted:
+        if url in referenced:
+            continue
         key = _key_from_url(url)
         if key:
             await storage.delete(key)

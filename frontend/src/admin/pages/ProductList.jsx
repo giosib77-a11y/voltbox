@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Copy, Plus, Search } from 'lucide-react';
+import { Copy, Plus, Search, Trash2 } from 'lucide-react';
 
 import Button from '../../components/common/Button.jsx';
 import EmptyState from '../../components/common/EmptyState.jsx';
@@ -19,6 +19,7 @@ import Select from '../../components/common/Select.jsx';
 import ProductImage from '../../components/common/ProductImage.jsx';
 import DataTable from '../components/DataTable.jsx';
 import AdminPagination from '../components/AdminPagination.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import { ProductStatusBadge, StockBadge } from '../components/StatusBadge.jsx';
 import { dateOnly, money } from '../format.js';
 import * as adminApi from '../adminApi.js';
@@ -56,6 +57,8 @@ export default function ProductList() {
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [duplicating, setDuplicating] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   /** Writes one control into the URL and returns to page 1. */
@@ -136,6 +139,54 @@ export default function ProductList() {
     }
   }
 
+  /**
+   * Deleting is permanent and the server may refuse it.
+   *
+   * A product that appears in an order cannot go - removing it would rewrite
+   * what a customer actually bought. The API answers 409 PRODUCT_IN_USE there,
+   * and the dialog turns that refusal into an offer to archive instead, which
+   * is what the admin wanted in the first place.
+   */
+  async function handleDelete() {
+    setDeleteError(null);
+    try {
+      await adminApi.deleteProduct(deleting.id);
+      setDeleting(null);
+      setReloadToken((token) => token + 1);
+    } catch (caught) {
+      setDeleteError(caught);
+    }
+  }
+
+  async function handleArchiveInstead() {
+    try {
+      await adminApi.archiveProduct(deleting.id);
+      closeDelete();
+      setReloadToken((token) => token + 1);
+    } catch (caught) {
+      setDeleteError(caught);
+    }
+  }
+
+  function closeDelete() {
+    setDeleting(null);
+    setDeleteError(null);
+  }
+
+  const blockedByOrders = deleteError?.details?.code === 'PRODUCT_IN_USE';
+  const ordersCount = deleteError?.details?.details?.ordersCount;
+
+  // Three states in one dialog: the warning before, a refusal that offers the
+  // way out, and any other server error verbatim.
+  let deleteDescription;
+  if (blockedByOrders) {
+    deleteDescription = `„${deleting?.name}“ უკვე გაყიდულია (${ordersCount} შეკვეთა), ამიტომ სამუდამოდ ვერ წაიშლება — შეკვეთის ისტორია არ უნდა შეიცვალოს. არქივში გადატანა პროდუქტს მაღაზიიდან მალავს და ისტორიას ხელუხლებლად ტოვებს.`;
+  } else if (deleteError) {
+    deleteDescription = deleteError.message;
+  } else {
+    deleteDescription = `„${deleting?.name}“ სამუდამოდ წაიშლება — სურათებთან და მარაგის ისტორიასთან ერთად. ქმედება შეუქცევადია. თუ პროდუქტი მხოლოდ დროებით უნდა დამალოთ, არქივში გადატანა სჯობს.`;
+  }
+
   const columns = useMemo(
     () => [
       {
@@ -208,15 +259,28 @@ export default function ProductList() {
         header: '',
         align: 'right',
         render: (product) => (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => handleDuplicate(product)}
-            loading={duplicating === product.id}
-            aria-label={`${product.name} — ასლის შექმნა`}
-          >
-            <Copy className="h-4 w-4" aria-hidden="true" />
-          </Button>
+          <span className="flex justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => handleDuplicate(product)}
+              loading={duplicating === product.id}
+              aria-label={`${product.name} — ასლის შექმნა`}
+            >
+              <Copy className="h-4 w-4" aria-hidden="true" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => {
+                setDeleteError(null);
+                setDeleting(product);
+              }}
+              aria-label={`${product.name} — წაშლა`}
+            >
+              <Trash2 className="h-4 w-4 text-danger-600" aria-hidden="true" />
+            </Button>
+          </span>
         ),
       },
     ],
@@ -329,6 +393,16 @@ export default function ProductList() {
           ) : null}
         </>
       )}
+
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title={blockedByOrders ? 'წაშლა შეუძლებელია' : 'პროდუქტის წაშლა'}
+        description={deleteDescription}
+        confirmLabel={blockedByOrders ? 'არქივში გადატანა' : 'სამუდამოდ წაშლა'}
+        variant={blockedByOrders ? 'accent' : 'danger'}
+        onConfirm={blockedByOrders ? handleArchiveInstead : handleDelete}
+        onClose={closeDelete}
+      />
     </div>
   );
 }
