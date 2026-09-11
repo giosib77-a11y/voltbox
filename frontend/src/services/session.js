@@ -19,18 +19,42 @@ import { readJSON, writeJSON } from '../utils/storage.js';
 const BASE_URL = (import.meta.env?.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
 /** Paths whose own 401 must never trigger a refresh (it would recurse). */
-const NO_REFRESH_PATHS = ['/auth/login', '/auth/register', '/auth/refresh'];
+const NO_REFRESH_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'];
 
 /** The in-flight refresh, shared by every caller until it settles. */
 let inFlight = null;
 
-/** Reads the persisted session, or null when there is none. */
+/**
+ * Reads the persisted session, or null when there is none.
+ *
+ * A stored session from before the refresh token moved into a cookie is
+ * discarded: its `refreshToken` is a value this client can no longer use, and
+ * keeping the rest would leave the user apparently signed in with an access
+ * token that expires in half an hour and nothing to renew it with. One
+ * re-login at the changeover, rather than a session that dies confusingly.
+ */
 export function readSession() {
-  return readJSON(STORAGE_KEYS.auth, null);
+  const stored = readJSON(STORAGE_KEYS.auth, null);
+  if (stored && 'refreshToken' in stored) {
+    clearSession();
+    return null;
+  }
+  return stored;
 }
 
-/** Persists a session object as returned by login/register/refresh. */
+/**
+ * Persists a session object as returned by login/register/refresh.
+ *
+ * `refreshToken` is stripped rather than trusted not to be there: a single
+ * server that still returned one would otherwise put the long-lived credential
+ * back into localStorage, which is the exact exposure the cookie removed.
+ */
 export function writeSession(session) {
+  if (session && 'refreshToken' in session) {
+    const { refreshToken: _ignored, ...rest } = session;
+    writeJSON(STORAGE_KEYS.auth, rest);
+    return;
+  }
   writeJSON(STORAGE_KEYS.auth, session);
 }
 
@@ -85,20 +109,24 @@ export function setSessionLostHandler(handler) {
 export function refreshSession() {
   if (inFlight) return inFlight;
 
-  const refreshToken = readSession()?.refreshToken ?? null;
-  if (!refreshToken) {
-    clearSession();
-    onSessionLost();
-    return Promise.resolve(null);
-  }
+  // No stored session means a guest, and a guest's 401 is an answer about
+  // permission, not an expired token. Firing a refresh would spend a request
+  // to learn nothing and would send them to the login page from, say, guest
+  // checkout. The cookie itself is httpOnly and cannot be inspected here, so
+  // the stored session is what tells us whether there is one to spend.
+  if (!readSession()) return Promise.resolve(null);
 
   inFlight = (async () => {
     let response;
     try {
+      // No body and no token: the refresh token is an httpOnly cookie, which
+      // the browser attaches by itself. `credentials: 'include'` is what makes
+      // it do so if the API is ever served from another origin; same-origin
+      // sends it either way.
       response = await fetch(`${BASE_URL}/auth/refresh`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ refreshToken }),
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
       });
     } catch {
       // Network failure: the session may still be valid, so keep it and let the

@@ -265,3 +265,55 @@ describe('guest order lookup', () => {
     expect(init.method).toBe('GET');
   });
 });
+
+describe('the refresh token never touches JavaScript', () => {
+  it('drops a session stored before the token moved into a cookie', () => {
+    // Such a session holds a refreshToken this client can no longer spend.
+    // Keeping the rest would look signed in for half an hour and then fail
+    // with nothing to renew.
+    localStorage.setItem(
+      'auth:v1',
+      JSON.stringify({ token: 'old-access', refreshToken: 'r1', user: { id: 'u1' } }),
+    );
+
+    expect(readSession()).toBeNull();
+    expect(localStorage.getItem('auth:v1')).toBe('null');
+  });
+
+  it('refuses to persist a refresh token even if one is handed to it', () => {
+    // Belt and braces: one server that still returned the field would
+    // otherwise put the long-lived credential straight back in localStorage.
+    writeSession({ token: 'a', refreshToken: 'should-not-be-kept', user: { id: 'u1' } });
+
+    expect(readSession()).toEqual({ token: 'a', user: { id: 'u1' } });
+    expect(localStorage.getItem('auth:v1')).not.toContain('should-not-be-kept');
+  });
+
+  it('refreshes with the cookie alone - no body, no token', async () => {
+    writeSession({ token: 'expired', user: { id: 'u1' } });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(reply({ token: 'fresh', user: { id: 'u1' } }))
+      .mockResolvedValueOnce(reply({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await httpApi.getProfile();
+
+    const [url, init] = fetchMock.mock.calls[1];
+    expect(url).toBe('/api/v1/auth/refresh');
+    expect(init.body).toBeUndefined();
+    expect(init.credentials).toBe('include');
+  });
+
+  it('does not refresh for a guest, who has no cookie to spend', async () => {
+    localStorage.clear();
+    const fetchMock = vi.fn().mockResolvedValue(unauthorized());
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(httpApi.getProfile()).rejects.toThrow();
+
+    // One call: the original. No refresh attempt.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

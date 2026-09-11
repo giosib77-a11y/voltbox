@@ -37,6 +37,23 @@ class Settings(BaseSettings):
     access_token_ttl_minutes: int = 30
     refresh_token_ttl_days: int = 30
 
+    # --- refresh cookie -------------------------------------------------------
+    # The refresh token is the long-lived credential, so it never reaches
+    # JavaScript: httpOnly means an XSS can use the session while the page is
+    # open but cannot copy the token out and keep it.
+    refresh_cookie_name: str = "voltbox_refresh"
+    # Scoped to the auth routes as the *browser* sees them. If a proxy serves
+    # the API under a different external prefix, set this to that prefix -
+    # otherwise the cookie is sent on the wrong paths, or on none.
+    refresh_cookie_path: str = ""
+    # Same-origin deployment (the frontend proxies /api to the backend), so the
+    # strictest setting costs nothing. `none` would need CSRF protection.
+    refresh_cookie_samesite: Literal["strict", "lax", "none"] = "strict"
+    # None means "secure unless this is local development or a test run". A
+    # Secure cookie is dropped outright over plain http, which would make every
+    # local login - and every test - look like it silently failed.
+    refresh_cookie_secure: bool | None = None
+
     # --- http -----------------------------------------------------------------
     cors_origins: str = "http://localhost:5173,http://localhost:4173"
     trusted_hosts: str = "*"
@@ -89,6 +106,22 @@ class Settings(BaseSettings):
         for junk in ("?sslmode=require", "&sslmode=require", "?sslmode=prefer", "&sslmode=prefer"):
             url = url.replace(junk, "")
         return url
+
+    @property
+    def cookie_path(self) -> str:
+        """Where the browser should send the refresh cookie."""
+        return self.refresh_cookie_path or f"{self.api_v1_prefix}/auth"
+
+    @property
+    def cookie_secure(self) -> bool:
+        if self.refresh_cookie_secure is not None:
+            return self.refresh_cookie_secure
+        return self.app_env not in {"development", "test"}
+
+    @property
+    def refresh_cookie_max_age(self) -> int:
+        """Seconds, matching the token's own lifetime in the database."""
+        return self.refresh_token_ttl_days * 24 * 60 * 60
 
     @property
     def is_production(self) -> bool:

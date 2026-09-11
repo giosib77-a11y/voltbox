@@ -81,6 +81,15 @@ async def login(db: AsyncSession, *, email: str, password: str) -> dict[str, obj
     return await _issue_session(db, user)
 
 
+def invalid_refresh_token() -> UnauthorizedError:
+    """One sentence for every way a refresh can fail.
+
+    Missing cookie, expired token, already-spent token: telling them apart
+    would tell a caller which of those it is holding.
+    """
+    return UnauthorizedError("Refresh token is invalid or expired", code="INVALID_REFRESH_TOKEN")
+
+
 async def refresh(db: AsyncSession, *, raw_token: str) -> dict[str, object]:
     """Exchange a refresh token for a new session, exactly once.
 
@@ -114,7 +123,7 @@ async def refresh(db: AsyncSession, *, raw_token: str) -> dict[str, object]:
     ).one_or_none()
 
     if claimed is None:
-        raise UnauthorizedError("Refresh token is invalid or expired", code="INVALID_REFRESH_TOKEN")
+        raise invalid_refresh_token()
 
     user = await db.scalar(select(User).where(User.id == claimed.user_id))
     if user is None or not user.is_active:

@@ -34,10 +34,6 @@ class LoginRequest(ApiRequest):
     password: str = Field(max_length=128)
 
 
-class RefreshRequest(ApiRequest):
-    refresh_token: str = Field(min_length=16, max_length=256)
-
-
 class ChangePasswordRequest(ApiRequest):
     current_password: str = Field(max_length=128)
     new_password: str = Field(max_length=128)
@@ -70,13 +66,14 @@ class UserOut(ApiModel):
 class SessionOut(ApiModel):
     """frontend `{ user, token }`-ს ელოდება და `session.token`-ს ინახავს.
 
-    `refreshToken` დამატებითი ველია — არსებული კლიენტი მას უბრალოდ იგნორირებს,
-    ახალი კი rotation-ისთვის გამოიყენებს.
+    The refresh token is deliberately absent. It travels only as an httpOnly
+    cookie, so it never reaches JavaScript and an XSS cannot copy it out - the
+    difference between an attacker holding the page for as long as it is open
+    and holding the account for a month.
     """
 
     user: UserOut
     token: str
-    refresh_token: str
     expires_at: datetime
 
 

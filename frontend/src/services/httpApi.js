@@ -153,13 +153,11 @@ export async function login(payload) {
 // POST /auth/logout
 export async function logout() {
   // ტოკენის ლოკალური წაშლა საკმარისი არაა — მოპარული refresh-ტოკენი
-  // სერვერზე მაინც მოქმედი დარჩებოდა
-  const session = readSession();
+  // სერვერზე მაინც მოქმედი დარჩებოდა. The token itself is not ours to send:
+  // it is in an httpOnly cookie, which the browser attaches and the server
+  // both revokes and clears.
   try {
-    await request('/auth/logout', {
-      method: 'POST',
-      body: { refreshToken: session?.refreshToken ?? null },
-    });
+    await request('/auth/logout', { method: 'POST' });
   } finally {
     clearSession();
   }
