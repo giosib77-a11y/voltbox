@@ -73,7 +73,9 @@ describe('access token refresh', () => {
       return unauthorized();
     });
 
-    await expect(httpApi.getProfile()).rejects.toMatchObject({ name: 'AuthError' });
+    // One recognisable type, so the UI can show one message instead of one
+    // per request that happened to be in flight.
+    await expect(httpApi.getProfile()).rejects.toMatchObject({ name: 'SessionExpiredError' });
 
     // one attempt + one refresh, and nothing after it
     expect(urls).toEqual(['/api/v1/auth/me', '/api/v1/auth/refresh']);
@@ -315,5 +317,102 @@ describe('the refresh token never touches JavaScript', () => {
 
     // One call: the original. No refresh attempt.
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('one refresh for a burst, one logout for a failure', () => {
+  it('refreshes once for five concurrent 401s and retries all five', async () => {
+    writeSession({ user: { id: 'u1' }, token: 'expired' });
+    let refreshes = 0;
+    global.fetch = vi.fn(async (url, init) => {
+      if (url.endsWith('/auth/refresh')) {
+        refreshes += 1;
+        return reply({ user: { id: 'u1' }, token: 'fresh' });
+      }
+      const bearer = init?.headers?.Authorization;
+      return bearer === 'Bearer fresh' ? reply({ ok: true, url }) : unauthorized();
+    });
+
+    const results = await Promise.all([
+      httpApi.getProfile(),
+      httpApi.getProfile(),
+      httpApi.getProfile(),
+      httpApi.getProfile(),
+      httpApi.getProfile(),
+    ]);
+
+    expect(refreshes).toBe(1);
+    expect(results).toHaveLength(5);
+    expect(results.every((r) => r.ok)).toBe(true);
+  });
+
+  it('ends the session once, however many requests were waiting', async () => {
+    writeSession({ user: { id: 'u1' }, token: 'expired' });
+    const lost = vi.fn();
+    setSessionLostHandler(lost);
+    global.fetch = vi.fn(async (url) =>
+      url.endsWith('/auth/refresh') ? reply({ error: { code: 'INVALID_TOKEN' } }, 401) : unauthorized(),
+    );
+
+    const outcomes = await Promise.allSettled([
+      httpApi.getProfile(),
+      httpApi.getProfile(),
+      httpApi.getProfile(),
+    ]);
+
+    expect(lost).toHaveBeenCalledTimes(1);
+    expect(outcomes.every((o) => o.status === 'rejected')).toBe(true);
+    expect(outcomes.every((o) => o.reason.name === 'SessionExpiredError')).toBe(true);
+  });
+
+  it('gives up after one retry rather than looping', async () => {
+    writeSession({ user: { id: 'u1' }, token: 'expired' });
+    const urls = [];
+    global.fetch = vi.fn(async (url) => {
+      urls.push(url);
+      // The refresh succeeds, but the new token is rejected too - a permission
+      // problem wearing a 401. A second refresh would loop forever.
+      return url.endsWith('/auth/refresh')
+        ? reply({ user: { id: 'u1' }, token: 'fresh' })
+        : unauthorized();
+    });
+
+    await expect(httpApi.getProfile()).rejects.toBeTruthy();
+
+    expect(urls).toEqual(['/api/v1/auth/me', '/api/v1/auth/refresh', '/api/v1/auth/me']);
+  });
+
+  it('holds a cross-tab lock while refreshing', async () => {
+    // Two tabs restoring together both carry the same cookie, and
+    // rotation-on-use means the loser is spending a token already claimed.
+    writeSession({ user: { id: 'u1' }, token: 'expired' });
+    const held = [];
+    vi.stubGlobal('navigator', {
+      locks: {
+        request: async (name, task) => {
+          held.push(name);
+          return task();
+        },
+      },
+    });
+    global.fetch = vi.fn(async (url, init) => {
+      if (url.endsWith('/auth/refresh')) return reply({ user: { id: 'u1' }, token: 'fresh' });
+      return init?.headers?.Authorization === 'Bearer fresh' ? reply({ ok: true }) : unauthorized();
+    });
+
+    await httpApi.getProfile();
+
+    expect(held).toEqual(['voltbox-auth-refresh']);
+  });
+
+  it('still refreshes where the Web Locks API is missing', async () => {
+    writeSession({ user: { id: 'u1' }, token: 'expired' });
+    vi.stubGlobal('navigator', {});
+    global.fetch = vi.fn(async (url, init) => {
+      if (url.endsWith('/auth/refresh')) return reply({ user: { id: 'u1' }, token: 'fresh' });
+      return init?.headers?.Authorization === 'Bearer fresh' ? reply({ ok: true }) : unauthorized();
+    });
+
+    await expect(httpApi.getProfile()).resolves.toEqual({ ok: true });
   });
 });

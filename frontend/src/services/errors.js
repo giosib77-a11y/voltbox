@@ -35,6 +35,21 @@ export class AuthError extends ApiError {
   }
 }
 
+/**
+ * სესია დასრულდა და აღდგენა ვერ მოხერხდა.
+ *
+ * One type for every request that was in flight when the refresh failed. A
+ * burst of expired requests otherwise rejects with a handful of
+ * indistinguishable 401s and the UI stacks a toast for each, on top of the
+ * login redirect that is already happening.
+ */
+export class SessionExpiredError extends ApiError {
+  constructor(message = 'სესიის ვადა ამოიწურა. გთხოვთ, ხელახლა შეხვიდეთ.') {
+    super(message, 401);
+    this.name = 'SessionExpiredError';
+  }
+}
+
 /** 409 — უნიკალურობის ან მდგომარეობის კონფლიქტი (SKU, slug, მარაგი, სტატუსი). */
 export class ConflictError extends ApiError {
   constructor(message = 'ოპერაცია ეწინააღმდეგება არსებულ მონაცემებს', details = null) {

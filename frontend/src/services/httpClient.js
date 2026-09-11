@@ -10,8 +10,15 @@
  * admin API without also pulling in the storefront's http implementation.
  */
 
-import { ApiError, AuthError, ConflictError, NotFoundError, ValidationError } from './errors.js';
-import { getAccessToken, isAuthPath, refreshSession } from './session.js';
+import {
+  ApiError,
+  AuthError,
+  ConflictError,
+  NotFoundError,
+  SessionExpiredError,
+  ValidationError,
+} from './errors.js';
+import { getAccessToken, isAuthPath, readSession, refreshSession } from './session.js';
 
 const BASE_URL = (import.meta.env?.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
@@ -110,8 +117,14 @@ export async function request(path, options = {}) {
   // ვადაგასული ტოკენი: ერთი განახლება ყველა პარალელური მოთხოვნისთვის საერთოა
   // (`refreshSession` single-flight-ია), მერე თითოეული ზუსტად ერთხელ მეორდება.
   if (response.status === 401 && !retried && !isAuthPath(path)) {
+    const hadSession = Boolean(readSession());
     const token = await refreshSession();
     if (token) return request(path, { ...options, retried: true });
+    // The session is gone and `refreshSession` has already redirected. One
+    // recognisable type for every request caught in the same moment, so the UI
+    // shows one message rather than one per pending call. A guest falls
+    // through instead: their 401 is about permission, not an expired session.
+    if (hadSession) throw new SessionExpiredError();
   }
 
   if (response.status === 204) return null;

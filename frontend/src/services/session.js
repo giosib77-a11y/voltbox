@@ -25,6 +25,33 @@ const NO_REFRESH_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/au
 let inFlight = null;
 
 /**
+ * Name of the cross-tab lock.
+ *
+ * The module-level `inFlight` only covers one tab. Two tabs restoring together
+ * - a browser reopening a window, or someone switching back to a page left
+ * open - both send a refresh carrying the same cookie, and rotation-on-use
+ * means one of them is spending a token the other has already claimed. The
+ * loser gets a 401 and logs the user out of both.
+ */
+const REFRESH_LOCK = 'voltbox-auth-refresh';
+
+/**
+ * Runs `task` while holding the cross-tab lock, or immediately without it.
+ *
+ * The Web Locks API is missing in older Safari and outside secure contexts. No
+ * lock is the behaviour this had before, so the fallback is a smaller window
+ * rather than a broken one.
+ *
+ * The lock is released when the promise settles, and fetch always settles, so
+ * a stuck holder is bounded by the browser's own network timeout.
+ */
+function withRefreshLock(task) {
+  const locks = globalThis.navigator?.locks;
+  if (typeof locks?.request !== 'function') return task();
+  return locks.request(REFRESH_LOCK, task);
+}
+
+/**
  * Reads the persisted session, or null when there is none.
  *
  * A stored session from before the refresh token moved into a cookie is
@@ -114,9 +141,16 @@ export function refreshSession() {
   // to learn nothing and would send them to the login page from, say, guest
   // checkout. The cookie itself is httpOnly and cannot be inspected here, so
   // the stored session is what tells us whether there is one to spend.
-  if (!readSession()) return Promise.resolve(null);
+  const staleToken = readSession()?.token ?? null;
+  if (!staleToken) return Promise.resolve(null);
 
-  inFlight = (async () => {
+  inFlight = withRefreshLock(async () => {
+    // Inside the lock: another tab may have refreshed while we waited, and its
+    // result is already in our own storage. Spending a second token to learn
+    // the same thing is what rotation punishes.
+    const current = readSession()?.token ?? null;
+    if (current && current !== staleToken) return current;
+
     let response;
     try {
       // No body and no token: the refresh token is an httpOnly cookie, which
@@ -148,7 +182,7 @@ export function refreshSession() {
     }
     writeSession(session);
     return session.token;
-  })().finally(() => {
+  }).finally(() => {
     inFlight = null;
   });
 
