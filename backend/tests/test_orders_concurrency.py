@@ -11,7 +11,16 @@ from decimal import Decimal
 
 import pytest
 from app.core.errors import ConflictError
-from app.db.models import Brand, Category, Order, OrderItem, Product, ProductImage
+from app.db.models import (
+    REASON_ORDER_CANCELLED,
+    Brand,
+    Category,
+    InventoryMovement,
+    Order,
+    OrderItem,
+    Product,
+    ProductImage,
+)
 from app.db.session import SessionLocal
 from app.services import order as order_service
 from sqlalchemy import delete, func, select
@@ -218,3 +227,59 @@ async def test_two_different_keys_still_compete_for_the_last_unit(last_unit: Pro
     assert sorted(outcome for outcome, _ in results) == ["conflict", "ok"]
     conflicts = [detail for outcome, detail in results if outcome == "conflict"]
     assert conflicts == ["INSUFFICIENT_STOCK"]
+
+
+async def _cancel(order_id: object) -> tuple[str, str]:
+    """One cancellation on its own connection. → (outcome, detail)."""
+    async with SessionLocal() as session:
+        stored = await session.scalar(select(Order).where(Order.id == order_id))
+        assert stored is not None
+        try:
+            await order_service.cancel(session, stored)
+            await session.commit()
+        except ConflictError as exc:
+            await session.rollback()
+            return "conflict", exc.code
+        except Exception as exc:
+            # Broad on purpose and hiding nothing: the caller asserts on the
+            # outcomes, so anything caught here fails the test by name.
+            await session.rollback()
+            return "error", type(exc).__name__
+        return "ok", "cancelled"
+
+
+async def test_two_parallel_cancellations_restock_exactly_once(last_unit: Product) -> None:
+    """Both readers used to see `pending` and both returned the stock.
+
+    The item was ordered out of a stock of one, so a double restock is visible
+    immediately: stock becomes 2 for a product only ever stocked with 1.
+    """
+    async with SessionLocal() as session:
+        order = await order_service.create_order(
+            session,
+            items=[(last_unit.id, 1)],  # type: ignore[list-item]
+            customer=dict(CUSTOMER),
+            payment_method="cash",
+            user=None,
+        )
+        await session.commit()
+        order_id = order.id
+
+    results = await asyncio.gather(_cancel(order_id), _cancel(order_id))
+
+    assert sorted(outcome for outcome, _ in results) == ["conflict", "ok"], results
+    refusals = [detail for outcome, detail in results if outcome == "conflict"]
+    assert refusals == ["ORDER_NOT_CANCELLABLE"]
+
+    async with SessionLocal() as check:
+        stock = await check.scalar(select(Product.stock).where(Product.id == last_unit.id))
+        movements = await check.scalar(
+            select(func.count())
+            .select_from(InventoryMovement)
+            .where(
+                InventoryMovement.order_id == order_id,
+                InventoryMovement.reason == REASON_ORDER_CANCELLED,
+            )
+        )
+    assert stock == 1, "the single unit came back once, not twice"
+    assert movements == 1

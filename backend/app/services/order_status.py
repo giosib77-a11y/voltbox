@@ -58,7 +58,13 @@ async def _lock_order(db: AsyncSession, order_id: uuid.UUID) -> Order:
     locked = await db.scalar(select(Order.id).where(Order.id == order_id).with_for_update())
     if locked is None:
         raise NotFoundError("Order not found", code="ORDER_NOT_FOUND")
-    order = await db.scalar(select(Order).where(Order.id == order_id))
+    # populate_existing: if this session already holds the order, SQLAlchemy
+    # would hand back the instance it has, with the status it read before the
+    # lock was granted - so the check would run against a stale value and the
+    # lock would have bought nothing.
+    order = await db.scalar(
+        select(Order).where(Order.id == order_id).execution_options(populate_existing=True)
+    )
     if order is None:  # pragma: no cover - the lock above already proved it exists
         raise NotFoundError("Order not found", code="ORDER_NOT_FOUND")
     return order

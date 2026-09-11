@@ -34,3 +34,6 @@ backend/products.json
 
 # export_mock_data.mjs-ის გამონატანი (CI-ში და ხელით გაშვებისას)
 mock.json
+
+# ერთჯერადი, `alembic upgrade --sql`-ით დაგენერირებული ფაილები
+backend/supabase-*.sql

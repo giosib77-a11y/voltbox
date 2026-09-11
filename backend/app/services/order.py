@@ -364,23 +364,44 @@ async def get_by_number(
 async def cancel(db: AsyncSession, order: Order, *, actor_id: UUID | None = None) -> Order:
     """გაუქმება მარაგს აბრუნებს — სხვაგვარად ჩამოწერილი ერთეულები დაიკარგება.
 
-    ⚠️ გამომძახებელმა შეკვეთის row უნდა დაბლოკოს (`FOR UPDATE`) მანამდე, თორემ
-    ორმა პარალელურმა გაუქმებამ მარაგი ორჯერ დააბრუნებს. Phase 3-ის
-    სტატუსების მანქანა სწორედ ამას აკეთებს.
+    The order row is locked here rather than by the caller. Relying on a
+    docstring to say "lock this first" means the one caller that forgets
+    restocks an order twice, and the second refund only shows up as inventory
+    that never reconciles.
+
+    Lock order is fixed: the order row first, then its products by ascending
+    id - the same sequence checkout follows, so a cancellation racing an order
+    for the same products cannot deadlock against it.
     """
-    if order.status in {"shipped", "delivered", "cancelled"}:
+    # populate_existing: the caller handed us an instance this session already
+    # loaded. Without it the re-read returns that cached object with the status
+    # it had before the lock, and two concurrent cancellations would both see
+    # "pending" and both return the stock - which is the bug the lock is for.
+    locked = await db.scalar(select(Order.id).where(Order.id == order.id).with_for_update())
+    if locked is None:
+        raise NotFoundError("Order not found", code="ORDER_NOT_FOUND")
+    fresh = await db.scalar(
+        select(Order).where(Order.id == order.id).execution_options(populate_existing=True)
+    )
+    if fresh is None:  # pragma: no cover - the lock above already proved it exists
+        raise NotFoundError("Order not found", code="ORDER_NOT_FOUND")
+
+    if fresh.status in {"shipped", "delivered", "cancelled"}:
         raise ConflictError("Order can no longer be cancelled", code="ORDER_NOT_CANCELLABLE")
 
-    # id-ით დალაგებული — იგივე წესი, რაც შექმნისას
-    for item in sorted(order.items, key=lambda i: i.product_id):
+    # id-ით დალაგებული — იგივე წესი, რაც შექმნისას.
+    # `adjust_stock` locks each product row before reading it, so the read and
+    # the write are one atomic step; it is also the only path that writes the
+    # inventory_movements row, which a bare `stock = stock + n` would skip.
+    for item in sorted(fresh.items, key=lambda i: i.product_id):
         await adjust_stock(
             db,
             item.product_id,
             item.quantity,
             REASON_ORDER_CANCELLED,
             actor_id=actor_id,
-            order_id=order.id,
+            order_id=fresh.id,
         )
-    order.status = "cancelled"
+    fresh.status = "cancelled"
     await db.flush()
-    return order
+    return fresh
