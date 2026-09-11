@@ -314,7 +314,7 @@ async def test_snapshot_survives_a_later_price_change(
     shop["cheap"].name = "Renamed"
     await db.flush()
 
-    stored = (await client.get(f"/api/v1/orders/{number}", params={"email": "555123456"})).json()
+    stored = (await _lookup(client, number, CUSTOMER["phone"])).json()
 
     assert stored["items"][0]["snapshot"]["price"] == "40.00"
     assert stored["items"][0]["snapshot"]["name"] == "Cheap Phone"
@@ -330,10 +330,79 @@ async def test_order_number_is_not_readable_without_the_contact(
     ]
 
     anonymous = await client.get(f"/api/v1/orders/{number}")
-    wrong_contact = await client.get(f"/api/v1/orders/{number}", params={"email": "555999999"})
+    wrong_contact = await _lookup(client, number, "555999999")
 
-    assert anonymous.status_code == 404
+    # GET is for signed-in callers only now, so a guest gets 401 there.
+    assert anonymous.status_code == 401
     assert wrong_contact.status_code == 404
+
+
+async def _lookup(client: httpx.AsyncClient, number: str, contact: str) -> httpx.Response:
+    return await client.post(
+        "/api/v1/orders/lookup", json={"orderNumber": number, "contact": contact}
+    )
+
+
+async def test_a_guest_reads_their_order_with_the_contact_in_the_body(
+    client: httpx.AsyncClient, shop: dict[str, Product]
+) -> None:
+    number = (await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}])).json()[
+        "orderNumber"
+    ]
+
+    response = await _lookup(client, number, CUSTOMER["phone"])
+
+    assert response.status_code == 200
+    assert response.json()["orderNumber"] == number
+
+
+async def test_the_contact_is_matched_however_it_is_written(
+    client: httpx.AsyncClient, shop: dict[str, Product]
+) -> None:
+    """A shopper typing their own number back rarely reproduces the digits exactly.
+
+    This is the case the shared normaliser exists for: the checkout schema
+    constrains the phone, the lookup cannot.
+    """
+    number = (await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}])).json()[
+        "orderNumber"
+    ]
+
+    for written in ["555 12 34 56", "+995555123456", "(555) 12-34-56", "0555123456"]:
+        response = await _lookup(client, number, written)
+        assert response.status_code == 200, written
+
+
+async def test_an_unknown_number_and_a_wrong_contact_are_indistinguishable(
+    client: httpx.AsyncClient, shop: dict[str, Product]
+) -> None:
+    """Order numbers are sequential. A different answer would make them enumerable."""
+    number = (await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}])).json()[
+        "orderNumber"
+    ]
+
+    wrong_contact = await _lookup(client, number, "599000000")
+    no_such_order = await _lookup(client, "VB-20200101-0001", CUSTOMER["phone"])
+
+    assert wrong_contact.status_code == no_such_order.status_code == 404
+    assert wrong_contact.json() == no_such_order.json()
+
+
+async def test_the_contact_never_reaches_a_url(client: httpx.AsyncClient) -> None:
+    """The regression itself: a phone number in the query string.
+
+    From there it is written to the access log of every hop, to proxy logs and
+    to the browser's own history - none of which are places a customer's phone
+    number can be deleted from afterwards.
+    """
+    schema = (await client.get("/openapi.json")).json()
+
+    lookup = schema["paths"]["/api/v1/orders/lookup"]["post"]
+    assert "parameters" not in lookup or lookup["parameters"] == []
+
+    read_one = schema["paths"]["/api/v1/orders/{order_number}"]["get"]
+    query_params = [p for p in read_one.get("parameters", []) if p["in"] == "query"]
+    assert query_params == []
 
 
 async def test_authenticated_user_sees_only_their_own_orders(

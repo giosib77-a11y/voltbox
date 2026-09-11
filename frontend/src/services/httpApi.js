@@ -101,12 +101,24 @@ export async function getOrders() {
   return request('/orders');
 }
 
-// GET /orders/:orderNumber
+/**
+ * One order, by number.
+ *
+ * A signed-in caller reads their own with GET. A guest has to prove the order
+ * is theirs with the contact they gave at checkout, and that goes in a POST
+ * body: it used to travel as `?email=` while actually carrying a phone number,
+ * which wrote a customer's phone into every access log, proxy log and history
+ * entry between here and the server.
+ */
 export async function getOrderByNumber(orderNumber) {
   const contact = readJSON(GUEST_ORDERS_KEY, {})[orderNumber];
-  return request(`/orders/${encodeURIComponent(orderNumber)}`, {
-    params: contact ? { email: contact } : undefined,
-  });
+  if (contact) {
+    return request('/orders/lookup', {
+      method: 'POST',
+      body: { orderNumber, contact },
+    });
+  }
+  return request(`/orders/${encodeURIComponent(orderNumber)}`);
 }
 
 /* -------------------------------------------------------------------------- */

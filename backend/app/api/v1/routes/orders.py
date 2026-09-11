@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Header, Query, status
+from fastapi import APIRouter, Header, status
 
 from app.core.deps import CurrentUser, Db, OptionalUser
 from app.core.errors import ValidationError
@@ -13,6 +13,7 @@ from app.schemas.order import (
     CustomerOut,
     OrderItemOut,
     OrderItemSnapshot,
+    OrderLookupRequest,
     OrderOut,
     OrderTotals,
 )
@@ -106,20 +107,35 @@ async def list_orders(db: Db, user: CurrentUser) -> list[OrderOut]:
     return [_to_out(o) for o in await order_service.list_for_user(db, user.id)]
 
 
-@router.get(
-    "/{order_number}",
-    summary="Get an order by number",
+@router.post(
+    "/lookup",
+    summary="Find a guest order",
     description=(
-        "Authenticated users can read their own orders. Guests must supply the "
-        "email or phone used at checkout — order numbers are guessable."
+        "For an order placed without an account. The email or phone used at "
+        "checkout goes in the body, never in the URL, because a query string "
+        "is written to every access log between here and the browser. "
+        "An unknown order number and a contact that does not match give the "
+        "same 404: order numbers are sequential, so a different answer would "
+        "make them enumerable."
     ),
     response_model=OrderOut,
 )
-async def get_order(
-    db: Db,
-    user: OptionalUser,
-    order_number: str,
-    email: Annotated[str | None, Query(description="Contact used at checkout")] = None,
-) -> OrderOut:
-    order = await order_service.get_by_number(db, order_number, user=user, email=email)
+async def lookup_order(db: Db, user: OptionalUser, payload: OrderLookupRequest) -> OrderOut:
+    order = await order_service.get_by_number(
+        db, payload.order_number, user=user, contact=payload.contact
+    )
+    return _to_out(order)
+
+
+@router.get(
+    "/{order_number}",
+    summary="Get one of your own orders",
+    description=(
+        "Signed-in callers only. A guest uses POST /orders/lookup — order "
+        "numbers are guessable, so the number alone is never enough."
+    ),
+    response_model=OrderOut,
+)
+async def get_order(db: Db, user: CurrentUser, order_number: str) -> OrderOut:
+    order = await order_service.get_by_number(db, order_number, user=user)
     return _to_out(order)

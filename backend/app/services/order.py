@@ -336,13 +336,22 @@ async def list_for_user(db: AsyncSession, user_id: UUID) -> list[Order]:
 
 
 async def get_by_number(
-    db: AsyncSession, order_number: str, *, user: User | None, email: str | None = None
+    db: AsyncSession, order_number: str, *, user: User | None, contact: str | None = None
 ) -> Order:
     """შეკვეთის წაკითხვა ნომრით.
 
     შეკვეთის ნომერი თანმიმდევრობითია და გამოცნობადი, ამიტომ მარტო ნომრით
     წვდომა დაუშვებელია. ავტორიზებული თავისას ხედავს; სტუმარმა ელ. ფოსტა ან
     ტელეფონი უნდა დაამთხვიოს. ორივე შემთხვევაში უარი 404-ია და არა 403.
+
+    `contact` is whichever of the two the guest gave at checkout; it is
+    compared through services/contact.py, the same helper that decides whether
+    a repeated Idempotency-Key belongs to the caller. The two answers have to
+    agree - an order a guest can read is one they could have replayed.
+
+    ⚠️ The value must never reach a URL. It used to arrive as `?email=` while
+    actually carrying a phone number, which put a customer's phone in every
+    access log, proxy log and browser history entry.
     """
     order = await db.scalar(select(Order).where(Order.order_number == order_number))
     if order is None:
@@ -351,13 +360,11 @@ async def get_by_number(
     if user is not None and order.user_id == user.id:
         return order
 
-    contact = (email or "").strip().lower()
-    if contact and contact in {
-        (order.guest_email or "").lower(),
-        (order.guest_phone or "").lower(),
-    }:
+    if contact_matches(contact, email=order.guest_email, phone=order.guest_phone):
         return order
 
+    # Deliberately the same answer as "no such order": a different one would
+    # turn the sequential order numbers into a way to enumerate real orders.
     raise NotFoundError("Order not found", code="ORDER_NOT_FOUND")
 
 

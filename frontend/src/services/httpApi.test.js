@@ -232,3 +232,36 @@ describe('register payload', () => {
     });
   });
 });
+
+describe('guest order lookup', () => {
+  it('sends the contact in the body, never in the URL', async () => {
+    // The regression: the phone travelled as `?email=`, which wrote it into
+    // every access log, proxy log and browser history entry on the way.
+    localStorage.setItem('guest-orders:v1', JSON.stringify({ 'VB-20260101-0001': '555123456' }));
+    const fetchMock = vi.fn().mockResolvedValue(reply({ orderNumber: 'VB-20260101-0001' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await httpApi.getOrderByNumber('VB-20260101-0001');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/v1/orders/lookup');
+    expect(url).not.toContain('555123456');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({
+      orderNumber: 'VB-20260101-0001',
+      contact: '555123456',
+    });
+  });
+
+  it('reads a signed-in order with a plain GET and no contact', async () => {
+    localStorage.removeItem('guest-orders:v1');
+    const fetchMock = vi.fn().mockResolvedValue(reply({ orderNumber: 'VB-20260101-0002' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await httpApi.getOrderByNumber('VB-20260101-0002');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/v1/orders/VB-20260101-0002');
+    expect(init.method).toBe('GET');
+  });
+});

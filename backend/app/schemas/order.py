@@ -62,6 +62,18 @@ class OrderTotals(ApiModel):
     total: Decimal
 
 
+class OrderLookupRequest(ApiRequest):
+    """A guest reading their own order.
+
+    The contact travels in the body, never in the URL: a query string is
+    written to the access log of every hop, to proxy logs and to browser
+    history, and this field is a customer's phone number or email.
+    """
+
+    order_number: str = Field(min_length=3, max_length=32)
+    contact: str = Field(min_length=3, max_length=255, description="Email or phone from checkout")
+
+
 class CustomerOut(ApiModel):
     first_name: str
     last_name: str
