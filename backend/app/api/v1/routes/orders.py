@@ -1,10 +1,12 @@
 """შეკვეთების მარშრუტები."""
 
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Header, Query, status
 
 from app.core.deps import CurrentUser, Db, OptionalUser
+from app.core.errors import ValidationError
 from app.db.models import Order
 from app.schemas.order import (
     CreateOrderRequest,
@@ -17,6 +19,29 @@ from app.schemas.order import (
 from app.services import order as order_service
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+
+def _validated_key(raw: str | None) -> str | None:
+    """An Idempotency-Key must be a UUID, or it is refused.
+
+    The key is a permanent claim on a row - once taken, that value can never
+    produce a different order. Accepting free text would let a client take
+    "checkout" and then wonder why every later order replays the first one.
+    """
+    if raw is None:
+        return None
+    candidate = raw.strip()
+    if not candidate:
+        return None
+    try:
+        uuid.UUID(candidate)
+    except ValueError:
+        raise ValidationError(
+            "Idempotency-Key must be a UUID",
+            code="INVALID_IDEMPOTENCY_KEY",
+            details=[{"field": "Idempotency-Key"}],
+        ) from None
+    return candidate
 
 
 def _to_out(order: Order) -> OrderOut:
@@ -69,7 +94,7 @@ async def create_order(
         customer=payload.customer.model_dump(exclude_none=True),
         payment_method=payload.payment_method,
         user=user,
-        idempotency_key=idempotency_key,
+        idempotency_key=_validated_key(idempotency_key),
     )
     await db.commit()
     await db.refresh(order)

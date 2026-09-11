@@ -22,6 +22,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -35,9 +36,15 @@ from app.db.models import (
     Product,
     User,
 )
+from app.services.contact import contact_matches
 from app.services.inventory import adjust_stock
 
 MAX_QUANTITY = 99
+
+#: The unique index that makes the key a claim rather than a hope. Named
+#: explicitly because only *this* violation may be turned into a replay - any
+#: other IntegrityError is a real fault and has to keep propagating.
+IDEMPOTENCY_CONSTRAINT = "uq_orders_idempotency_key"
 
 
 def money(value: Decimal) -> Decimal:
@@ -95,6 +102,94 @@ async def _lock_products(db: AsyncSession, product_ids: list[UUID]) -> dict[UUID
     return {product.id: product for product in products}
 
 
+def owns_order(order: Order, *, user: User | None, customer: dict[str, Any]) -> bool:
+    """Whether this requester is the person the stored order belongs to.
+
+    An Idempotency-Key is a value a client chooses, so a repeat of one has to
+    prove who it is before the order comes back. Without this check a guessed
+    or copied key reads someone else's name, address and basket.
+
+    An order placed while signed in belongs to that account and to nothing
+    else - a guest who happens to know the email must not replay it.
+    """
+    if order.user_id is not None:
+        return user is not None and order.user_id == user.id
+    if user is not None:
+        return False
+    return contact_matches(
+        customer.get("email"), email=order.guest_email, phone=order.guest_phone
+    ) or contact_matches(customer.get("phone"), email=order.guest_email, phone=order.guest_phone)
+
+
+def _replay(order: Order, *, user: User | None, customer: dict[str, Any]) -> Order:
+    """Return the stored order to its owner, or refuse without describing it."""
+    if owns_order(order, user=user, customer=customer):
+        return order
+    raise ConflictError(
+        "This idempotency key belongs to a different order",
+        code="IDEMPOTENCY_KEY_CONFLICT",
+    )
+
+
+async def _claim_key(
+    db: AsyncSession,
+    *,
+    idempotency_key: str | None,
+    customer: dict[str, Any],
+    payment_method: str,
+    user: User | None,
+) -> Order:
+    """Insert the order row, taking the key before anything else can fail.
+
+    The claim has to happen first, not last. Two things go wrong otherwise:
+
+      · A duplicate submitted while the first request is still running races to
+        the same INSERT and one of them dies on the unique index - a 500 on a
+        checkout the shopper already completed.
+      · On the last unit in stock the duplicate reaches the stock check before
+        the original has committed, and the shopper is told the item ran out
+        instead of being shown the order they just placed.
+
+    With the row inserted up front, a concurrent duplicate blocks on the unique
+    index until the original commits and then sees it, which is the answer it
+    wanted. Totals are filled in once the prices are known - the row is only
+    visible inside this transaction until then.
+    """
+    order = Order(
+        order_number=await _next_order_number(db),
+        user_id=user.id if user else None,
+        guest_email=customer.get("email") if user is None else None,
+        guest_phone=customer.get("phone") if user is None else None,
+        status="pending",
+        customer=customer,
+        shipping_address={
+            "city": customer.get("city"),
+            "address": customer.get("address"),
+            "phone": customer.get("phone"),
+        },
+        subtotal=Decimal("0"),
+        shipping=Decimal("0"),
+        total=Decimal("0"),
+        currency=settings.currency,
+        payment_method=payment_method,
+        notes=customer.get("comment") or None,
+        idempotency_key=idempotency_key,
+    )
+    db.add(order)
+    await db.flush()
+    return order
+
+
+def _is_idempotency_clash(error: IntegrityError) -> bool:
+    """Only the idempotency key's own unique violation, never anything else.
+
+    A blanket `except IntegrityError` here would swallow a duplicate order
+    number, a broken foreign key or a violated check constraint and answer with
+    somebody else's order.
+    """
+    return IDEMPOTENCY_CONSTRAINT in str(getattr(error, "orig", error))
+
+
 async def create_order(
     db: AsyncSession,
     *,
@@ -111,8 +206,10 @@ async def create_order(
     if idempotency_key:
         existing = await db.scalar(select(Order).where(Order.idempotency_key == idempotency_key))
         if existing is not None:
-            # ორმაგად გაგზავნილი checkout — იმავე შეკვეთას ვაბრუნებთ და მეორეს არ ვქმნით
-            return existing
+            # ორმაგად გაგზავნილი checkout — იმავე შეკვეთას ვაბრუნებთ და მეორეს
+            # არ ვქმნით. მფლობელობა აუცილებლად მოწმდება: გასაღები კლიენტის
+            # არჩეულია და გამოცნობილით სხვისი შეკვეთა იკითხებოდა.
+            return _replay(existing, user=user, customer=customer)
 
     # ერთი პროდუქტი ორჯერ: რაოდენობებს ვაჯამებთ, თორემ FOR UPDATE-ის შემდეგ
     # ორივე ხაზი ერთსა და იმავე მარაგს დაუპირისპირდებოდა
@@ -127,6 +224,28 @@ async def create_order(
                 code="INVALID_QUANTITY",
                 details=[{"field": "items", "productId": str(product_id), "max": MAX_QUANTITY}],
             )
+
+    # The key is claimed here, before any check that can fail or block. A
+    # duplicate arriving now waits on the unique index instead of racing us to
+    # an IntegrityError or being told the last unit is gone.
+    try:
+        order = await _claim_key(
+            db,
+            idempotency_key=idempotency_key,
+            customer=customer,
+            payment_method=payment_method,
+            user=user,
+        )
+    except IntegrityError as error:
+        if not _is_idempotency_clash(error):
+            raise
+        # The original committed while we waited. Start a clean transaction,
+        # read what it wrote, and hand it back to whoever owns it.
+        await db.rollback()
+        existing = await db.scalar(select(Order).where(Order.idempotency_key == idempotency_key))
+        if existing is None:  # pragma: no cover - the violation proves it exists
+            raise
+        return _replay(existing, user=user, customer=customer)
 
     products = await _lock_products(db, sorted(quantities))
 
@@ -178,31 +297,20 @@ async def create_order(
     subtotal = money(subtotal)
     shipping = calc_shipping(subtotal)
 
-    order = Order(
-        order_number=await _next_order_number(db),
-        user_id=user.id if user else None,
-        guest_email=customer.get("email") if user is None else None,
-        guest_phone=customer.get("phone") if user is None else None,
-        status="pending",
-        customer=customer,
-        shipping_address={
-            "city": customer.get("city"),
-            "address": customer.get("address"),
-            "phone": customer.get("phone"),
-        },
-        subtotal=subtotal,
-        shipping=shipping,
-        total=money(subtotal + shipping),
-        currency=settings.currency,
-        payment_method=payment_method,
-        notes=customer.get("comment") or None,
-        idempotency_key=idempotency_key,
-        items=order_items,
-    )
-    db.add(order)
-    # flush ჯერ — `order.id` მოძრაობებს სჭირდებათ, რომ ledger-ში ჩანდეს
-    # რომელმა შეკვეთამ ჩამოწერა მარაგი.
+    order.subtotal = subtotal
+    order.shipping = shipping
+    order.total = money(subtotal + shipping)
+
+    # `order.items = [...]` would have to read the collection as it stands to
+    # work out the difference, and the row was flushed a moment ago with the
+    # collection never loaded - that read is lazy IO inside async code, which
+    # raises MissingGreenlet. Adding the rows against the id we already have
+    # avoids the question; the refresh then loads them back explicitly.
+    for item in order_items:
+        item.order_id = order.id
+    db.add_all(order_items)
     await db.flush()
+    await db.refresh(order, ["items"])
 
     # მარაგი ერთადერთი გზით იცვლება — `inventory.adjust_stock`-ით: ის row-ს
     # ბლოკავს, უარყოფით შედეგზე 409-ს აგდებს და ledger-ში ჩანაწერს წერს.

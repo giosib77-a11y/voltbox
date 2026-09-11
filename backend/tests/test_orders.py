@@ -13,7 +13,11 @@ from app.db.models import Product
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tests.factories import make_brand, make_category, make_product
+from tests.factories import auth_header, make_brand, make_category, make_product, make_user
+
+#: A real UUID: the API refuses anything else, because a key is a permanent
+#: claim on a row and free text like "checkout" would replay forever.
+KEY = "6f1c2f7e-6a3f-4f2e-8a1e-4d9f0b2c7a10"
 
 CUSTOMER = {
     "firstName": "გიორგი",
@@ -186,13 +190,118 @@ async def test_idempotency_key_prevents_a_duplicate_order(
     client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
 ) -> None:
     """ორმაგად დაჭერილი „შეკვეთის დადასტურება“ ორ შეკვეთას არ უნდა ქმნიდეს."""
-    headers = {"Idempotency-Key": "checkout-123"}
+    headers = {"Idempotency-Key": KEY}
     first = await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}], headers=headers)
     second = await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}], headers=headers)
 
     assert first.json()["orderNumber"] == second.json()["orderNumber"]
+    # A replay looks exactly like the original, so the client needs no branch.
+    assert second.json() == first.json()
     stock = await db.scalar(select(Product.stock).where(Product.id == shop["cheap"].id))
     assert stock == 4  # ერთხელ ჩამოიწერა და არა ორჯერ
+
+
+async def test_a_key_cannot_be_used_to_read_somebody_elses_order(
+    client: httpx.AsyncClient, shop: dict[str, Product]
+) -> None:
+    """The key is a value the client chooses, so a repeat has to prove who it is.
+
+    Without the owner check, a guessed or copied key returns a stranger's name,
+    address, phone number and basket.
+    """
+    headers = {"Idempotency-Key": KEY}
+    await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}], headers=headers)
+
+    stranger = dict(CUSTOMER, phone="599999999", firstName="ნინო")
+    response = await client.post(
+        "/api/v1/orders",
+        json={
+            "items": [{"productId": str(shop["cheap"].id), "qty": 1}],
+            "customer": stranger,
+            "paymentMethod": "cash",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["error"]["code"] == "IDEMPOTENCY_KEY_CONFLICT"
+    # Nothing about the order it refused to show.
+    assert "orderNumber" not in body
+    assert "ბერიძე" not in response.text
+
+
+async def test_a_guest_cannot_replay_an_order_placed_while_signed_in(
+    client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+) -> None:
+    """An account's order belongs to the account, not to whoever knows the phone."""
+    user = await make_user(db, email="owner@voltbox.ge")
+    headers = {"Idempotency-Key": KEY}
+    placed = await client.post(
+        "/api/v1/orders",
+        json={
+            "items": [{"productId": str(shop["cheap"].id), "qty": 1}],
+            "customer": CUSTOMER,
+            "paymentMethod": "cash",
+        },
+        headers={**headers, **auth_header(user)},
+    )
+    assert placed.status_code == 201
+
+    # Same key, same contact details, but no longer signed in.
+    response = await _place(
+        client, [{"productId": str(shop["cheap"].id), "qty": 1}], headers=headers
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "IDEMPOTENCY_KEY_CONFLICT"
+
+
+async def test_the_same_email_written_differently_still_replays(
+    client: httpx.AsyncClient, shop: dict[str, Product]
+) -> None:
+    """Case and stray spaces are not a different person.
+
+    (The phone field is already constrained by the schema to nine digits, so
+    at checkout it arrives in one shape; the free-form case is the lookup.)
+    """
+    headers = {"Idempotency-Key": KEY}
+    with_email = dict(CUSTOMER, email="Giorgi@Example.GE")
+    first = await client.post(
+        "/api/v1/orders",
+        json={
+            "items": [{"productId": str(shop["cheap"].id), "qty": 1}],
+            "customer": with_email,
+            "paymentMethod": "cash",
+        },
+        headers=headers,
+    )
+    assert first.status_code == 201
+
+    response = await client.post(
+        "/api/v1/orders",
+        json={
+            "items": [{"productId": str(shop["cheap"].id), "qty": 1}],
+            "customer": dict(with_email, email="  giorgi@example.ge  "),
+            "paymentMethod": "cash",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["orderNumber"] == first.json()["orderNumber"]
+
+
+@pytest.mark.parametrize("key", ["checkout-123", "not a uuid", "12345"])
+async def test_a_key_that_is_not_a_uuid_is_refused(
+    client: httpx.AsyncClient, shop: dict[str, Product], key: str
+) -> None:
+    response = await _place(
+        client, [{"productId": str(shop["cheap"].id), "qty": 1}], headers={"Idempotency-Key": key}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_IDEMPOTENCY_KEY"
 
 
 async def test_snapshot_survives_a_later_price_change(

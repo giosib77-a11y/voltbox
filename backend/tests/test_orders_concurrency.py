@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -13,7 +14,7 @@ from app.core.errors import ConflictError
 from app.db.models import Brand, Category, Order, OrderItem, Product, ProductImage
 from app.db.session import SessionLocal
 from app.services import order as order_service
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 CUSTOMER = {
@@ -125,3 +126,95 @@ async def test_cancellation_restores_stock(last_unit: Product, db: AsyncSession)
     async with SessionLocal() as check:
         stock = await check.scalar(select(Product.stock).where(Product.id == last_unit.id))
     assert stock == 1
+
+
+async def _order_with_key(product_id: object, key: str, *, qty: int = 1) -> tuple[str, str]:
+    """One checkout on its own connection. → (outcome, detail).
+
+    Outcomes: ("ok", order_number) for a created or replayed order,
+    ("conflict", code) for a refusal, ("error", type) for anything else - which
+    is the case that used to happen and must not any more.
+    """
+    async with SessionLocal() as session:
+        try:
+            order = await order_service.create_order(
+                session,
+                items=[(product_id, qty)],  # type: ignore[list-item]
+                customer=dict(CUSTOMER),
+                payment_method="cash",
+                user=None,
+                idempotency_key=key,
+            )
+            number = order.order_number
+            await session.commit()
+        except ConflictError as exc:
+            await session.rollback()
+            return "conflict", exc.code
+        except Exception as exc:
+            # Deliberately broad, and it hides nothing: the caller asserts
+            # that no outcome is "error", so anything caught here fails the
+            # test by name instead of being swallowed.
+            await session.rollback()
+            return "error", type(exc).__name__
+        return "ok", number
+
+
+async def test_parallel_duplicates_of_one_key_make_one_order(last_unit: Product) -> None:
+    """Five simultaneous submissions of the same checkout.
+
+    Before the key was claimed up front, the losers of this race died on the
+    unique index and the shopper saw a 500 for an order that had in fact gone
+    through.
+    """
+    key = str(uuid.uuid4())
+    results = await asyncio.gather(*(_order_with_key(last_unit.id, key) for _ in range(5)))
+
+    outcomes = {outcome for outcome, _ in results}
+    assert outcomes == {"ok"}, results
+
+    numbers = {detail for _, detail in results}
+    assert len(numbers) == 1, f"expected one order, got {numbers}"
+
+    async with SessionLocal() as check:
+        stock = await check.scalar(select(Product.stock).where(Product.id == last_unit.id))
+        orders = await check.scalar(
+            select(func.count()).select_from(Order).where(Order.idempotency_key == key)
+        )
+    # Charged exactly once, out of a stock of one.
+    assert stock == 0
+    assert orders == 1
+
+
+async def test_the_last_unit_does_not_turn_a_duplicate_into_out_of_stock(
+    last_unit: Product,
+) -> None:
+    """Two duplicates competing for the only unit both get the order.
+
+    This is why the claim has to come before the stock check: the duplicate
+    would otherwise reach the check while the original was still uncommitted,
+    find nothing left, and tell the shopper the item sold out - to them, in
+    between two clicks of their own.
+    """
+    key = str(uuid.uuid4())
+    first, second = await asyncio.gather(
+        _order_with_key(last_unit.id, key), _order_with_key(last_unit.id, key)
+    )
+
+    assert first[0] == "ok" and second[0] == "ok", (first, second)
+    assert first[1] == second[1]
+
+
+async def test_two_different_keys_still_compete_for_the_last_unit(last_unit: Product) -> None:
+    """Idempotency must not become a way around the stock check.
+
+    Two genuinely different checkouts are still two orders, and only one of
+    them can have the last unit.
+    """
+    results = await asyncio.gather(
+        _order_with_key(last_unit.id, str(uuid.uuid4())),
+        _order_with_key(last_unit.id, str(uuid.uuid4())),
+    )
+
+    assert sorted(outcome for outcome, _ in results) == ["conflict", "ok"]
+    conflicts = [detail for outcome, detail in results if outcome == "conflict"]
+    assert conflicts == ["INSUFFICIENT_STOCK"]
