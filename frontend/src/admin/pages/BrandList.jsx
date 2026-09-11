@@ -62,7 +62,7 @@ function BrandDialog({ brand, onClose, onSaved }) {
 
   return (
     <Modal open onClose={onClose} title={isEdit ? 'ბრენდის რედაქტირება' : 'ახალი ბრენდი'}>
-      <form onSubmit={handleSubmit} noValidate className="space-y-3">
+      <form onSubmit={handleSubmit} noValidate className="space-y-3 p-5">
         {formError ? (
           <p role="alert" className="rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">
             {formError.message}

@@ -60,7 +60,7 @@ function AdjustDialog({ row, onClose, onSaved }) {
 
   return (
     <Modal open onClose={onClose} title={`მარაგი — ${row.name}`}>
-      <form onSubmit={handleSubmit} noValidate className="space-y-3">
+      <form onSubmit={handleSubmit} noValidate className="space-y-3 p-5">
         {error ? (
           <p role="alert" className="rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">
             {error.message}
@@ -121,36 +121,38 @@ function HistoryDialog({ row, onClose }) {
 
   return (
     <Modal open onClose={onClose} title={`ისტორია — ${row.name}`}>
-      {movements === null ? (
-        <p className="text-sm text-ink-600">იტვირთება…</p>
-      ) : movements.length === 0 ? (
-        <p className="text-sm text-ink-600">ჩანაწერი არ არის.</p>
-      ) : (
-        <ol className="max-h-96 space-y-2 overflow-y-auto text-sm">
-          {movements.map((movement) => (
-            <li key={movement.id} className="flex items-baseline justify-between gap-3">
-              <span>
-                <strong
-                  className={`tabular-nums ${movement.change > 0 ? 'text-success-700' : 'text-danger-700'}`}
-                >
-                  {movement.change > 0 ? '+' : ''}
-                  {movement.change}
-                </strong>{' '}
-                <span className="text-ink-700">
-                  {MOVEMENT_REASONS[movement.reason] || movement.reason}
+      <div className="p-5">
+        {movements === null ? (
+          <p className="text-sm text-ink-600">იტვირთება…</p>
+        ) : movements.length === 0 ? (
+          <p className="text-sm text-ink-600">ჩანაწერი არ არის.</p>
+        ) : (
+          <ol className="max-h-96 space-y-2 overflow-y-auto text-sm">
+            {movements.map((movement) => (
+              <li key={movement.id} className="flex items-baseline justify-between gap-3">
+                <span>
+                  <strong
+                    className={`tabular-nums ${movement.change > 0 ? 'text-success-700' : 'text-danger-700'}`}
+                  >
+                    {movement.change > 0 ? '+' : ''}
+                    {movement.change}
+                  </strong>{' '}
+                  <span className="text-ink-700">
+                    {MOVEMENT_REASONS[movement.reason] || movement.reason}
+                  </span>
+                  {movement.note ? <span className="text-ink-500"> — {movement.note}</span> : null}
+                  <span className="block text-xs text-ink-500">
+                    {movement.previousStock} → {movement.newStock}
+                  </span>
                 </span>
-                {movement.note ? <span className="text-ink-500"> — {movement.note}</span> : null}
-                <span className="block text-xs text-ink-500">
-                  {movement.previousStock} → {movement.newStock}
+                <span className="whitespace-nowrap text-xs text-ink-500">
+                  {dateTime(movement.createdAt)}
                 </span>
-              </span>
-              <span className="whitespace-nowrap text-xs text-ink-500">
-                {dateTime(movement.createdAt)}
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
     </Modal>
   );
 }

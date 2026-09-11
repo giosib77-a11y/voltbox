@@ -23,10 +23,25 @@ const POSITIONS = {
 };
 
 const PANELS = {
-  center: 'w-full max-w-lg rounded-card animate-slide-up',
+  center: 'w-full rounded-card animate-slide-up',
   bottom: 'w-full max-h-[88vh] rounded-t-2xl animate-sheet-up',
   right: 'h-full w-[86vw] max-w-sm animate-slide-in-right',
   left: 'h-full w-[86vw] max-w-sm animate-slide-in-left',
+};
+
+/**
+ * ცენტრალური დიალოგის სიგანე — `size`-ით და არა `panelClassName`-ით.
+ *
+ * ორივე რომ Tailwind-ის კლასი იყოს, რომელი გაიმარჯვებს, იმას კლასის ატრიბუტში
+ * რიგი კი არ წყვეტს, არამედ stylesheet-ში რიგი. დასადასტურებელ ფანჯარას `lg`
+ * ჰყოფნის, ორსვეტიან ფორმას კი — არა.
+ */
+const CENTER_WIDTHS = {
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-xl',
+  '2xl': 'max-w-2xl',
 };
 
 export default function Modal({
@@ -36,6 +51,7 @@ export default function Modal({
   children,
   footer = null,
   position = 'center',
+  size = 'lg',
   labelledBy,
   panelClassName = '',
   showClose = true,
@@ -114,9 +130,14 @@ export default function Modal({
         aria-label={!labelledBy && title ? title : undefined}
         aria-labelledby={labelledBy}
         tabIndex={-1}
-        className={`relative flex flex-col overflow-hidden bg-white shadow-popover focus:outline-none ${
-          PANELS[position] || PANELS.center
-        } ${panelClassName}`}
+        className={[
+          'relative flex flex-col overflow-hidden bg-white shadow-popover focus:outline-none',
+          PANELS[position] || PANELS.center,
+          position === 'center' ? CENTER_WIDTHS[size] || CENTER_WIDTHS.lg : '',
+          panelClassName,
+        ]
+          .filter(Boolean)
+          .join(' ')}
       >
         {(title || showClose) && (
           <div className="flex shrink-0 items-center justify-between gap-4 border-b border-ink-200 px-5 py-4">

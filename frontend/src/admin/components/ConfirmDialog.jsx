@@ -37,14 +37,16 @@ export default function ConfirmDialog({
 
   return (
     <Modal open={open} onClose={busy ? () => {} : onClose} title={title}>
-      <p className="text-sm text-ink-600">{description}</p>
-      <div className="mt-5 flex justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>
-          {cancelLabel}
-        </Button>
-        <Button variant={variant} size="sm" onClick={handleConfirm} loading={busy}>
-          {confirmLabel}
-        </Button>
+      <div className="p-5">
+        <p className="text-sm text-ink-600">{description}</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>
+            {cancelLabel}
+          </Button>
+          <Button variant={variant} size="sm" onClick={handleConfirm} loading={busy}>
+            {confirmLabel}
+          </Button>
+        </div>
       </div>
     </Modal>
   );

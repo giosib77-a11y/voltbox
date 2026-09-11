@@ -108,8 +108,13 @@ export default function CategoryDialog({ category, categories, onClose, onSaved 
     .map((item) => ({ value: item.id, label: item.name }));
 
   return (
-    <Modal open onClose={onClose} title={isEdit ? 'კატეგორიის რედაქტირება' : 'ახალი კატეგორია'}>
-      <form onSubmit={handleSubmit} noValidate className="space-y-4">
+    <Modal
+      open
+      onClose={onClose}
+      size="2xl"
+      title={isEdit ? 'კატეგორიის რედაქტირება' : 'ახალი კატეგორია'}
+    >
+      <form onSubmit={handleSubmit} noValidate className="space-y-5 p-5">
         {formError ? (
           <p role="alert" className="rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">
             {formError.message}
@@ -165,61 +170,94 @@ export default function CategoryDialog({ category, categories, onClose, onSaved 
         />
 
         <div>
-          <h3 className="mb-1 text-sm font-semibold text-ink-900">ფილტრები</h3>
-          <p className="mb-2 text-xs text-ink-600">
-            გასაღები არის <code>brand</code> ან <code>specs.რაღაც</code> — ზუსტად ისე, როგორც
-            პროდუქტის მახასიათებელს ჰქვია.
+          <div className="mb-1 flex items-baseline justify-between gap-3">
+            <h3 className="text-sm font-semibold text-ink-900">ფილტრები</h3>
+            <span className="text-xs text-ink-500">
+              {values.filters.length ? `${values.filters.length} ფილტრი` : null}
+            </span>
+          </div>
+          <p className="mb-3 text-xs text-ink-600">
+            გასაღები არის <code className="rounded bg-ink-100 px-1 py-0.5">brand</code> ან{' '}
+            <code className="rounded bg-ink-100 px-1 py-0.5">specs.რაღაც</code> — ზუსტად ისე,
+            როგორც პროდუქტის მახასიათებელს ჰქვია.
           </p>
 
-          <div className="space-y-2">
-            {values.filters.map((filter, index) => (
-              <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto_auto]">
-                <Input
-                  aria-label="გასაღები"
-                  value={filter.key}
-                  onChange={(event) => setFilter(index, { key: event.target.value })}
-                />
-                <Input
-                  aria-label="ლეიბლი"
-                  value={filter.label}
-                  onChange={(event) => setFilter(index, { label: event.target.value })}
-                />
-                <Select
-                  aria-label="ტიპი"
-                  value={filter.type}
-                  options={FILTER_TYPES}
-                  onChange={(event) => setFilter(index, { type: event.target.value })}
-                />
-                <Input
-                  aria-label="match"
-                  placeholder="match"
-                  disabled={filter.type !== 'toggle'}
-                  value={String(filter.match ?? '')}
-                  onChange={(event) => setFilter(index, { match: event.target.value })}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  aria-label="ფილტრის წაშლა"
-                  onClick={() =>
-                    setValues((current) => ({
-                      ...current,
-                      filters: current.filters.filter((_, i) => i !== index),
-                    }))
-                  }
+          {values.filters.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-ink-300 px-3 py-5 text-center text-sm text-ink-500">
+              ფილტრი არ არის. კატეგორიის გვერდზე გვერდითა პანელი ცარიელი დარჩება.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {values.filters.map((filter, index) => (
+                // Each filter is a card, not a row of unlabelled boxes: four
+                // controls squeezed into one line inside a dialog leaves the two
+                // that matter - key and label - about fifty pixels wide.
+                <fieldset
+                  key={index}
+                  className="rounded-xl border border-ink-200 bg-ink-50/70 p-3"
                 >
-                  <X className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              </div>
-            ))}
-          </div>
+                  <legend className="sr-only">ფილტრი {index + 1}</legend>
+
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-medium text-ink-800">
+                      {(filter.label || '').trim() || `ფილტრი ${index + 1}`}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      aria-label={`ფილტრის წაშლა — ${(filter.label || '').trim() || index + 1}`}
+                      onClick={() =>
+                        setValues((current) => ({
+                          ...current,
+                          filters: current.filters.filter((_, i) => i !== index),
+                        }))
+                      }
+                    >
+                      <X className="h-4 w-4 text-ink-500" aria-hidden="true" />
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Input
+                      label="გასაღები"
+                      value={filter.key}
+                      onChange={(event) => setFilter(index, { key: event.target.value })}
+                    />
+                    <Input
+                      label="ლეიბლი"
+                      hint="ასე დაინახავს მყიდველი"
+                      value={filter.label}
+                      onChange={(event) => setFilter(index, { label: event.target.value })}
+                    />
+                    <Select
+                      label="ტიპი"
+                      value={filter.type}
+                      options={FILTER_TYPES}
+                      onChange={(event) => setFilter(index, { type: event.target.value })}
+                    />
+                    {/* `match` means something only for a toggle. Showing it
+                        disabled on every other row was dead space that pushed
+                        the real fields out of view. */}
+                    {filter.type === 'toggle' ? (
+                      <Input
+                        label="მნიშვნელობა"
+                        hint="მაგ. true — რას უდრიდეს, რომ ჩაირთოს"
+                        value={String(filter.match ?? '')}
+                        onChange={(event) => setFilter(index, { match: event.target.value })}
+                      />
+                    ) : null}
+                  </div>
+                </fieldset>
+              ))}
+            </div>
+          )}
 
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="mt-2"
+            className="mt-3"
             onClick={() =>
               setValues((current) => ({
                 ...current,
