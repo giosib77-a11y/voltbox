@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictError, UnauthorizedError, ValidationError
@@ -82,19 +82,46 @@ async def login(db: AsyncSession, *, email: str, password: str) -> dict[str, obj
 
 
 async def refresh(db: AsyncSession, *, raw_token: str) -> dict[str, object]:
-    token_hash = hash_refresh_token(raw_token)
-    stored = await db.scalar(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+    """Exchange a refresh token for a new session, exactly once.
 
-    now = datetime.now(UTC)
-    if stored is None or stored.revoked_at is not None or stored.expires_at <= now:
+    The revocation is the check. Reading the row, deciding it was usable and
+    then revoking it in a second statement left a window in which two requests
+    carrying the same token both read `revoked_at IS NULL` and both received a
+    session - which is precisely what rotation-on-use exists to prevent, and it
+    happens on its own whenever a client fires parallel requests after an
+    access token expires.
+
+    One conditional UPDATE closes it: the second caller's statement waits on
+    the row, re-evaluates the WHERE clause once the first commits, matches
+    nothing, and gets a 401.
+    """
+    token_hash = hash_refresh_token(raw_token)
+
+    claimed = (
+        await db.execute(
+            update(RefreshToken)
+            .where(
+                RefreshToken.token_hash == token_hash,
+                RefreshToken.revoked_at.is_(None),
+                RefreshToken.expires_at > func.now(),
+            )
+            .values(revoked_at=func.now())
+            .returning(RefreshToken.user_id)
+            # Nothing in this session holds the row, so there is nothing to
+            # synchronise and the extra SELECT it would cost is pointless.
+            .execution_options(synchronize_session=False)
+        )
+    ).one_or_none()
+
+    if claimed is None:
         raise UnauthorizedError("Refresh token is invalid or expired", code="INVALID_REFRESH_TOKEN")
 
-    user = await db.scalar(select(User).where(User.id == stored.user_id))
+    user = await db.scalar(select(User).where(User.id == claimed.user_id))
     if user is None or not user.is_active:
+        # The revocation rolls back with the transaction, so a suspended
+        # account that is re-enabled keeps the sessions it had.
         raise UnauthorizedError("Account is not available", code="ACCOUNT_DISABLED")
 
-    stored.revoked_at = now  # rotation: ძველი მაშინვე უქმდება
-    await db.flush()
     return await _issue_session(db, user)
 
 

@@ -10,7 +10,7 @@ import uuid
 from decimal import Decimal
 
 import pytest
-from app.core.errors import ConflictError
+from app.core.errors import ConflictError, UnauthorizedError
 from app.db.models import (
     REASON_ORDER_CANCELLED,
     Brand,
@@ -20,11 +20,16 @@ from app.db.models import (
     OrderItem,
     Product,
     ProductImage,
+    RefreshToken,
+    User,
 )
 from app.db.session import SessionLocal
+from app.services import auth as auth_service
 from app.services import order as order_service
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from tests.factories import make_user
 
 CUSTOMER = {
     "first_name": "გიორგი",
@@ -283,3 +288,57 @@ async def test_two_parallel_cancellations_restock_exactly_once(last_unit: Produc
         )
     assert stock == 1, "the single unit came back once, not twice"
     assert movements == 1
+
+
+async def _refresh(raw_token: str) -> tuple[str, str]:
+    """One refresh on its own connection. → (outcome, detail)."""
+    async with SessionLocal() as session:
+        try:
+            issued = await auth_service.refresh(session, raw_token=raw_token)
+            await session.commit()
+        except UnauthorizedError as exc:
+            await session.rollback()
+            return "rejected", exc.code
+        except Exception as exc:
+            # Broad on purpose and hiding nothing: the caller asserts on the
+            # outcomes, so anything caught here fails the test by name.
+            await session.rollback()
+            return "error", type(exc).__name__
+        return "ok", str(issued["refresh_token"])
+
+
+async def test_one_refresh_token_can_only_be_spent_once(db: AsyncSession) -> None:
+    """Two tabs restoring at the same moment used to get a session each.
+
+    Rotation-on-use is what detects a stolen refresh token: a token that has
+    already been spent must never work again. A read-then-update left a window
+    where both callers saw `revoked_at IS NULL`, so the guarantee was only
+    true when nothing happened in parallel.
+    """
+    async with SessionLocal() as setup:
+        user = await make_user(setup, email="race@voltbox.ge")
+        session = await auth_service._issue_session(setup, user)
+        await setup.commit()
+        raw_token = str(session["refresh_token"])
+
+    results = await asyncio.gather(_refresh(raw_token), _refresh(raw_token))
+
+    outcomes = sorted(outcome for outcome, _ in results)
+    assert outcomes == ["ok", "rejected"], results
+    assert [d for o, d in results if o == "rejected"] == ["INVALID_REFRESH_TOKEN"]
+
+    async with SessionLocal() as check:
+        spent = await check.scalar(
+            select(func.count())
+            .select_from(RefreshToken)
+            .where(
+                RefreshToken.user_id == user.id,
+                RefreshToken.revoked_at.is_not(None),
+            )
+        )
+        await check.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
+        await check.execute(delete(User).where(User.id == user.id))
+        await check.commit()
+
+    # Exactly the one that was presented; the winner's new token is untouched.
+    assert spent == 1
