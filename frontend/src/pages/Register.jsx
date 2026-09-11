@@ -8,6 +8,7 @@ import { useToast } from '../hooks/useToast.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import { MIN_PASSWORD_LENGTH, REGISTER_FIELDS, validateField, validateForm } from '../utils/validate.js';
 import { QUERY_KEYS } from '../constants/index.js';
+import { getSafeRedirect } from '../utils/redirect.js';
 
 const EMPTY = { firstName: '', lastName: '', email: '', password: '', confirmPassword: '' };
 
@@ -17,7 +18,11 @@ export default function Register() {
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get(QUERY_KEYS.redirect) || '/account/orders';
+  // Same untrusted parameter as on the login page, checked the same way.
+  const redirectTo = getSafeRedirect(
+    searchParams.get(QUERY_KEYS.redirect),
+    '/account/orders',
+  );
 
   const { register, pending } = useAuth();
   const toast = useToast();

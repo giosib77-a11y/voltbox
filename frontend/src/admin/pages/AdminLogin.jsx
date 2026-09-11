@@ -16,6 +16,7 @@ import { Loader2, Store } from 'lucide-react';
 import * as api from '../../services/api.js';
 import { getAdminProfile } from '../adminApi.js';
 import { clearSession, readSession } from '../../services/session.js';
+import { getSafeRedirect } from '../../utils/redirect.js';
 
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
@@ -25,7 +26,8 @@ export default function AdminLogin() {
 
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const next = params.get('next') || '/admin';
+  // `next` is the same untrusted input as the storefront's `redirect`.
+  const next = getSafeRedirect(params.get('next'), '/admin');
 
   // უკვე შესულს პაროლი აღარ უნდა ვკითხოთ. ამის გარეშე მაღაზიიდან პანელში
   // შესვლა ზოგჯერ შესვლის ფორმაზე გვაბრუნებდა და ისე გამოიყურებოდა, თითქოს

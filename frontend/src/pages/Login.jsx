@@ -8,6 +8,7 @@ import { useToast } from '../hooks/useToast.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import { LOGIN_FIELDS, validateField, validateForm } from '../utils/validate.js';
 import { QUERY_KEYS, SITE_NAME } from '../constants/index.js';
+import { getSafeRedirect } from '../utils/redirect.js';
 
 // MOCK ONLY — replace with real auth API.
 export default function Login() {
@@ -15,7 +16,13 @@ export default function Login() {
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get(QUERY_KEYS.redirect) || '/account/orders';
+  // Untrusted: the parameter arrives from a link anyone can write, and an
+  // unchecked value turns this page into an open redirect - a login form on
+  // the real site that lands the user somewhere else afterwards.
+  const redirectTo = getSafeRedirect(
+    searchParams.get(QUERY_KEYS.redirect),
+    '/account/orders',
+  );
 
   const { login, pending } = useAuth();
   const toast = useToast();
