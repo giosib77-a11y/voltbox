@@ -52,14 +52,21 @@ describe('CategoryDialog filters', () => {
     expect(screen.getByText(/გვერდითა პანელი ცარიელი დარჩება/)).toBeInTheDocument();
   });
 
-  it('gives every control a visible label', async () => {
+  it('names every control, and heads the columns once', async () => {
     renderDialog();
 
     await userEvent.click(screen.getByRole('button', { name: /ფილტრის დამატება/ }));
 
+    // Column headings carry the names on screen; the controls carry them for
+    // assistive technology. Both have to be there.
     expect(screen.getByLabelText('გასაღები')).toBeInTheDocument();
     expect(screen.getByLabelText('ლეიბლი')).toBeInTheDocument();
     expect(screen.getByLabelText('ტიპი')).toBeInTheDocument();
+
+    // One heading row, however many filters - not a title per row.
+    await userEvent.click(screen.getByRole('button', { name: /ფილტრის დამატება/ }));
+    expect(screen.getAllByLabelText('გასაღები')).toHaveLength(2);
+    expect(screen.getAllByText('ტიპი')).toHaveLength(1);
   });
 
   it('shows the match field only for a toggle', async () => {
@@ -67,11 +74,11 @@ describe('CategoryDialog filters', () => {
     await userEvent.click(screen.getByRole('button', { name: /ფილტრის დამატება/ }));
 
     // A new filter defaults to checkbox, where `match` means nothing.
-    expect(screen.queryByLabelText('მნიშვნელობა')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('ჩართვის მნიშვნელობა')).not.toBeInTheDocument();
 
     await userEvent.selectOptions(screen.getByLabelText('ტიპი'), 'toggle');
 
-    expect(screen.getByLabelText('მნიშვნელობა')).toBeInTheDocument();
+    expect(screen.getByLabelText('ჩართვის მნიშვნელობა')).toBeInTheDocument();
   });
 
   it('sends match for the toggle and strips it from the rest', async () => {

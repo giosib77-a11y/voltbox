@@ -27,6 +27,15 @@ const FILTER_TYPES = [
 
 const BLANK_FILTER = { key: 'specs.', label: '', type: 'checkbox', match: '' };
 
+/**
+ * ფილტრის მწკრივის სვეტები.
+ *
+ * `minmax(0,1fr)` და არა `auto`: `auto` სვეტი შიგთავსით იზომება, ამიტომ ტიპის
+ * გრძელი ტექსტი სიგანეს ართმევდა „გასაღებსა“ და „ლეიბლს“ — სწორედ იმ ორ ველს,
+ * რომელსაც ავსებ.
+ */
+const GRID = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_14rem_2.5rem]';
+
 export default function CategoryDialog({ category, categories, onClose, onSaved }) {
   const isEdit = Boolean(category);
   const [values, setValues] = useState({
@@ -176,10 +185,10 @@ export default function CategoryDialog({ category, categories, onClose, onSaved 
               {values.filters.length ? `${values.filters.length} ფილტრი` : null}
             </span>
           </div>
-          <p className="mb-3 text-xs text-ink-600">
+          <p className="mb-3 text-xs leading-relaxed text-ink-600">
             გასაღები არის <code className="rounded bg-ink-100 px-1 py-0.5">brand</code> ან{' '}
             <code className="rounded bg-ink-100 px-1 py-0.5">specs.რაღაც</code> — ზუსტად ისე,
-            როგორც პროდუქტის მახასიათებელს ჰქვია.
+            როგორც პროდუქტის მახასიათებელს ჰქვია. ლეიბლს მყიდველი დაინახავს.
           </p>
 
           {values.filters.length === 0 ? (
@@ -187,25 +196,44 @@ export default function CategoryDialog({ category, categories, onClose, onSaved 
               ფილტრი არ არის. კატეგორიის გვერდზე გვერდითა პანელი ცარიელი დარჩება.
             </p>
           ) : (
-            <div className="space-y-3">
-              {values.filters.map((filter, index) => (
-                // Each filter is a card, not a row of unlabelled boxes: four
-                // controls squeezed into one line inside a dialog leaves the two
-                // that matter - key and label - about fifty pixels wide.
-                <fieldset
-                  key={index}
-                  className="rounded-xl border border-ink-200 bg-ink-50/70 p-3"
-                >
-                  <legend className="sr-only">ფილტრი {index + 1}</legend>
+            <>
+              {/* Column headings once, above the list - not repeated on every
+                  row. A filter is three short values; per-filter cards with
+                  their own titles and hints turned eight of them into a page of
+                  scrolling. */}
+              <div className={`mb-1.5 hidden px-1 text-xs font-medium text-ink-600 sm:grid ${GRID}`}>
+                <span>გასაღები</span>
+                <span>ლეიბლი</span>
+                <span>ტიპი</span>
+                <span className="sr-only">მოქმედება</span>
+              </div>
 
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-medium text-ink-800">
-                      {(filter.label || '').trim() || `ფილტრი ${index + 1}`}
-                    </span>
+              <div className="space-y-2">
+                {values.filters.map((filter, index) => (
+                  <div key={index} className={`grid grid-cols-2 items-center gap-2 ${GRID}`}>
+                    <Input
+                      aria-label="გასაღები"
+                      placeholder="specs.ram"
+                      value={filter.key}
+                      onChange={(event) => setFilter(index, { key: event.target.value })}
+                    />
+                    <Input
+                      aria-label="ლეიბლი"
+                      placeholder="ოპერატიული მეხსიერება"
+                      value={filter.label}
+                      onChange={(event) => setFilter(index, { label: event.target.value })}
+                    />
+                    <Select
+                      aria-label="ტიპი"
+                      value={filter.type}
+                      options={FILTER_TYPES}
+                      onChange={(event) => setFilter(index, { type: event.target.value })}
+                    />
                     <Button
                       type="button"
                       variant="ghost"
-                      size="xs"
+                      size="icon"
+                      className="justify-self-end"
                       aria-label={`ფილტრის წაშლა — ${(filter.label || '').trim() || index + 1}`}
                       onClick={() =>
                         setValues((current) => ({
@@ -216,41 +244,24 @@ export default function CategoryDialog({ category, categories, onClose, onSaved 
                     >
                       <X className="h-4 w-4 text-ink-500" aria-hidden="true" />
                     </Button>
-                  </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Input
-                      label="გასაღები"
-                      value={filter.key}
-                      onChange={(event) => setFilter(index, { key: event.target.value })}
-                    />
-                    <Input
-                      label="ლეიბლი"
-                      hint="ასე დაინახავს მყიდველი"
-                      value={filter.label}
-                      onChange={(event) => setFilter(index, { label: event.target.value })}
-                    />
-                    <Select
-                      label="ტიპი"
-                      value={filter.type}
-                      options={FILTER_TYPES}
-                      onChange={(event) => setFilter(index, { type: event.target.value })}
-                    />
-                    {/* `match` means something only for a toggle. Showing it
-                        disabled on every other row was dead space that pushed
-                        the real fields out of view. */}
+                    {/* `match` means something only for a toggle. It sits under
+                        the type it belongs to, and is absent everywhere else
+                        rather than disabled and taking up a column. */}
                     {filter.type === 'toggle' ? (
                       <Input
-                        label="მნიშვნელობა"
-                        hint="მაგ. true — რას უდრიდეს, რომ ჩაირთოს"
+                        aria-label="ჩართვის მნიშვნელობა"
+                        placeholder="მაგ. true"
+                        hint="ჩაირთოს, როცა უდრის"
+                        containerClassName="sm:col-start-3"
                         value={String(filter.match ?? '')}
                         onChange={(event) => setFilter(index, { match: event.target.value })}
                       />
                     ) : null}
                   </div>
-                </fieldset>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
 
           <Button
