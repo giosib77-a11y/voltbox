@@ -22,8 +22,14 @@ const POSITIONS = {
   left: 'items-stretch justify-start',
 };
 
+/**
+ * `max-h-full` ცენტრალურ პანელზე აუცილებელია: მის გარეშე პანელი ეკრანს გარეთ
+ * იზრდება და შიგთავსის `overflow-y-auto`-ს შესაზღუდი არაფერი აქვს — გრძელი
+ * ფორმა უბრალოდ იჭრება, სქროლის გარეშე. მშობელი კონტეინერის padding-ი
+ * პროცენტულ ზღვარს თავისით ტოვებს სუნთქვის ადგილს.
+ */
 const PANELS = {
-  center: 'w-full rounded-card animate-slide-up',
+  center: 'w-full max-h-full rounded-card animate-slide-up',
   bottom: 'w-full max-h-[88vh] rounded-t-2xl animate-sheet-up',
   right: 'h-full w-[86vw] max-w-sm animate-slide-in-right',
   left: 'h-full w-[86vw] max-w-sm animate-slide-in-left',

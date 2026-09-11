@@ -27,6 +27,9 @@ const FILTER_TYPES = [
 
 const BLANK_FILTER = { key: 'specs.', label: '', type: 'checkbox', match: '' };
 
+// `form=` კავშირი: ღილაკი მოდალის ძირშია, ფორმის გარეთ, მაგრამ მაინც მას აგზავნის.
+const FORM_ID = 'admin-category-form';
+
 /**
  * ფილტრის მწკრივის სვეტები.
  *
@@ -122,8 +125,18 @@ export default function CategoryDialog({ category, categories, onClose, onSaved 
       onClose={onClose}
       size="2xl"
       title={isEdit ? 'კატეგორიის რედაქტირება' : 'ახალი კატეგორია'}
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={saving}>
+            გაუქმება
+          </Button>
+          <Button type="submit" form={FORM_ID} variant="accent" size="sm" loading={saving}>
+            შენახვა
+          </Button>
+        </div>
+      }
     >
-      <form onSubmit={handleSubmit} noValidate className="space-y-5 p-5">
+      <form id={FORM_ID} onSubmit={handleSubmit} noValidate className="space-y-5 p-5">
         {formError ? (
           <p role="alert" className="rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">
             {formError.message}
@@ -278,15 +291,6 @@ export default function CategoryDialog({ category, categories, onClose, onSaved 
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
             ფილტრის დამატება
-          </Button>
-        </div>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={saving}>
-            გაუქმება
-          </Button>
-          <Button type="submit" variant="accent" size="sm" loading={saving}>
-            შენახვა
           </Button>
         </div>
       </form>

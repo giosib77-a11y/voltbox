@@ -81,6 +81,22 @@ describe('CategoryDialog filters', () => {
     expect(screen.getByLabelText('ჩართვის მნიშვნელობა')).toBeInTheDocument();
   });
 
+  it('keeps the actions out of the scrolling area but still submitting', async () => {
+    // A long category scrolled the save button off the screen entirely.
+    const update = vi.spyOn(adminApi, 'updateCategory').mockResolvedValue(CATEGORY);
+    renderDialog(CATEGORY);
+
+    const save = screen.getByRole('button', { name: 'შენახვა' });
+    // The modal footer sits outside the overflow-y-auto body, so the button
+    // must not be a descendant of the form...
+    expect(document.getElementById('admin-category-form').contains(save)).toBe(false);
+
+    // ...and the form= association is what still makes it submit.
+    await userEvent.click(save);
+
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
   it('sends match for the toggle and strips it from the rest', async () => {
     const update = vi.spyOn(adminApi, 'updateCategory').mockResolvedValue(CATEGORY);
     renderDialog(CATEGORY);
