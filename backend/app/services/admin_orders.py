@@ -82,8 +82,12 @@ def _conditions(
             clauses = [
                 Order.order_number.ilike(f"%{needle.upper()}%"),
                 Order.guest_email.ilike(f"%{needle}%"),
-                Order.customer["firstName"].astext.ilike(f"%{needle}%"),
-                Order.customer["lastName"].astext.ilike(f"%{needle}%"),
+                # Snake case: the snapshot is written by `model_dump()`, which
+                # uses field names and not the camelCase aliases the API speaks
+                # in. Searching `firstName` matched nothing, so an order could
+                # only ever be found by its number or phone.
+                Order.customer["first_name"].astext.ilike(f"%{needle}%"),
+                Order.customer["last_name"].astext.ilike(f"%{needle}%"),
             ]
             if digits:
                 # The stored phone may carry formatting too, so both sides are
@@ -111,9 +115,15 @@ def _summary(order: Order, item_count: int) -> dict[str, Any]:
         "status": order.status,
         # `customer` is a JSONB snapshot typed as dict[str, object], so every
         # value has to be narrowed before it can be joined or returned.
+        #
+        # Snake case, because that is what is in the column. The snapshot is
+        # written by `payload.customer.model_dump()`, which uses field names and
+        # not the camelCase aliases the API speaks in - so reading `firstName`
+        # here found nothing and every order in the list was called "—".
+        # Nothing failed; the shop simply could not see who had ordered.
         "customer_name": " ".join(
             str(part)
-            for part in (customer.get("firstName"), customer.get("lastName"))
+            for part in (customer.get("first_name"), customer.get("last_name"))
             if isinstance(part, str) and part
         )
         or "—",

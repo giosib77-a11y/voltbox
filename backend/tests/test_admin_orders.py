@@ -23,9 +23,14 @@ from tests.factories import auth_header, make_brand, make_category, make_product
 
 ADMIN = "/api/v1/admin"
 
+#: Snake case, because that is the shape the route stores. The customer snapshot
+#: is written by `payload.customer.model_dump()`, which uses field names rather
+#: than the camelCase aliases the API speaks in. Building it with camelCase here
+#: made the fixtures disagree with production, and hid a bug where every order
+#: in the admin list was called "—".
 CUSTOMER = {
-    "firstName": "გიორგი",
-    "lastName": "ბერიძე",
+    "first_name": "გიორგი",
+    "last_name": "ბერიძე",
     "phone": "555123456",
     "city": "თბილისი",
     "address": "ჭავჭავაძის გამზირი 42",
@@ -399,3 +404,76 @@ async def test_an_old_order_is_not_in_top_products(
     assert body["topProducts"] == []
     # It still counts towards all-time sales.
     assert Decimal(str(body["salesTotal"])) == order.total
+
+
+class TestTheSnapshotShapeIsTheOneTheRouteWrites:
+    """Orders placed through the API, read through the admin API.
+
+    Every other test here builds the customer snapshot by calling the service
+    directly, so the shape is whatever the fixture says. The route writes it
+    with `payload.customer.model_dump()`, which uses field names rather than
+    the camelCase aliases the API speaks in - and when the fixture disagreed,
+    the admin list showed every order as "—" and searching by name found
+    nothing, with every test still green.
+
+    These place the order the way a shopper does, so the shape under test is
+    the shape production stores.
+    """
+
+    @staticmethod
+    async def _place(client: httpx.AsyncClient, product: Product) -> str:
+        response = await client.post(
+            "/api/v1/orders",
+            json={
+                "items": [{"productId": str(product.id), "qty": 1}],
+                "customer": {
+                    "firstName": "ნინო",
+                    "lastName": "კაპანაძე",
+                    "phone": "555987654",
+                    "city": "ბათუმი",
+                    "address": "რუსთაველის გამზირი 10",
+                },
+                "paymentMethod": "cash",
+            },
+        )
+        assert response.status_code == 201, response.text
+        return str(response.json()["orderNumber"])
+
+    async def test_the_admin_list_shows_who_ordered(
+        self, client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+    ) -> None:
+        category = await make_category(db, slug="cat-shape")
+        brand = await make_brand(db, "Brand-shape")
+        product = await make_product(db, category, brand, slug="shape", stock=5)
+        number = await self._place(client, product)
+
+        listed = await client.get("/api/v1/admin/orders", headers=headers, params={"q": number})
+        row = listed.json()["items"][0]
+
+        assert row["customerName"] == "ნინო კაპანაძე", row["customerName"]
+
+    async def test_the_admin_can_search_by_the_name(
+        self, client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+    ) -> None:
+        category = await make_category(db, slug="cat-search")
+        brand = await make_brand(db, "Brand-search")
+        product = await make_product(db, category, brand, slug="search", stock=5)
+        await self._place(client, product)
+
+        found = await client.get("/api/v1/admin/orders", headers=headers, params={"q": "კაპანაძე"})
+
+        assert found.json()["total"] >= 1
+
+    async def test_the_stored_keys_are_the_ones_the_readers_use(
+        self, client: httpx.AsyncClient, db: AsyncSession
+    ) -> None:
+        """States the contract outright, so a change to either side is loud."""
+        category = await make_category(db, slug="cat-keys")
+        brand = await make_brand(db, "Brand-keys")
+        product = await make_product(db, category, brand, slug="keys", stock=5)
+        number = await self._place(client, product)
+
+        stored = await db.scalar(select(Order.customer).where(Order.order_number == number))
+
+        assert set(stored) >= {"first_name", "last_name", "phone", "city", "address"}
+        assert "firstName" not in stored
