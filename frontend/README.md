@@ -203,7 +203,7 @@ python scripts/seed.py           # იმავე 61 პროდუქტს �
 uvicorn app.main:app --reload    # → http://localhost:8000
 ```
 
-შემდეგ frontend-ის `.env`-ში:
+შემდეგ frontend-ის `.env`-ში (თუ ჯერ არ არსებობს: `cp .env.example .env`):
 
 ```dotenv
 VITE_API_MODE=http
@@ -226,7 +226,7 @@ index.html                       ← Vite-ის entry
 vite.config.js                   ← alias, dev/preview სერვერები, envDir
 tailwind.config.js               ← დიზაინ-ტოკენები
 postcss.config.js
-.env                             ← VITE_API_MODE (mock | http)
+.env                             ← VITE_API_MODE (mock | http)  [git-ში არაა]
 public/
 ├── favicon.svg
 └── images/

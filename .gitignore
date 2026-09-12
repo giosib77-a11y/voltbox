@@ -11,6 +11,9 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
+# ბილდის გადამრთველები საიდუმლო არაა, მაგრამ `.env` ისაა, სადაც საიდუმლო
+# ბუნებრივად ეწერება. ნიმუშისთვის: frontend/.env.example
+frontend/.env
 frontend/.env.local
 frontend/.env.*.local
 npm-debug.log*

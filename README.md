@@ -20,7 +20,7 @@ voltbox/
 │   ├── src/           components, pages, context, hooks, services, data, utils
 │   ├── public/        favicon + 183 დაგენერირებული SVG
 │   ├── scripts/       gen-images.mjs
-│   ├── .env           ← VITE_API_MODE (mock | http)   [კომიტდება]
+│   ├── .env           ← VITE_API_MODE (mock | http)   [კომიტდება არ უნდა]
 │   └── vite.config.js  package.json  tailwind.config.js  postcss.config.js
 │
 ├── backend/           FastAPI REST API
@@ -41,10 +41,22 @@ voltbox/
 
 | ფაილი | ვინ კითხულობს | Git-ში |
 |---|---|---|
-| `frontend/.env` | Vite (**ბილდის დროს**) | ✅ კომიტდება — საიდუმლო არაფერია |
+| `frontend/.env` | Vite (**ბილდის დროს**) | ❌ იგნორირებულია — იხ. ქვემოთ |
 | `backend/.env` | FastAPI (**გაშვების დროს**) | ❌ იგნორირებულია — შეიცავს ბაზის პაროლს და `JWT_SECRET`-ს |
 
-`backend/.env.example` და `frontend/.env.example` ნიმუშებია.
+`backend/.env.example` და `frontend/.env.example` ნიმუშებია — კლონირების
+შემდეგ ორივე უნდა გადაიწეროს `.env`-ად.
+
+`frontend/.env`-ში საიდუმლო არაფერია (Vite მხოლოდ `VITE_*`-ს ხსნის და ისიც
+ბანდლში ღიად ხვდება), მაგრამ git-ში მაინც არ დევს, ორი მიზეზით:
+
+1. **ბილდის კონფიგი დეპლოის დროს.** დაკომიტებული `VITE_API_BASE_URL=/api/v1`
+   იმას ნიშნავს, რომ frontend და backend ერთ origin-ზეა. თუ ისინი ცალკეა
+   გაშვებული, ბილდი ჩუმად არასწორი მისამართით აეწყობა — შეცდომის გარეშე.
+   CI და hosting გარემოს ცვლადს აყენებს, რომელიც ფაილს ჯაბნის; ლოკალური
+   ფაილი კი აღარ ერევა.
+2. **`.env` ისაა, სადაც საიდუმლო ბუნებრივად ეწერება.** დღეს ცარიელია — ხვალ
+   შემთხვევით არა.
 
 ---
 
