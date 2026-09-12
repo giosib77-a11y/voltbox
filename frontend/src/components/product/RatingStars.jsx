@@ -3,6 +3,15 @@ import { formatNumber, formatRating, formatReviews } from '../../utils/format.js
 
 /**
  * ვარსკვლავები ნახევრების მხარდაჭერით.
+ *
+ * A product nobody has reviewed renders nothing at all. Five empty stars and
+ * "(0)" is not the absence of a rating - it reads as a rating of zero, and
+ * every product the shop adds would launch looking badly reviewed. There is no
+ * reviews table yet, so this is the honest answer until there is one.
+ *
+ * `reviewsCount = null` still means "show the stars, no count" - for callers
+ * that have a rating from somewhere other than a review count.
+ *
  * @param {{ rating:number, reviewsCount?:number, size?:'sm'|'md'|'lg',
  *            showValue?:boolean, showReviewsLabel?:boolean }} props
  */
@@ -22,6 +31,10 @@ export default function RatingStars({
   className = '',
 }) {
   const dims = SIZES[size] || SIZES.sm;
+
+  // Nobody has rated this yet. Say nothing rather than something untrue.
+  if (reviewsCount === 0) return null;
+
   const clamped = Math.max(0, Math.min(5, Number(rating) || 0));
   const percent = (clamped / 5) * 100;
 

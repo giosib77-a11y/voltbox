@@ -491,8 +491,13 @@ export default function ProductForm() {
           {isEdit && product ? (
             <section className="rounded-xl border border-ink-200 bg-white p-4 text-sm text-ink-600">
               <h2 className="mb-2 text-sm font-semibold text-ink-900">ინფორმაცია</h2>
+              {/* No reviews table exists, so a count of zero means "nobody has
+                  rated this", not "rated zero". Saying so keeps the panel and
+                  the storefront telling the same story. */}
               <p>
-                რეიტინგი: {product.rating} ({product.reviewsCount})
+                {product.reviewsCount
+                  ? `რეიტინგი: ${product.rating} (${product.reviewsCount} შეფასება)`
+                  : 'შეფასება ჯერ არ არის — მაღაზიის გვერდზეც არ ჩანს'}
               </p>
               <p className="mt-1">მიმდინარე ფასი: {money(product.price)}</p>
             </section>
