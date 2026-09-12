@@ -108,6 +108,30 @@ def _check_the_rate_limit_counters_are_shared() -> None:
     )
 
 
+def _check_the_hosts_are_named() -> None:
+    """Refuse a deployment that answers to any Host it is given.
+
+    `TRUSTED_HOSTS` defaults to `*`, and app/main.py reads that as "skip the
+    middleware entirely" - so a deployed server answers a request claiming any
+    hostname at all.
+
+    Nothing in the application builds a URL from `Host` today, so this is a
+    door rather than a hole. It is worth closing anyway: the thing that makes
+    it a hole later is one line somewhere that does, and nobody writing that
+    line will think to come back here.
+    """
+    configured = os.environ.get("TRUSTED_HOSTS", "").strip()
+
+    if configured and configured != "*":
+        return
+
+    raise SystemExit(
+        "TRUSTED_HOSTS is not set to real hostnames, so the Host header is not "
+        "checked at all and the server answers to any name it is given. List "
+        "the domains this API is served on, comma separated."
+    )
+
+
 def _check_connection_budget() -> None:
     """Refuse a worker count whose connection pools cannot all fit.
 
@@ -163,5 +187,6 @@ def on_starting(server: object) -> None:
             "limit bucket. Set it to the proxy's address."
         )
 
+    _check_the_hosts_are_named()
     _check_the_rate_limit_counters_are_shared()
     _check_connection_budget()

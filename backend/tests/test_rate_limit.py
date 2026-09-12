@@ -186,6 +186,7 @@ def test_a_named_proxy_starts_normally(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.0.2")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("TRUSTED_HOSTS", "voltbox.ge")
     conf = load_gunicorn_conf()
 
     conf.on_starting(None)
@@ -219,6 +220,7 @@ def _conf_with(monkeypatch: pytest.MonkeyPatch, **env: str) -> ModuleType:
     # Otherwise the shared-counter check below fires first and every test in
     # this section fails for a reason it is not about.
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("TRUSTED_HOSTS", "voltbox.ge")
     for key in ("WEB_CONCURRENCY", "DB_POOL_SIZE", "DB_MAX_OVERFLOW", "DB_CONNECTION_BUDGET"):
         monkeypatch.delenv(key, raising=False)
     for key, value in env.items():
@@ -317,6 +319,7 @@ def test_a_named_deployment_passes(monkeypatch: pytest.MonkeyPatch, app_env: str
     monkeypatch.setenv("APP_ENV", app_env)
     monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.0.2")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("TRUSTED_HOSTS", "voltbox.ge")
     conf = load_gunicorn_conf()
 
     conf.on_starting(None)
@@ -359,3 +362,42 @@ def test_a_blank_redis_url_does_not_count_as_configured(
 
     with pytest.raises(SystemExit, match="no REDIS_URL"):
         conf.on_starting(None)
+
+
+# ── naming the hosts ─────────────────────────────────────────────────────────
+#
+# `TRUSTED_HOSTS` defaults to `*`, which app/main.py reads as "skip the
+# middleware entirely": a deployed server then answers a request claiming any
+# hostname. Nothing builds a URL from `Host` today, so this is a door rather
+# than a hole - and the line that turns it into one will be written by someone
+# who does not know this check exists.
+
+
+@pytest.mark.parametrize("value", [None, "", "*", "   "])
+def test_a_deployment_that_answers_to_any_host_is_refused(
+    monkeypatch: pytest.MonkeyPatch, value: str | None
+) -> None:
+    conf = _conf_with(monkeypatch)
+    if value is None:
+        monkeypatch.delenv("TRUSTED_HOSTS", raising=False)
+    else:
+        monkeypatch.setenv("TRUSTED_HOSTS", value)
+
+    with pytest.raises(SystemExit, match="TRUSTED_HOSTS"):
+        conf.on_starting(None)
+
+
+def test_named_hosts_start_normally(monkeypatch: pytest.MonkeyPatch) -> None:
+    conf = _conf_with(monkeypatch, TRUSTED_HOSTS="voltbox.ge,www.voltbox.ge")
+
+    conf.on_starting(None)
+
+
+def test_a_local_run_is_not_asked_for_hostnames(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nothing is served to the internet, so there is no name to insist on."""
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("ALLOW_NON_PRODUCTION_SERVER", "1")
+    monkeypatch.delenv("TRUSTED_HOSTS", raising=False)
+    conf = load_gunicorn_conf()
+
+    conf.on_starting(None)
