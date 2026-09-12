@@ -348,3 +348,30 @@ class TestStorageSelection:
 
         with pytest.raises(RuntimeError, match="Object storage is not configured"):
             get_storage()
+
+    def test_a_test_run_never_reaches_the_real_bucket(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Credentials come from `.env`, which points at the live project.
+
+        Anything that uploads without overriding this dependency - a script, a
+        new test that forgets the fixture - writes into production storage while
+        its database is local. The files are orphaned as they are written: no
+        row refers to them, nothing collects them, and afterwards they look like
+        real ones.
+        """
+        monkeypatch.setattr(settings, "supabase_project_ref", "a-real-project", raising=False)
+        monkeypatch.setattr(settings, "supabase_service_role_key", "a-real-key", raising=False)
+        monkeypatch.setattr(settings, "app_env", "test", raising=False)
+
+        assert isinstance(get_storage(), InMemoryStorage)
+
+    def test_development_still_uses_the_configured_bucket(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Uploading real product images locally is the point of configuring it."""
+        monkeypatch.setattr(settings, "supabase_project_ref", "a-real-project", raising=False)
+        monkeypatch.setattr(settings, "supabase_service_role_key", "a-real-key", raising=False)
+        monkeypatch.setattr(settings, "app_env", "development", raising=False)
+
+        assert isinstance(get_storage(), SupabaseStorage)

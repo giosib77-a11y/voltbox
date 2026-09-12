@@ -156,7 +156,18 @@ def get_storage() -> StorageBackend:
     point at `storage.test` (a reserved name that resolves nowhere), and the
     order items that snapshot that URL keep it forever. Nothing raises, so the
     panel reports success and the breakage only shows on the storefront.
+
+    A test run never gets the real bucket, whatever the environment holds. The
+    credentials are read from `.env`, and a developer's `.env` points at the
+    live project - so anything that uploads without overriding this dependency
+    writes into production storage while pointed at a local database. Those
+    files are orphaned the moment they are written: no row here refers to them,
+    nothing cleans them up, and they are indistinguishable from real ones
+    afterwards except by size.
     """
+    if settings.app_env == "test":
+        return InMemoryStorage()
+
     if settings.supabase_project_ref and settings.supabase_service_role_key:
         return SupabaseStorage(
             settings.supabase_project_ref,
