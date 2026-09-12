@@ -235,7 +235,22 @@ export function CartProvider({ children }) {
     dispatch({ type: ACTIONS.SET_QTY, payload: { productId, qty } });
   }, []);
 
-  const clear = useCallback(() => dispatch({ type: ACTIONS.CLEAR }), []);
+  /**
+   * Empty the cart, and tell the account at once rather than on the debounce.
+   *
+   * This is called after an order is placed and when somebody empties the cart
+   * by hand, and both are followed by leaving. Waiting out the debounce means a
+   * tab closed a moment later leaves the account holding items that were just
+   * bought - visible on their phone as though the order never happened.
+   */
+  const clear = useCallback(() => {
+    dispatch({ type: ACTIONS.CLEAR });
+    if (savingRef.current) {
+      api.clearCart().catch(() => {
+        /* the debounced save below still gets a chance */
+      });
+    }
+  }, []);
 
   /** წაშლილი ჩანაწერის აღდგენა — „დაბრუნება“ toast-ისთვის. */
   const restoreItem = useCallback((item) => {

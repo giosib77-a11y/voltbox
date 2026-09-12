@@ -147,3 +147,56 @@ describe('CartAccountSync', () => {
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('0'));
   });
 });
+
+describe('emptying the cart', () => {
+  function ClearHarness() {
+    const { addItem, clear, items } = useCart();
+    return (
+      <>
+        <button type="button" onClick={() => addItem(PRODUCT, 1)}>
+          add
+        </button>
+        <button type="button" onClick={clear}>
+          clear
+        </button>
+        <span data-testid="count">{items.length}</span>
+      </>
+    );
+  }
+
+  const renderClear = () =>
+    render(
+      <CartProvider>
+        <CartAccountSync />
+        <ClearHarness />
+      </CartProvider>,
+    );
+
+  it('tells the account at once rather than waiting for the debounce', async () => {
+    // Placing an order and emptying by hand are both followed by leaving. A tab
+    // closed a moment later would otherwise leave the account holding items
+    // that were just bought.
+    authValue = { user: { id: 'u1' }, initializing: false };
+    renderClear();
+    await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
+
+    screen.getByText('add').click();
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
+
+    screen.getByText('clear').click();
+
+    await waitFor(() => expect(api.clearCart).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not call the API for a guest', async () => {
+    authValue = { user: null, initializing: false };
+    renderClear();
+
+    screen.getByText('add').click();
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
+    screen.getByText('clear').click();
+
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('0'));
+    expect(api.clearCart).not.toHaveBeenCalled();
+  });
+});
