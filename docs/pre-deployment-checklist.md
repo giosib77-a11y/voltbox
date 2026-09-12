@@ -58,14 +58,14 @@ token families          → როტაცია ოჯახს ინარ�
 
 ---
 
-## 1. Database / Supabase — 🟡 თითქმის დახურული (2026-09-12)
+## 1. Database / Supabase — ✅ დახურულია (2026-09-12)
 
 - [x] Production database სწორად შექმნილია — PostgreSQL 17.6, eu-central-1
-- [ ] ყველა migration სწორად გაშვებულია — **`0006` Supabase-ზე ჯერ არ გაშვებულა**
-- [x] database schema სრულად განახლებულია — `alembic check` სუფთა (`0005`-ზე)
+- [x] ყველა migration სწორად გაშვებულია — Supabase `0006`, `alembic check` სუფთა
+- [x] database schema სრულად განახლებულია — `alembic check` სუფთა
 - [x] ყველა foreign key შემოწმებულია — 15, ყველა მოდელს ემთხვევა
 - [x] ყველა საჭირო unique constraint შემოწმებულია — 9
-- [x] ყველა საჭირო index შემოწმებულია — 44 (+1 დაემატა)
+- [x] ყველა საჭირო index შემოწმებულია — 45 (`ix_order_items_product_id` დაემატა)
 - [x] Product მონაცემები სწორად ინახება — `Numeric(12,2)`, 4 CHECK
 - [x] Category მონაცემები სწორად ინახება — self-FK SET NULL, unique slug
 - [x] User მონაცემები სწორად ინახება — `citext` email, unique
@@ -75,7 +75,7 @@ token families          → როტაცია ოჯახს ინარ�
 - [x] concurrent order / stock შემცირება ტესტირებულია — 8 ტესტი რეალურ Postgres-ზე
 - [x] transaction boundaries შემოწმებულია — თითო მოთხოვნა ერთი სესია, შეცდომაზე rollback
 - [x] connection/pool configuration შემოწმებულია — გასწორდა, იხ. ქვემოთ
-- [ ] production backup ჩართულია — **Dashboard-ში შენ უნდა შეამოწმო**
+- [ ] production backup ჩართულია — 🔴 **Free Plan-ს backup არ აქვს.** გადაწყვეტილება გაშვებამდე → §21
 - [x] backup restore პროცედურაც ტესტირებულია — `docs/backup-restore.md`, 0 შეუსაბამობა
 
 ### რა გასწორდა
@@ -89,6 +89,10 @@ token families          → როტაცია ოჯახს ინარ�
 ### გადამოწმების მტკიცებულება
 
 ```
+Supabase 0006-ის შემდეგ:
+  Seq Scan  →  Index Only Scan using ix_order_items_product_id
+  alembic check: No new upgrade operations detected
+
 restore სუფთა PG17-ში, შედარება ცოცხალთან:
   tables 13/13 · columns 129/129 · indexes 44/44
   fkeys 15/15 · checks 12/12 · uniques 9/9 · alembic 0005/0005
@@ -105,7 +109,7 @@ restore სუფთა PG17-ში, შედარება ცოცხალ
 |---|---|
 | **Cart ბაზაში არ ინახება** — მხოლოდ ბრაუზერშია. მოწყობილობებს შორის არ სინქრონდება | §8 Cart |
 | ლოკალური Postgres **16**, production **17.6** — production-ის backup ლოკალურად ვერ აღდგება; პროცედურა `docs/backup-restore.md` §3-შია | §19 Testing / CI |
-| Supabase-ის backup retention — გეგმაზეა დამოკიდებული | §21 Backup / Recovery |
+| 🔴 **ავტომატური backup არ არსებობს** — Free Plan-ს არც scheduled, არც PITR. ვარიანტები `docs/backup-restore.md`-ში | §21 Backup / Recovery |
 
 ---
 
