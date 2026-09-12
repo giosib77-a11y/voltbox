@@ -14,7 +14,7 @@ import { TEXT } from '../../constants/index.js';
  * პროდუქტის ბარათი.
  * მთელი ბარათი ბმულია; „კალათაში დამატება“ ბმულს არ ააქტიურებს.
  */
-function ProductCard({ product, className = '' }) {
+function ProductCard({ product, className = '', priority = false }) {
   const { addItem, quantities } = useCart();
   const toast = useToast();
   const navigate = useNavigate();
@@ -48,6 +48,7 @@ function ProductCard({ product, className = '' }) {
             alt={product.name}
             className="aspect-square w-full"
             imgClassName="transition-transform duration-300 group-hover:scale-[1.04]"
+            loading={priority ? 'eager' : 'lazy'}
             sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
           />
 

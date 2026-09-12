@@ -103,3 +103,39 @@ describe('ProductCarousel', () => {
     expect(screen.getByText('ახალი ჩამოსული')).toBeInTheDocument();
   });
 });
+
+const renderGrid = (products) =>
+  render(
+    <ToastProvider>
+      <CartProvider>
+        <MemoryRouter>
+          <ProductGrid products={products} />
+        </MemoryRouter>
+      </CartProvider>
+    </ToastProvider>,
+  );
+
+describe('what loads first', () => {
+  it('does not make the top of the page wait for a lazy image', async () => {
+    // Every image on the site was lazy, the one at the top of the home page
+    // included. A lazy image starts downloading only after layout, so the
+    // largest thing on the first screen waited for a round trip it did not
+    // need to.
+    renderGrid([...Array(8)].map((_, i) => ({ ...PRODUCT, id: `p${i}` })));
+
+    const images = screen.getAllByRole('img');
+    expect(images.slice(0, 4).map((img) => img.getAttribute('loading'))).toEqual([
+      'eager',
+      'eager',
+      'eager',
+      'eager',
+    ]);
+  });
+
+  it('leaves everything below the fold lazy', async () => {
+    renderGrid([...Array(8)].map((_, i) => ({ ...PRODUCT, id: `p${i}` })));
+
+    const images = screen.getAllByRole('img');
+    expect(images.slice(4).every((img) => img.getAttribute('loading') === 'lazy')).toBe(true);
+  });
+});
