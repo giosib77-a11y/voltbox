@@ -75,3 +75,52 @@ describe('the tab case, spelled out', () => {
     expect(getSafeRedirect(attack)).toBe('/');
   });
 });
+
+/**
+ * GHSA-wrjc-x8rr-h8h6 - react-router reads some backslash forms as a
+ * protocol-relative URL inside `<Link>` and `useNavigate`, turning a value that
+ * looks like a path into a navigation off the site. Versions 6.0.0 through
+ * 7.17.0 are affected; this project is on 6.30.x and the only published fix is
+ * the 7.x major.
+ *
+ * Nothing reaches `navigate()` from a query string without passing through
+ * `getSafeRedirect` first - Login, Register and the admin login all call it -
+ * and it returns a resolved `pathname + search + hash`, so none of the shapes
+ * the advisory relies on survive it.
+ *
+ * That is what makes deferring the major upgrade a decision rather than a hope:
+ * weaken the function and these fail.
+ */
+const BACKSLASH = String.fromCharCode(92);
+
+describe('the backslash open redirect, specifically', () => {
+  const PAYLOADS = [
+    `/${BACKSLASH}evil.com`,
+    `${BACKSLASH}/evil.com`,
+    `${BACKSLASH}${BACKSLASH}evil.com`,
+    `${BACKSLASH}evil.com`,
+    `/${BACKSLASH}/evil.com`,
+    `/${BACKSLASH}${BACKSLASH}evil.com`,
+    '//evil.com',
+    `/..${BACKSLASH}evil.com`,
+    'https://evil.com',
+    // Percent-encoded: the URL parser decodes it, so the check has to hold
+    // after resolution and not only on the raw string.
+    '/%5Cevil.com',
+  ];
+
+  it.each(PAYLOADS)('%j never becomes an off-site navigation', (payload) => {
+    const result = getSafeRedirect(payload);
+    const origin = globalThis.location.origin;
+
+    // The property that matters is where it lands, not what it spells. Two of
+    // these resolve to a path on this site that happens to be *named*
+    // `evil.com` (`/..\evil.com` normalises to `/evil.com`), which is a page
+    // that does not exist here - not a navigation to another origin.
+    expect(new URL(result, origin).origin).toBe(origin);
+
+    expect(result.startsWith('/')).toBe(true);
+    expect(result.startsWith('//')).toBe(false);
+    expect(result).not.toContain(BACKSLASH);
+  });
+});
