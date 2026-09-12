@@ -65,7 +65,15 @@ export default function AdminLogin() {
         clearSession();
         setError('ამ ანგარიშს ადმინისტრატორის უფლებები არ აქვს.');
       } else if (caught?.status === 401) {
-        setError('ელ. ფოსტა ან პაროლი არასწორია.');
+        // A lockout after too many attempts is also a 401, and its message is
+        // the one that says how long to wait. Flattening every 401 into "wrong
+        // password" leaves somebody locked out retyping a password that is
+        // correct, with nothing on screen explaining the refusal.
+        setError(
+          caught?.details?.code === 'INVALID_CREDENTIALS' || !caught?.message
+            ? 'ელ. ფოსტა ან პაროლი არასწორია.'
+            : caught.message,
+        );
       } else {
         setError(caught?.message || 'შესვლა ვერ მოხერხდა. სცადეთ ხელახლა.');
       }
