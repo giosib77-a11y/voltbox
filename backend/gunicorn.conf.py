@@ -35,6 +35,43 @@ LOOPBACK_ONLY = "127.0.0.1"
 
 PRODUCTION_ENVS = {"production", "staging"}
 
+#: How many server connections this deployment may occupy in total. Supabase's
+#: smaller instances allow 60, of which three are reserved for superusers and
+#: roughly twenty are already held by Supabase's own services (PostgREST,
+#: Realtime, Storage, GoTrue). The remainder is what is actually ours, and the
+#: default leaves room for a migration and a psql session on top.
+DEFAULT_CONNECTION_BUDGET = 30
+
+#: Must match the defaults in app/core/config.py. Read from the environment
+#: rather than imported, because this file runs before the application does.
+DEFAULT_POOL_SIZE = 5
+DEFAULT_MAX_OVERFLOW = 10
+
+
+def _check_connection_budget() -> None:
+    """Refuse a worker count whose connection pools cannot all fit.
+
+    Each worker owns a separate pool, so the ceiling is multiplied by the worker
+    count - and raising WEB_CONCURRENCY is the first thing anyone does to a slow
+    site. Past the limit Postgres refuses new connections, which surfaces as
+    intermittent 500s under load rather than as anything pointing at the pool.
+    """
+    pool = int(os.environ.get("DB_POOL_SIZE", DEFAULT_POOL_SIZE))
+    overflow = int(os.environ.get("DB_MAX_OVERFLOW", DEFAULT_MAX_OVERFLOW))
+    budget = int(os.environ.get("DB_CONNECTION_BUDGET", DEFAULT_CONNECTION_BUDGET))
+
+    if budget <= 0:  # an explicit opt-out, for a database that is not shared
+        return
+
+    ceiling = workers * (pool + overflow)
+    if ceiling > budget:
+        raise SystemExit(
+            f"{workers} workers x (DB_POOL_SIZE {pool} + DB_MAX_OVERFLOW {overflow}) "
+            f"= {ceiling} database connections, over the budget of {budget}. "
+            "Lower WEB_CONCURRENCY or the pool settings, or raise "
+            "DB_CONNECTION_BUDGET if the database really has room."
+        )
+
 
 def on_starting(server: object) -> None:
     """Refuse to start a production server that would mis-attribute every IP.
@@ -63,3 +100,5 @@ def on_starting(server: object) -> None:
             "attributed to the proxy and the whole site would share one rate "
             "limit bucket. Set it to the proxy's address."
         )
+
+    _check_connection_budget()

@@ -197,3 +197,69 @@ def test_local_development_needs_no_proxy(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.delenv("FORWARDED_ALLOW_IPS", raising=False)
 
     conf.on_starting(None)
+
+
+# ── connection budget ────────────────────────────────────────────────────────
+#
+# Each worker owns its own pool, so the number of database connections a
+# deployment holds is `workers x (pool_size + max_overflow)`. Past what the
+# server allows, Postgres refuses new connections: the site returns intermittent
+# 500s under load, and nothing in the error points at the pool.
+
+
+def _conf_with(monkeypatch: pytest.MonkeyPatch, **env: str) -> ModuleType:
+    """`workers` is read at import, so the environment is set before loading."""
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.0.2")
+    for key in ("WEB_CONCURRENCY", "DB_POOL_SIZE", "DB_MAX_OVERFLOW", "DB_CONNECTION_BUDGET"):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    return load_gunicorn_conf()
+
+
+def test_the_shipped_defaults_fit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two workers x 15 connections is exactly the budget, and must not trip."""
+    _conf_with(monkeypatch).on_starting(None)
+
+
+def test_more_workers_than_the_database_allows_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Raising WEB_CONCURRENCY is the first thing anyone does to a slow site."""
+    conf = _conf_with(monkeypatch, WEB_CONCURRENCY="4")
+
+    with pytest.raises(SystemExit, match="60 database connections"):
+        conf.on_starting(None)
+
+
+def test_a_smaller_pool_lets_the_same_worker_count_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fix the message suggests has to actually work."""
+    conf = _conf_with(monkeypatch, WEB_CONCURRENCY="4", DB_POOL_SIZE="3", DB_MAX_OVERFLOW="4")
+
+    conf.on_starting(None)
+
+
+def test_the_budget_can_be_raised_for_a_bigger_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conf = _conf_with(monkeypatch, WEB_CONCURRENCY="4", DB_CONNECTION_BUDGET="100")
+
+    conf.on_starting(None)
+
+
+def test_zero_opts_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A database nobody else shares does not need this arithmetic."""
+    conf = _conf_with(monkeypatch, WEB_CONCURRENCY="16", DB_CONNECTION_BUDGET="0")
+
+    conf.on_starting(None)
+
+
+def test_development_is_left_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The check belongs to deployments; locally gunicorn is not what runs."""
+    conf = _conf_with(monkeypatch, WEB_CONCURRENCY="16")
+    monkeypatch.setenv("APP_ENV", "development")
+
+    conf.on_starting(None)
