@@ -493,13 +493,68 @@ search e2e: 22/23 გაიარა (ერთი ჩავარდნა ჩ�
 
 ---
 
-## 9–25 — ⬜ ჯერ არ დაწყებულა
+## 9. Checkout — ✅ დახურულია (2026-09-12)
 
-`9. Checkout` · `10. Orders` · `11. Admin Panel` ·
-`12. Order Status / Business Flow` · `13. Error Handling` · `14. Performance` ·
-`15. SEO` · `16. Accessibility` · `17. Responsive / Browser` · `18. Full E2E` ·
-`19. Testing / CI` · `20. Logging / Monitoring` · `21. Backup / Recovery` ·
-`22. Payment` · `23. Analytics` · `24. Domain / Deployment` · `25. Final Launch`
+- [x] guest checkout მუშაობს — 201, შეკვეთის ნომრით
+- [x] registered user checkout მუშაობს — იმავე გზით, `user_id`-ით
+- [x] customer name validation — მინ. 2 სიმბოლო, ორივე ველზე
+- [x] phone validation — `^5\d{8}$`, ქართული მობილური
+- [x] city validation — მინ. 2
+- [x] address validation — მინ. 5
+- [x] comment field მუშაობს — ინახება, მაქს. 1000
+- [x] payment method მუშაობს — **გასწორდა**, იხ. ქვემოთ
+- [x] delivery information სწორად ინახება — jsonb snapshot-ად
+- [x] invalid form submit არ ხდება — 10 შემთხვევა, ყველა 400
+- [x] server-side validation არსებობს — `extra="forbid"` + Field-ები
+- [x] **frontend price-ს backend არ ენდობა** — `price` ხაზში → 400
+- [x] **backend ხელახლა ითვლის total-ს** — 80.00 + 5.00 = 85.00, სერვერზე
+- [x] მიმდინარე ფასი გამოიყენება — snapshot შეკვეთის მომენტისაა
+- [x] stock checkout-ზე ხელახლა მოწმდება — 409 + `available`
+- [x] stock race condition ტესტირებულია — 8 concurrency ტესტი რეალურ Postgres-ზე
+- [x] duplicate checkout protection — `Idempotency-Key`, უნიკალური ინდექსი
+- [x] Idempotency-Key flow ტესტირებულია — გამეორება იმავე შეკვეთას აბრუნებს
+- [x] failed checkout სწორად მუშავდება — rollback, მარაგი არ იხარჯება
+- [x] successful checkout სრულდება — ledger-ის ჩანაწერით
+
+### რა გასწორდა
+
+| # | პრობლემა | გასწორება |
+|---|---|---|
+| 🟡 | **`payment_method` არსად არ მოწმდებოდა.** ნებისმიერი 32-სიმბოლოიანი სტრიქონი მიდიოდა request-იდან ადმინ პანელამდე. `paymentMethod: "already paid"` → **201** | `Literal` სქემაში + CHECK constraint (მიგრაცია `0010`) |
+| 🟢 | `clear()` 800ms-ს ელოდებოდა — ტაბის დახურვისას ანგარიშზე ნაყიდი ნივთები რჩებოდა | მყისიერი `clearCart()` |
+
+⚠️ პირველი **ჩემი კალათის ფუნქციამ** გააჩინა — მანამდე მიუწვდომელი იყო.
+
+`payment_method`-ზე: ფულს არაფერი ამოძრავებს (ონლაინ გადახდა არ არსებობს), მაგრამ
+შეკვეთების სიაში „already paid" კურიერს საქონლის უფასოდ გაცემას ნიშნავს.
+`status`-ს enum პირველი მიგრაციიდან აქვს — ესეც იგივეა, მეორე ველზე, რომელზეც
+ოპერატორი მოქმედებს.
+
+### გადამოწმების მტკიცებულება
+
+```
+checkout e2e სუფთა ბაზაზე:  31/31
+
+subtotal 80.00 · shipping 5.00 · total 85.00   ← სერვერზე
+200.00 → უფასო მიწოდება
+ხაზში price → 400 · totals სხეულში → 400
+10 არასწორი ფორმა → ყველა 400
+99 ცალი 3-ზე → 409 {"available": 2}
+იგივე Idempotency-Key → იგივე შეკვეთა, მარაგი ერთხელ
+არა-uuid key → 400 · ledger: ყოველ შეკვეთაზე ჩანაწერი
+```
+
+15 ახალი ტესტი, დამტკიცებული ბაგის დაბრუნებით (6 ჩავარდა, 2 frontend-ზე).
+
+---
+
+## 10–25 — ⬜ ჯერ არ დაწყებულა
+
+`10. Orders` · `11. Admin Panel` · `12. Order Status / Business Flow` ·
+`13. Error Handling` · `14. Performance` · `15. SEO` · `16. Accessibility` ·
+`17. Responsive / Browser` · `18. Full E2E` · `19. Testing / CI` ·
+`20. Logging / Monitoring` · `21. Backup / Recovery` · `22. Payment` ·
+`23. Analytics` · `24. Domain / Deployment` · `25. Final Launch`
 
 პუნქტები სრული სახით — `voltbox_pre_deployment_checklist.md` (საწყისი დოკუმენტი).
 
