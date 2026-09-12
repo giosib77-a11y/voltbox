@@ -233,25 +233,70 @@ admin routes: 33 ოპერაცია
 
 ---
 
-## 4. Security Audit — ⬜
+## 4. Security Audit — 🟡 თითქმის დახურული (2026-09-12)
 
-- [ ] HTTPS გამოყენებისთვის მზადაა
-- [ ] CORS production configuration სწორია — *(§0: default localhost, დაცვის გარეშე)*
-- [ ] rate limiting ჩართულია — *(§0: `REDIS_URL` ცარიელია → per-worker მთვლელები)*
-- [ ] forwarded IP / proxy configuration სწორია — *(`gunicorn.conf.py` production-ში ამოწმებს)*
-- [ ] brute-force protection შემოწმებულია
-- [ ] input validation ყველა endpoint-ზე მუშაობს
-- [ ] SQL injection-ის რისკი შემოწმებულია
-- [ ] XSS-ის რისკი შემოწმებულია
-- [ ] CSRF-ის საჭიროება/დაცვა შემოწმებულია
-- [ ] sensitive data response-ში არ ხვდება
-- [ ] stack trace production response-ში არ ხვდება — *(§0-ში დადასტურდა)*
-- [ ] debug mode გამორთულია
-- [ ] admin endpoints დაცულია
-- [ ] security headers განახლებულია
-- [ ] dependency security audit შესრულებულია
-- [ ] მოძველებული / vulnerable dependency-ები განახლებულია
-- [ ] secrets rotation საჭიროებაზე შემოწმებულია
+- [ ] HTTPS გამოყენებისთვის მზადაა — HSTS იგზავნება დეპლოიზე; TLS თვითონ hosting-ს ეკუთვნის → §24
+- [ ] CORS production configuration სწორია — კოდი სწორია, **მნიშვნელობა დეპლოიზე** → §24
+- [x] rate limiting ჩართულია — 5/წთ ავტორიზაციაზე, 10/წთ lookup-ზე, 60/წთ ნაგულისხმევი; გასწორდა
+- [x] forwarded IP / proxy configuration სწორია — `X-Forwarded-For` მხოლოდ დასახელებულ proxy-ს სჯერა
+- [x] brute-force protection შემოწმებულია — იხ. შეზღუდვა ქვემოთ
+- [x] input validation ყველა endpoint-ზე მუშაობს — `extra="forbid"` ყველა მოთხოვნაზე
+- [x] SQL injection-ის რისკი შემოწმებულია — **სტრიქონით აწყობილი SQL არსად არაა**
+- [x] XSS-ის რისკი შემოწმებულია — `dangerouslySetInnerHTML`/`innerHTML`/`eval` საერთოდ არ არსებობს
+- [x] CSRF-ის საჭიროება/დაცვა შემოწმებულია — Bearer + `SameSite=strict` ერთადერთ cookie-ზე
+- [x] sensitive data response-ში არ ხვდება — OpenAPI-ს სქემა შემოწმებულია
+- [x] stack trace production response-ში არ ხვდება — §0
+- [x] debug mode გამორთულია — `debug=True` არსად; `DB_ECHO` დოკუმენტირებულია
+- [x] admin endpoints დაცულია — §3, 33 ოპერაცია × 3
+- [x] security headers განახლებულია — **დაემატა**
+- [x] dependency security audit შესრულებულია — `docs/dependency-audit.md`
+- [x] მოძველებული / vulnerable dependency-ები შეფასებულია — 8-დან 7 dev-ია
+- [ ] secrets rotation — ჯერ არ დამდგარა (გასაღებები არ გაჟონილა) → გაშვებამდე
+
+### რა გასწორდა
+
+| # | პრობლემა | გასწორება |
+|---|---|---|
+| 🟡 | **ვერცერთი security header არ იგზავნებოდა** | `SecurityHeadersMiddleware` — nosniff, frame-ancestors, no-referrer, CSP; HSTS მხოლოდ დეპლოიზე |
+| 🟡 | `REDIS_URL`-ის გარეშე ორი worker **ყოველ ლიმიტს აორმაგებდა** — მათ შორის შესვლისას. მხოლოდ გაფრთხილება იყო | `gunicorn.conf.py` ჩერდება; ერთი worker ხელუხლებელია |
+| 🟢 | react-router-ის open redirect advisory შეფასებული არ იყო | 10 payload-იანი ტესტი + `docs/dependency-audit.md` |
+
+### რა იყო უკვე ძლიერი
+
+| | |
+|---|---|
+| **SQL injection** | სტრიქონით აწყობილი SQL **არსად არაა** — ყველა `text()` სტატიკური ლიტერალია |
+| **XSS** | `dangerouslySetInnerHTML`, `innerHTML`, `eval` — არცერთი არ არსებობს |
+| **ფასის გაყალბება** | `extra="forbid"` — კლიენტის გამოგზავნილი `price` 400-ს იწვევს, არა ჩუმ იგნორს |
+| **CSRF** | ყველაფერი Bearer-ზეა; ერთადერთი cookie `SameSite=strict` — ჯვარედინი მოთხოვნა მას საერთოდ არ ატარებს |
+| **ლოგები** | სხეული არასოდეს იწერება; `/auth`-ზე query-ც არა |
+
+### გადამოწმების მტკიცებულება
+
+```
+ცოცხალი პროცესი:
+  x-content-type-options: nosniff
+  x-frame-options: DENY
+  referrer-policy: no-referrer
+  content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'
+  401-ზეც იგზავნება
+
+Set-Cookie: voltbox_refresh=…; HttpOnly; Max-Age=2592000; Path=/api/v1/auth; SameSite=strict
+
+pip-audit  →  No known vulnerabilities found
+npm audit  →  8, აქედან 7 dev-only; მე-8 ნეიტრალიზებულია getSafeRedirect-ით
+```
+
+21 ახალი ტესტი დამტკიცდა დაცვების დროებითი მოხსნით — 12 ჩავარდა.
+
+### რაც განზრახ არ გაკეთდა
+
+| რა | რატომ |
+|---|---|
+| `TRUSTED_HOSTS`-ზე დაცვა | **არცერთი კოდი არ იყენებს `Host`-ს** — არაფრისგან დაცვა იქნებოდა. მნიშვნელობა დოკუმენტირებულია და დეპლოიზე უნდა დაყენდეს |
+| access token-ის გაუქმება | მოპარული ტოკენი 30 წუთს მუშაობს. `jti` უკვე იწერება, ანუ deny-list მოგვიანებით დაემატება → ROADMAP §20 |
+| ანგარიშზე lockout | rate limit მხოლოდ IP-ზეა, ბოტნეტი გვერდს უვლის. lockout კი საკუთარ DoS-ს ქმნის (მოწინააღმდეგეს შეუძლია ანგარიში განგებ ჩაკეტოს) |
+| `vite`/`vitest` major | dev-only ხარვეზები; ცალკე სამუშაოა → ROADMAP §18 |
 
 ---
 
