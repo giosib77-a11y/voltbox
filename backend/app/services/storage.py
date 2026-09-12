@@ -142,11 +142,20 @@ class SupabaseStorage:
             await client.delete(f"{self.base}/object/{self.bucket}/{key}", headers=self.headers)
 
 
+#: Where the in-memory fake is an acceptable stand-in. Anywhere else, an
+#: unconfigured bucket is a misconfiguration rather than a mode to run in.
+LOCAL_ENVS = {"development", "test"}
+
+
 def get_storage() -> StorageBackend:
-    """The configured backend, or the in-memory one when Supabase is not set up.
+    """The configured backend; the in-memory one only outside a deployment.
 
     Falling back rather than failing keeps the whole feature testable and lets
-    the panel run locally before any bucket exists.
+    the panel run locally before any bucket exists. It must not survive into a
+    deployment: uploads would land in one worker's memory, the saved URL would
+    point at `storage.test` (a reserved name that resolves nowhere), and the
+    order items that snapshot that URL keep it forever. Nothing raises, so the
+    panel reports success and the breakage only shows on the storefront.
     """
     if settings.supabase_project_ref and settings.supabase_service_role_key:
         return SupabaseStorage(
@@ -154,4 +163,12 @@ def get_storage() -> StorageBackend:
             settings.supabase_service_role_key,
             settings.supabase_storage_bucket,
         )
+
+    if settings.app_env not in LOCAL_ENVS:
+        raise RuntimeError(
+            f"Object storage is not configured and APP_ENV is {settings.app_env!r}. "
+            "Set SUPABASE_PROJECT_REF and SUPABASE_SERVICE_ROLE_KEY; without them "
+            "uploaded images would be written to process memory and lost."
+        )
+
     return InMemoryStorage()

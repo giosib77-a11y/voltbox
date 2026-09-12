@@ -14,9 +14,10 @@ import uuid
 
 import httpx
 import pytest
+from app.core.config import settings
 from app.db.models import ROLE_ADMIN, OrderItem, ProductImage
 from app.main import app
-from app.services.storage import InMemoryStorage, get_storage
+from app.services.storage import InMemoryStorage, SupabaseStorage, get_storage
 from PIL import Image
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -302,3 +303,48 @@ async def test_deleting_a_product_takes_its_stored_objects_with_it(
 
     assert response.status_code == 204
     assert storage.objects == {}
+
+
+class TestStorageSelection:
+    """`get_storage` must not hand a deployment the in-memory fake.
+
+    The fake keeps objects in one worker's dict and hands back a
+    `https://storage.test/...` URL. Nothing raises, so an admin upload reports
+    success while the file is unreachable from the other worker, gone on the
+    next restart, and frozen into any order item that snapshots the URL.
+    """
+
+    def test_uses_supabase_when_it_is_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "supabase_project_ref", "somewhere", raising=False)
+        monkeypatch.setattr(settings, "supabase_service_role_key", "a-key", raising=False)
+        monkeypatch.setattr(settings, "app_env", "production", raising=False)
+
+        assert isinstance(get_storage(), SupabaseStorage)
+
+    @pytest.mark.parametrize("env", ["development", "test"])
+    def test_falls_back_locally(self, monkeypatch: pytest.MonkeyPatch, env: str) -> None:
+        monkeypatch.setattr(settings, "supabase_project_ref", "", raising=False)
+        monkeypatch.setattr(settings, "supabase_service_role_key", "", raising=False)
+        monkeypatch.setattr(settings, "app_env", env, raising=False)
+
+        assert isinstance(get_storage(), InMemoryStorage)
+
+    @pytest.mark.parametrize("env", ["production", "staging"])
+    def test_refuses_to_fall_back_in_a_deployment(
+        self, monkeypatch: pytest.MonkeyPatch, env: str
+    ) -> None:
+        monkeypatch.setattr(settings, "supabase_project_ref", "", raising=False)
+        monkeypatch.setattr(settings, "supabase_service_role_key", "", raising=False)
+        monkeypatch.setattr(settings, "app_env", env, raising=False)
+
+        with pytest.raises(RuntimeError, match="Object storage is not configured"):
+            get_storage()
+
+    def test_refuses_when_only_half_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A ref without a key is the shape a half-filled .env actually has."""
+        monkeypatch.setattr(settings, "supabase_project_ref", "somewhere", raising=False)
+        monkeypatch.setattr(settings, "supabase_service_role_key", "", raising=False)
+        monkeypatch.setattr(settings, "app_env", "production", raising=False)
+
+        with pytest.raises(RuntimeError, match="Object storage is not configured"):
+            get_storage()
