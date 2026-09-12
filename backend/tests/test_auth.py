@@ -3,7 +3,10 @@
 from datetime import UTC, datetime, timedelta
 
 import httpx
+import jwt
 import pytest
+from app.core.config import settings
+from app.core.security import decode_access_token
 from app.db.models import RefreshToken, User
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -395,3 +398,105 @@ async def test_rotation_keeps_a_session_in_one_family(
 
     families = {family for family, _ in await _families(db, "nino@example.ge")}
     assert len(families) == 1
+
+
+# ── expiry ───────────────────────────────────────────────────────────────────
+#
+# Both tokens carry a lifetime and both must actually stop working when it runs
+# out. The access token's expiry is PyJWT's job; the refresh token's is a
+# condition in our own UPDATE, and nothing was proving it.
+
+
+async def test_an_expired_access_token_is_refused(client: httpx.AsyncClient) -> None:
+    """Minted in the past rather than waited for, so the test stays fast."""
+
+    await _register(client)
+    user_id = (await _register(client, email="expired@example.ge")).json()["user"]["id"]
+
+    past = datetime.now(UTC) - timedelta(hours=1)
+    expired = jwt.encode(
+        {
+            "sub": user_id,
+            "iat": int((past - timedelta(minutes=30)).timestamp()),
+            "exp": int(past.timestamp()),
+            "jti": "0" * 32,
+            "type": "access",
+        },
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+    # The signature is genuine; only the clock has moved.
+    assert decode_access_token(expired) is None
+
+    response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {expired}"})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "INVALID_TOKEN"
+
+
+async def test_a_token_signed_with_another_key_is_refused(client: httpx.AsyncClient) -> None:
+    """A valid-looking token is only valid if we signed it."""
+
+    user_id = (await _register(client)).json()["user"]["id"]
+    forged = jwt.encode(
+        {
+            "sub": user_id,
+            "exp": int((datetime.now(UTC) + timedelta(hours=1)).timestamp()),
+            "type": "access",
+        },
+        "not-the-secret-this-server-uses-at-all",
+        algorithm=settings.jwt_algorithm,
+    )
+
+    response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {forged}"})
+
+    assert response.status_code == 401
+
+
+async def test_a_refresh_token_past_its_expiry_is_refused(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """The row is still there and not revoked - only out of date.
+
+    Rotation and reuse detection both key on `revoked_at`, so an expired but
+    unspent token would sail through if the date were not also checked.
+    """
+    await _register(client)
+    assert client.cookies.get(COOKIE)
+
+    await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.revoked_at.is_(None))
+        .values(expires_at=datetime.now(UTC) - timedelta(seconds=1))
+    )
+    await db.commit()
+
+    response = await client.post("/api/v1/auth/refresh")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "INVALID_REFRESH_TOKEN"
+
+
+async def test_an_expired_refresh_token_is_not_treated_as_theft(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """Expiry is the ordinary end of a session, not an attack.
+
+    Reuse detection revokes the whole family. Letting a token that simply timed
+    out land there would end every other session the person has for no reason.
+    """
+    await _register(client)
+
+    await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.revoked_at.is_(None))
+        .values(expires_at=datetime.now(UTC) - timedelta(seconds=1))
+    )
+    await db.commit()
+
+    await client.post("/api/v1/auth/refresh")
+
+    rows = (await db.scalars(select(RefreshToken))).all()
+    # Still unrevoked: nothing was spent, so nothing looks like a replay.
+    assert [row.revoked_at for row in rows] == [None]
