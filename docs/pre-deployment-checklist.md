@@ -300,14 +300,67 @@ npm audit  →  8, აქედან 7 dev-only; მე-8 ნეიტრალ
 
 ---
 
-## 5–25 — ⬜ ჯერ არ დაწყებულა
+## 5. Product Management — ✅ დახურულია (2026-09-12)
 
-`5. Product Management` · `6. Product Page / Catalog` · `7. Search / Filtering` ·
-`8. Cart` · `9. Checkout` · `10. Orders` · `11. Admin Panel` ·
-`12. Order Status / Business Flow` · `13. Error Handling` · `14. Performance` ·
-`15. SEO` · `16. Accessibility` · `17. Responsive / Browser` · `18. Full E2E` ·
-`19. Testing / CI` · `20. Logging / Monitoring` · `21. Backup / Recovery` ·
-`22. Payment` · `23. Analytics` · `24. Domain / Deployment` · `25. Final Launch`
+- [x] პროდუქტის შექმნა მუშაობს — end-to-end გაშვებული
+- [x] პროდუქტის რედაქტირება მუშაობს — სახელი, ფასი, კატეგორია, აღწერა
+- [x] პროდუქტის წაშლა მუშაობს — 204, შეკვეთაში მყოფი უარყოფილია
+- [x] აქტიური/არააქტიური მდგომარეობა მუშაობს — არააქტიური მაღაზიაში 404
+- [x] category სწორად მუშაობს — გადატანა მუშაობს, არარსებული უარყოფილია
+- [x] brand სწორად მუშაობს — სახელი მაღაზიაში სწორად ჩანს
+- [x] price სწორად ინახება — `2499.99` ზუსტად, float-ად არასოდეს იქცევა
+- [x] discount სწორად ითვლება — **გასწორდა**, იხ. ქვემოთ
+- [x] stock სწორად ინახება — ledger-ით, პირდაპირ ჩაწერა შეუძლებელია
+- [x] out-of-stock მდგომარეობა მუშაობს — პროდუქტი ჩანს, `inStock: false`
+- [x] product image upload/display მუშაობს — პირველი primary ხდება, SVG უარყოფილი
+- [x] description სწორად ინახება
+- [x] SKU სწორად მუშაობს — დუბლიკატი 409
+- [x] invalid product data უარყოფილია — 6 შემთხვევა, ყველა 400
+- [x] frontend display backend-ს შეესაბამება — კონტრაქტი ორივე მიმართულებით შემოწმებული
+
+### რა გასწორდა
+
+| # | პრობლემა | გასწორება |
+|---|---|---|
+| 🟡 | **ტესტი production-ის bucket-ში წერდა.** `get_storage()` `SUPABASE_*`-ს `APP_ENV`-ის მიუხედავად კითხულობდა — ანუ ლოკალურ ბაზაზე გაშვებული ტესტი ცოცხალ საცავში ტოვებდა ფაილს. **bucket-ში 150 ობოლი ფაილია** | `app_env == "test"` → ყოველთვის `InMemoryStorage` |
+| 🟢 | **ფასდაკლება backend-სა და frontend-ში სხვაობდა** ზუსტად ნახევრიან პროცენტებზე. 7347 წყვილიდან 38 | თეთრებში, მთელი რიცხვებით |
+
+### გადამოწმების მტკიცებულება
+
+```
+end-to-end სუფთა ლოკალურ ბაზაზე:  39/39 გავიდა
+  create → 201 · slug · price 2499.99 ზუსტად · draft-ად იწყება
+  6 არასწორი შემთხვევა → 400 · დუბლიკატი SKU → 409
+  edit → 200 · image → 201, primary · SVG → 400
+  activate → მაღაზიაში 200 · deactivate → 404
+  stock 0 → inStock false, პროდუქტი ისევ ჩანს
+  delete → 204 → 404
+
+ფასდაკლების შედარება backend ↔ frontend:
+  ფართო ნაკრები  6783 წყვილი → 0 განსხვავება
+  ზუსტად .5-ზე    564 წყვილი → 38 განსხვავება (გასწორდა → 0)
+
+კონტრაქტი:
+  ProductForm აგზავნის, backend არ იღებს → არცერთი
+  ProductForm კითხულობს, backend არ აგზავნის → არცერთი
+```
+
+### გადატანილი სხვა სექციებში
+
+| რა | სად |
+|---|---|
+| bucket-ის 150 ობოლი ფაილის წაშლა — ბაზა ვერცერთს არ იცნობს, მაგრამ წაშლა შენი გადასაწყვეტია | გაშვებამდე |
+
+---
+
+## 6–25 — ⬜ ჯერ არ დაწყებულა
+
+`6. Product Page / Catalog` · `7. Search / Filtering` · `8. Cart` · `9. Checkout` ·
+`10. Orders` · `11. Admin Panel` · `12. Order Status / Business Flow` ·
+`13. Error Handling` · `14. Performance` · `15. SEO` · `16. Accessibility` ·
+`17. Responsive / Browser` · `18. Full E2E` · `19. Testing / CI` ·
+`20. Logging / Monitoring` · `21. Backup / Recovery` · `22. Payment` ·
+`23. Analytics` · `24. Domain / Deployment` · `25. Final Launch`
 
 პუნქტები სრული სახით — `voltbox_pre_deployment_checklist.md` (საწყისი დოკუმენტი).
 
