@@ -279,8 +279,18 @@ async def create_order(
         line_total = money(unit_price * qty)
         subtotal += line_total
 
+        # is_primary first, then position - the two can disagree. The primary
+        # image is the one the product page shows, and it is a partial unique
+        # index rather than a rule about ordering, so a shop that reorders
+        # images without touching the primary would have snapshotted a
+        # different photo into the order than the customer was looking at.
+        # And a snapshot is forever: the order keeps whatever went in.
         primary = next(
-            (image.url for image in sorted(product.images, key=lambda i: i.position)), ""
+            (
+                image.url
+                for image in sorted(product.images, key=lambda i: (not i.is_primary, i.position))
+            ),
+            "",
         )
         order_items.append(
             OrderItem(

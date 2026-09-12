@@ -10,8 +10,8 @@ from decimal import Decimal
 import httpx
 import pytest
 from app.core.rate_limit import LOOKUP_RATE_LIMIT, limiter
-from app.db.models import Product
-from sqlalchemy import select
+from app.db.models import Product, ProductImage
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.factories import auth_header, make_brand, make_category, make_product, make_user
@@ -494,3 +494,28 @@ async def test_the_limit_does_not_reach_the_signed_in_path(
         limiter.enabled = False
 
     assert set(statuses) == {200}
+
+
+async def test_the_order_snapshots_the_primary_image_not_the_first_one(
+    client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+) -> None:
+    """The two can disagree, and the order keeps whichever it took, forever.
+
+    `is_primary` is a partial unique index, not a rule about ordering, so an
+    admin who reorders images without touching the primary makes position 0 and
+    the primary two different photos. The order must carry the one the customer
+    was looking at.
+    """
+    product = shop["cheap"]
+    await db.execute(delete(ProductImage).where(ProductImage.product_id == product.id))
+    db.add_all(
+        [
+            ProductImage(product_id=product.id, url="/second.jpg", position=0, is_primary=False),
+            ProductImage(product_id=product.id, url="/hero.jpg", position=1, is_primary=True),
+        ]
+    )
+    await db.flush()
+
+    body = (await _place(client, [{"productId": str(product.id), "qty": 1}])).json()
+
+    assert body["items"][0]["snapshot"]["image"] == "/hero.jpg"
