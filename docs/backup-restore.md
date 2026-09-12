@@ -36,20 +36,24 @@ artifact-ის retention მოკლე.
 
 ## 1. Backup
 
-```bash
-# DATABASE_URL აიღე backend/.env-იდან (Session pooler URI)
-URL='postgresql://postgres.<ref>:<password>@aws-0-eu-central-1.pooler.supabase.com:5432/postgres'
+ერთი ბრძანება. URL-ს თვითონ კითხულობს `.env`-იდან, ანუ პაროლი არსად იწერება:
 
+```bash
+cd backend
+URL=$(grep -E '^DATABASE_URL=' .env | cut -d= -f2-)
 docker run --rm postgres:17-alpine \
   pg_dump --schema=public --no-owner --no-acl --format=plain "$URL" \
-  > voltbox-backup-$(date +%Y%m%d).sql
+  > "backups/voltbox-$(date +%Y%m%d-%H%M).sql"
 ```
+
+`backend/backups/` თავის `.gitignore`-ს ატარებს, ამიტომ იქ დადებული ფაილი
+git-ში ვერ მოხვდება.
 
 **`postgres:17-alpine` სავალდებულოა.** Supabase-ზე სერვერი 17.6-ია, `pg_dump`-ის
 16 კი უფრო ახალი სერვერიდან dump-ს **უარს ამბობს**.
 
-⚠️ ფაილი შეიცავს ყველა მომხმარებლის მონაცემს — git-ში არ ჩააგდო. `.gitignore`
-უკვე იჭერს `backend/supabase-*.sql`-ს, მაგრამ ეს ფაილი სხვა სახელისაა.
+⚠️ ფაილი შეიცავს ყველა მომხმარებლის მონაცემს — სახელებს, ტელეფონებს,
+მისამართებს. `backend/backups/`-ის გარეთ თუ გაიტან, ეს გახსოვდეს.
 
 ---
 
@@ -81,18 +85,21 @@ TARGET='postgresql://voltbox:voltbox@localhost:55433/voltbox_restore'
 # 1. სუფთა სქემა + საჭირო გაფართოებები
 psql "$TARGET" \
   -c 'drop schema if exists public cascade' \
+  -c 'create schema public' \
   -c 'create extension if not exists citext   with schema public' \
   -c 'create extension if not exists pg_trgm  with schema public' \
   -c 'create extension if not exists unaccent with schema public'
 
 # 2. თვითონ restore
-psql "$TARGET" -f voltbox-backup-20260912.sql
+psql "$TARGET" -f backups/voltbox-<თარიღი>.sql
 ```
 
-`drop schema … cascade`-ის შემდეგ `public` აღარ არსებობს, ამიტომ
-`create extension … with schema public` მას თავად შექმნის — და dump-ის საკუთარი
-`CREATE SCHEMA public` უვნებელ `already exists`-ს დააბრუნებს. სხვა შეცდომა არ
-უნდა იყოს.
+⚠️ `create schema public` **აუცილებელია**. `with schema public` არსებულ სქემას
+ითხოვს — თვითონ არ ქმნის. მის გარეშე restore ჩერდება:
+`ERROR: schema "public" does not exist`.
+
+dump-ის საკუთარი `CREATE SCHEMA public` უვნებელ `already exists`-ს დააბრუნებს —
+ეს ერთადერთი მოსალოდნელი შეცდომაა. სხვა არა.
 
 ### 3. გადამოწმება
 
