@@ -1,11 +1,13 @@
 """Phase 1 — სქემის ტესტები: ინვარიანტები, რომლებსაც ბაზა უნდა იცავდეს."""
 
+import re
 import uuid
 from decimal import Decimal
 
 import pytest
 from app.db.models import Address, Brand, Category, Product, ProductImage, User
-from sqlalchemy import select
+from app.services.order_status import TRANSITIONS
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -131,3 +133,43 @@ async def test_product_defaults_match_frontend_constants(db: AsyncSession) -> No
     assert product.is_active is True
     assert product.is_new is False
     assert isinstance(product.id, uuid.UUID)
+
+
+async def test_the_status_graph_and_the_database_agree(db: AsyncSession) -> None:
+    """Every status the state machine can reach must be one the column accepts.
+
+    The graph lives in Python and the CHECK constraint lives in a migration.
+    Adding a status to one and not the other is a transition the API allows and
+    the database then refuses with an IntegrityError - a 500 on a button the
+    admin panel offered the operator.
+
+    Looked up by what the constraint says rather than by its name: the metadata
+    naming convention prefixes an already-named constraint, so the row is
+    actually called ck_orders_ck_orders_status_allowed.
+    """
+    definitions = (
+        await db.scalars(
+            text(
+                "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                "WHERE conrelid = 'orders'::regclass AND contype = 'c'"
+            )
+        )
+    ).all()
+    accepted = next((d for d in definitions if "status" in d), None)
+
+    assert accepted is not None, "orders.status has no CHECK constraint"
+
+    # Every status the graph can *reach*, not merely every key: a target added
+    # to one tuple and nowhere else is the drift that is easy to miss.
+    reachable = set(TRANSITIONS) | {to for targets in TRANSITIONS.values() for to in targets}
+    for status in reachable:
+        assert f"'{status}'" in accepted, f"{status} is in the graph but not in the constraint"
+
+    # And nothing the column allows is missing from the graph, or an order could
+    # sit in a status the UI offers no way out of.
+    quoted = set(re.findall(r"'([a-z_]+)'", accepted))
+    assert quoted == set(TRANSITIONS)
+
+    # A target that is not also a key would be a status with no row of its own:
+    # `transition` would refuse it as unknown, while the graph advertised it.
+    assert reachable == set(TRANSITIONS)

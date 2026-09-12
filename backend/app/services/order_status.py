@@ -33,15 +33,10 @@ TRANSITIONS: dict[str, tuple[str, ...]] = {
     "cancelled": (),
 }
 
-#: Georgian labels for the admin UI, kept next to the graph they describe.
-STATUS_LABELS = {
-    "pending": "მიღებული",
-    "confirmed": "დადასტურებული",
-    "processing": "მუშავდება",
-    "shipped": "გაგზავნილი",
-    "delivered": "მიწოდებული",
-    "cancelled": "გაუქმებული",
-}
+#: The Georgian labels live in the frontend - src/admin/statuses.jsx for the
+#: panel, ORDER_STATUS_LABELS in src/constants for the shop, which word them
+#: differently on purpose. A third copy here said it was "for the admin UI" and
+#: was read by nothing, so renaming a status in this file changed no screen.
 
 
 def allowed_transitions(status: str) -> list[str]:

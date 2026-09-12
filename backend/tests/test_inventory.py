@@ -24,6 +24,7 @@ from app.db.models import (
     Product,
 )
 from app.services import order as order_service
+from app.services import order_status
 from app.services.inventory import adjust_stock, stock_status, validate_manual_adjustment
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -139,6 +140,26 @@ async def test_cancelling_returns_the_units_and_records_it(db: AsyncSession) -> 
     assert placed.reason == REASON_ORDER_PLACED
     assert cancelled.reason == REASON_ORDER_CANCELLED
     assert (cancelled.previous_stock, cancelled.change, cancelled.new_stock) == (6, 4, 10)
+
+
+async def test_cancelling_is_recorded_in_the_status_history(db: AsyncSession) -> None:
+    """Whichever door a cancellation comes through, it leaves the same record.
+
+    `order_status.transition` is the admin's door and writes a history row.
+    `order_service.cancel` is the one a customer-facing cancel would reach for -
+    it is the obvious function, it is tested, and it used to move the order to
+    `cancelled` while writing nothing. An order would then sit in the panel
+    cancelled with no trace of when or by whom.
+    """
+    product = await _product(db, stock=10, slug="cancel-history")
+    order = await order_service.create_order(
+        db, items=[(product.id, 2)], customer=CUSTOMER, payment_method="cash", user=None
+    )
+
+    await order_service.cancel(db, order)
+
+    entries = await order_status.history(db, order.id)
+    assert [(e.from_status, e.to_status) for e in entries] == [("pending", "cancelled")]
 
 
 async def test_cancelling_twice_does_not_restock_twice(db: AsyncSession) -> None:

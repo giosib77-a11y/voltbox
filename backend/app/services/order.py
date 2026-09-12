@@ -29,13 +29,13 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.db.models import (
-    REASON_ORDER_CANCELLED,
     REASON_ORDER_PLACED,
     Order,
     OrderItem,
     Product,
     User,
 )
+from app.services import order_status
 from app.services.contact import contact_matches
 from app.services.inventory import adjust_stock
 
@@ -381,44 +381,21 @@ async def get_by_number(
 async def cancel(db: AsyncSession, order: Order, *, actor_id: UUID | None = None) -> Order:
     """გაუქმება მარაგს აბრუნებს — სხვაგვარად ჩამოწერილი ერთეულები დაიკარგება.
 
-    The order row is locked here rather than by the caller. Relying on a
-    docstring to say "lock this first" means the one caller that forgets
-    restocks an order twice, and the second refund only shows up as inventory
-    that never reconciles.
+    Delegates to the state machine rather than repeating it. This used to hold
+    its own copy of the locking, the restock loop and the "can it still be
+    cancelled?" rule, and moved the order to `cancelled` while writing no
+    history row - so an order cancelled through this door sat in the panel with
+    no record of when it happened or who did it. Two implementations of one
+    transition also drift: the graph in order_status.py is the one the admin API
+    and the UI already read.
 
-    Lock order is fixed: the order row first, then its products by ascending
-    id - the same sequence checkout follows, so a cancellation racing an order
-    for the same products cannot deadlock against it.
+    What is kept is the refusal's code. `ORDER_NOT_CANCELLABLE` is the one a
+    customer is meant to read - the frontend already has the sentence for it -
+    while `INVALID_TRANSITION` names a move in a graph they never see.
     """
-    # populate_existing: the caller handed us an instance this session already
-    # loaded. Without it the re-read returns that cached object with the status
-    # it had before the lock, and two concurrent cancellations would both see
-    # "pending" and both return the stock - which is the bug the lock is for.
-    locked = await db.scalar(select(Order.id).where(Order.id == order.id).with_for_update())
-    if locked is None:
-        raise NotFoundError("Order not found", code="ORDER_NOT_FOUND")
-    fresh = await db.scalar(
-        select(Order).where(Order.id == order.id).execution_options(populate_existing=True)
-    )
-    if fresh is None:  # pragma: no cover - the lock above already proved it exists
-        raise NotFoundError("Order not found", code="ORDER_NOT_FOUND")
-
-    if fresh.status in {"shipped", "delivered", "cancelled"}:
-        raise ConflictError("Order can no longer be cancelled", code="ORDER_NOT_CANCELLABLE")
-
-    # id-ით დალაგებული — იგივე წესი, რაც შექმნისას.
-    # `adjust_stock` locks each product row before reading it, so the read and
-    # the write are one atomic step; it is also the only path that writes the
-    # inventory_movements row, which a bare `stock = stock + n` would skip.
-    for item in sorted(fresh.items, key=lambda i: i.product_id):
-        await adjust_stock(
-            db,
-            item.product_id,
-            item.quantity,
-            REASON_ORDER_CANCELLED,
-            actor_id=actor_id,
-            order_id=fresh.id,
-        )
-    fresh.status = "cancelled"
-    await db.flush()
-    return fresh
+    try:
+        return await order_status.transition(db, order.id, "cancelled", actor_id=actor_id)
+    except ConflictError as exc:
+        raise ConflictError(
+            "Order can no longer be cancelled", code="ORDER_NOT_CANCELLABLE"
+        ) from exc
