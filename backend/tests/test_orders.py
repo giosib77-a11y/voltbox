@@ -519,3 +519,55 @@ async def test_the_order_snapshots_the_primary_image_not_the_first_one(
     body = (await _place(client, [{"productId": str(product.id), "qty": 1}])).json()
 
     assert body["items"][0]["snapshot"]["image"] == "/hero.jpg"
+
+
+async def test_a_signed_in_customer_cannot_read_another_ones_order(
+    client: httpx.AsyncClient, shop: dict[str, Product], db: AsyncSession
+) -> None:
+    """The list is scoped by user; reading one by number has to be too.
+
+    Order numbers are sequential and therefore guessable, so `GET /orders/{n}`
+    being behind a login proves nothing on its own - every customer has one.
+    """
+    owner = await make_user(db, email="owner-by-number@example.ge")
+    stranger = await make_user(db, email="stranger-by-number@example.ge")
+
+    placed = await _place(
+        client, [{"productId": str(shop["cheap"].id), "qty": 1}], headers=auth_header(owner)
+    )
+    number = placed.json()["orderNumber"]
+
+    mine = await client.get(f"/api/v1/orders/{number}", headers=auth_header(owner))
+    theirs = await client.get(f"/api/v1/orders/{number}", headers=auth_header(stranger))
+
+    assert mine.status_code == 200
+    assert mine.json()["orderNumber"] == number
+    # Not 403: telling them the order exists is already more than they had.
+    assert theirs.status_code == 404
+    assert theirs.json()["error"]["code"] == "ORDER_NOT_FOUND"
+
+
+async def test_knowing_the_contact_does_not_open_the_signed_in_route(
+    client: httpx.AsyncClient, shop: dict[str, Product], db: AsyncSession
+) -> None:
+    """`GET /orders/{n}` takes no contact, so learning one must not help.
+
+    The guest path exists for exactly this and is rate limited; this route is
+    ownership only, and must not quietly become a second way in.
+    """
+    owner = await make_user(db, email="owner-contact@example.ge")
+    stranger = await make_user(db, email="stranger-contact@example.ge")
+
+    placed = await _place(
+        client, [{"productId": str(shop["cheap"].id), "qty": 1}], headers=auth_header(owner)
+    )
+    number = placed.json()["orderNumber"]
+
+    # The phone the order was actually placed with, offered every way the route
+    # could conceivably read one.
+    response = await client.get(
+        f"/api/v1/orders/{number}?contact={CUSTOMER['phone']}",
+        headers={**auth_header(stranger), "X-Contact": CUSTOMER["phone"]},
+    )
+
+    assert response.status_code == 404
