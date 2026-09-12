@@ -7,7 +7,7 @@ frontend-ის `User` ტიპს `firstName` + `lastName` აქვს (დ�
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -34,6 +34,21 @@ class User(UUIDPrimaryKey, Timestamps, Base):
     phone: Mapped[str | None] = mapped_column(String(32))
     role: Mapped[str] = mapped_column(String(20), nullable=False, server_default="customer")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+
+    #: Bumped to refuse every access token issued so far. An access token is a
+    #: signed statement with a 30 minute life and no way to take it back, so
+    #: changing a stolen password used to leave the thief half an hour of
+    #: access - the refresh token was revoked, the access token was not.
+    #:
+    #: A counter on the user rather than a list of dead token ids, because
+    #: `get_current_user` already reads this row on every request: the check
+    #: costs nothing, where a deny-list would cost a lookup per request.
+    #:
+    #: A counter rather than a timestamp because `iat` is whole seconds. Against
+    #: a "valid from" instant, a token minted in the same second as the
+    #: revocation is indistinguishable from one minted just before it, and one
+    #: of the two has to be guessed wrong. A version has no such edge.
+    token_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
 
     addresses: Mapped[list["Address"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", lazy="selectin"

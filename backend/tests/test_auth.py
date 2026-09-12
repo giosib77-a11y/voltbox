@@ -500,3 +500,110 @@ async def test_an_expired_refresh_token_is_not_treated_as_theft(
     rows = (await db.scalars(select(RefreshToken))).all()
     # Still unrevoked: nothing was spent, so nothing looks like a replay.
     assert [row.revoked_at for row in rows] == [None]
+
+
+# ── access tokens can be revoked after all ───────────────────────────────────
+#
+# An access token is a signed statement with a thirty minute life and no way to
+# take it back. Revoking the refresh tokens stops a session being extended and
+# does nothing about the access token already handed out - so changing a stolen
+# password left the thief signed in for the rest of that half hour, at the one
+# moment the owner is certain something is wrong.
+
+
+async def test_changing_the_password_kills_the_access_token_too(
+    client: httpx.AsyncClient,
+) -> None:
+    stolen = await _auth_header(client)
+    assert (await client.get("/api/v1/auth/me", headers=stolen)).status_code == 200
+
+    changed = await client.post(
+        "/api/v1/auth/change-password",
+        headers=stolen,
+        json={"currentPassword": REGISTRATION["password"], "newPassword": "brandnewpass9"},
+    )
+    assert changed.status_code == 200
+
+    after = await client.get("/api/v1/auth/me", headers=stolen)
+
+    assert after.status_code == 401
+    assert after.json()["error"]["code"] == "INVALID_TOKEN"
+
+
+async def test_the_owner_can_carry_on_immediately(client: httpx.AsyncClient) -> None:
+    """The line must not catch the session being handed out to replace them."""
+    header = await _auth_header(client)
+    await client.post(
+        "/api/v1/auth/change-password",
+        headers=header,
+        json={"currentPassword": REGISTRATION["password"], "newPassword": "brandnewpass9"},
+    )
+
+    signed_in = await client.post(
+        "/api/v1/auth/login",
+        json={"email": REGISTRATION["email"], "password": "brandnewpass9"},
+    )
+    fresh = {"Authorization": f"Bearer {signed_in.json()['token']}"}
+
+    assert signed_in.status_code == 200
+    assert (await client.get("/api/v1/auth/me", headers=fresh)).status_code == 200
+
+
+async def test_one_accounts_revocation_leaves_another_alone(
+    client: httpx.AsyncClient,
+) -> None:
+    """The line is per account, so it must not reach across to someone else."""
+    mine = await _auth_header(client)
+    other = (await _register(client, email="other@example.ge")).json()["token"]
+    others_header = {"Authorization": f"Bearer {other}"}
+
+    await client.post(
+        "/api/v1/auth/change-password",
+        headers=mine,
+        json={"currentPassword": REGISTRATION["password"], "newPassword": "brandnewpass9"},
+    )
+
+    assert (await client.get("/api/v1/auth/me", headers=mine)).status_code == 401
+    assert (await client.get("/api/v1/auth/me", headers=others_header)).status_code == 200
+
+
+async def test_a_token_without_a_version_is_refused(client: httpx.AsyncClient) -> None:
+    """Every token this application mints carries `tv`.
+
+    One that does not was either minted before the version existed or not by
+    us. Neither is a reason to honour it, and the first is the reason the
+    migration signs everyone out once.
+    """
+    user_id = (await _register(client)).json()["user"]["id"]
+    versionless = jwt.encode(
+        {
+            "sub": user_id,
+            "iat": int(datetime.now(UTC).timestamp()),
+            "exp": int((datetime.now(UTC) + timedelta(hours=1)).timestamp()),
+            "type": "access",
+        },
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+    response = await client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {versionless}"}
+    )
+
+    assert response.status_code == 401
+
+
+async def test_an_ordinary_logout_does_not_sign_out_the_other_devices(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """Logging out here revokes this refresh token, not every access token.
+
+    The line moves for a password change, which means "something is wrong,
+    end everything". A logout means "I am done on this device", and pushing
+    the line there would sign the person out of their phone as well.
+    """
+    header = await _auth_header(client)
+
+    await client.post("/api/v1/auth/logout")
+
+    assert (await client.get("/api/v1/auth/me", headers=header)).status_code == 200

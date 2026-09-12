@@ -136,5 +136,5 @@ async def make_user(
 
 def auth_header(user: User) -> dict[str, str]:
     """Bearer header for a user, skipping the login round trip."""
-    token, _ = create_access_token(user.id)
+    token, _ = create_access_token(user.id, user.token_version)
     return {"Authorization": f"Bearer {token}"}

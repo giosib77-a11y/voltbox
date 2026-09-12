@@ -1,6 +1,6 @@
 """საერთო FastAPI dependency-ები."""
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends
@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ForbiddenError, UnauthorizedError
-from app.core.security import decode_access_token
+from app.core.security import VERSION_CLAIM, decode_access_token
 from app.db.models import ROLE_ADMIN, User
 from app.db.session import get_db
 
@@ -35,7 +35,31 @@ async def _user_from_credentials(credentials: Credentials, db: AsyncSession) -> 
     user = await db.scalar(select(User).where(User.id == user_id))
     if user is None or not user.is_active:
         return None
+    if _revoked(payload, user):
+        return None
     return user
+
+
+def _revoked(payload: dict[str, Any], user: User) -> bool:
+    """Whether the account has invalidated its tokens since this one was issued.
+
+    An access token cannot be taken back on its own - it is a signed statement
+    with a 30 minute life. Revoking the refresh tokens stops a session being
+    extended and does nothing about the access token already handed out, so
+    changing a stolen password left the thief the rest of that half hour. This
+    is the check that closes it, and it is free: the row is already loaded.
+
+    A version rather than an issued-before-this-instant comparison, because
+    `iat` is whole seconds - a token minted in the same second as the revocation
+    could not be told from one minted just before it.
+    """
+    version = payload.get(VERSION_CLAIM)
+    if not isinstance(version, int) or isinstance(version, bool):
+        # Every token this application mints carries one. A token without it
+        # was either minted before this existed or not by us; neither is a
+        # reason to trust it.
+        return True
+    return version != user.token_version
 
 
 async def get_current_user(credentials: Credentials, db: Db) -> User:

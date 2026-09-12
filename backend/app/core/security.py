@@ -64,7 +64,13 @@ def is_common_password(password: str) -> bool:
     return password.lower() in COMMON_PASSWORDS
 
 
-def create_access_token(user_id: uuid.UUID) -> tuple[str, datetime]:
+#: Claim carrying the account's token version at the moment of issue. Compared
+#: against the stored one on every request; a mismatch means the account has
+#: invalidated its tokens since, and this is one of them.
+VERSION_CLAIM = "tv"
+
+
+def create_access_token(user_id: uuid.UUID, token_version: int = 0) -> tuple[str, datetime]:
     """წვდომის ტოკენი. `jti` საჭიროა მომავალი revocation-ისთვის."""
     now = datetime.now(UTC)
     expires_at = now + timedelta(minutes=settings.access_token_ttl_minutes)
@@ -73,6 +79,7 @@ def create_access_token(user_id: uuid.UUID) -> tuple[str, datetime]:
         "iat": int(now.timestamp()),
         "exp": int(expires_at.timestamp()),
         "jti": uuid.uuid4().hex,
+        VERSION_CLAIM: token_version,
         "type": "access",
     }
     token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)

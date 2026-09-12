@@ -50,7 +50,7 @@ async def _issue_session(
     db: AsyncSession, user: User, *, family_id: uuid.UUID | None = None
 ) -> dict[str, object]:
     """A new access/refresh pair. `family_id=None` starts a new login."""
-    access_token, expires_at = create_access_token(user.id)
+    access_token, expires_at = create_access_token(user.id, user.token_version)
     raw_refresh, refresh_hash, refresh_expires = generate_refresh_token()
 
     token = RefreshToken(user_id=user.id, token_hash=refresh_hash, expires_at=refresh_expires)
@@ -210,11 +210,29 @@ async def logout(db: AsyncSession, *, raw_token: str | None) -> None:
 
 
 async def revoke_all(db: AsyncSession, user_id: object) -> None:
-    """პაროლის შეცვლისას ყველა სესია უნდა გაითიშოს."""
+    """პაროლის შეცვლისას ყველა სესია უნდა გაითიშოს.
+
+    Both halves of a session, not just the half that can be deleted. Revoking
+    the refresh tokens stops a session being *extended*; the access tokens
+    already handed out keep working until they expire, which was up to another
+    thirty minutes of the thief still being signed in after the owner changed a
+    stolen password. Moving `tokens_valid_from` refuses those too.
+    """
+    now = datetime.now(UTC)
     await db.execute(
         update(RefreshToken)
         .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
-        .values(revoked_at=datetime.now(UTC))
+        .values(revoked_at=now)
+    )
+    await db.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(token_version=User.token_version + 1)
+        # The row is usually already loaded in this session - `change_password`
+        # is holding it - and the sessions here are created with
+        # `expire_on_commit=False`, so without this the instance would keep the
+        # old value and a read on the same session would be answered from it.
+        .execution_options(synchronize_session="fetch")
     )
 
 
