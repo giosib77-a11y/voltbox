@@ -354,14 +354,64 @@ end-to-end სუფთა ლოკალურ ბაზაზე:  39/39 გ�
 
 ---
 
-## 6–25 — ⬜ ჯერ არ დაწყებულა
+## 6. Product Page / Catalog — ✅ დახურულია (2026-09-12)
 
-`6. Product Page / Catalog` · `7. Search / Filtering` · `8. Cart` · `9. Checkout` ·
-`10. Orders` · `11. Admin Panel` · `12. Order Status / Business Flow` ·
-`13. Error Handling` · `14. Performance` · `15. SEO` · `16. Accessibility` ·
-`17. Responsive / Browser` · `18. Full E2E` · `19. Testing / CI` ·
-`20. Logging / Monitoring` · `21. Backup / Recovery` · `22. Payment` ·
-`23. Analytics` · `24. Domain / Deployment` · `25. Final Launch`
+- [x] კატეგორიები მუშაობს — 6 კატეგორია, ყველას აქვს slug და name
+- [x] პროდუქტის listing მუშაობს — pagination-ის კონვერტი სრული
+- [x] პროდუქტის დეტალური გვერდი მუშაობს — 11 ველი ყველა ადგილზეა
+- [x] **ყველა პროდუქტი სწორად ეტვირთება** — 59/59 მიწვდომადი, 0 დუბლიკატი
+- [x] პროდუქტის სურათი ეტვირთება — listing-ში 12/12
+- [x] ფასი სწორად — ბაზას ზუსტად ემთხვევა
+- [x] ფასდაკლება სწორად — §5-ში გასწორდა, აქ გადამოწმდა
+- [x] stock status სწორად — 0 მარაგზე `inStock: false`, პროდუქტი ისევ ჩანს
+- [x] quantity selection მუშაობს — მარაგით შეზღუდული, ხელით აკრეფაც ილექება
+- [x] add to cart მუშაობს — მარაგის გარეშე ღილაკი გამორთულია
+- [x] unavailable product სწორად ჩანს — არქივი და არააქტიური 404
+- [x] loading state არსებობს — Category, ProductDetails, Home, SearchResults
+- [x] empty state არსებობს — **ტესტი დაემატა**
+- [x] API error state არსებობს — `ErrorState` + retry ოთხივე გვერდზე
+- [x] broken image დამუშავებულია — **ტესტი დაემატა**
+
+### გასწორება არ დასჭირვებია
+
+ეს სექცია უკვე სწორი იყო. 45 შემოწმებიდან 44 გაიარა, ერთი კი **ჩემი მოლოდინი
+იყო არასწორი**: მაღაზია უცნობ `sort`-ს ჩუმად ნაგულისხმევზე აბრუნებს (ძველი
+ბმული 400-ს არ უნდა იღებდეს), ადმინი კი უარყოფს. ორივე განზრახაა და
+`SORTABLE.get(sort, DEFAULT)` თეთრი სიის ძებნაა — ინტერპოლაცია არსად.
+
+### რა დაემატა
+
+| # | ხარვეზი | ტესტი |
+|---|---|---|
+| 🟢 | `ProductImage`-ის fallback არსად არ იტესტებოდა. კრიტიკული ნაწილი — როცა **placeholder-იც** ჩავარდება: skeleton state-ზეა და დასრულებული გვერდი სამუდამოდ ციმციმებდა | 6 ტესტი |
+| 🟢 | `ProductCarousel`-ის ცარიელი ქცევა არ იტესტებოდა. **ეს შენი ახლანდელი მდგომარეობაა** — 0 პროდუქტით სათაურიანი ცარიელი რიგი გატეხილად წაიკითხებოდა | 7 ტესტი |
+
+### გადამოწმების მტკიცებულება
+
+```
+catalog end-to-end (61 პროდუქტი, 2 არქივი, 6 უმარაგო, 21 ფასდაკლებული):
+  44/45 გაიარა
+
+pagination:  5 გვერდი · db 59 · მიღწეული 59 · დუბლიკატი 0
+             ვერმიღწეული: არცერთი · ზედმეტი: არცერთი
+             ბოლოს მიღმა გვერდი → [] და 200
+
+price_asc მართლა ზრდადია · price_desc მართლა კლებადი
+კატეგორიის ფილტრი: api=15 db=15
+ფასდაკლება: api=11 გამოთვლილი=11
+არქივი → 404 · უცნობი slug → 404 · related საკუთარ თავს არ აბრუნებს
+```
+
+---
+
+## 7–25 — ⬜ ჯერ არ დაწყებულა
+
+`7. Search / Filtering` · `8. Cart` · `9. Checkout` · `10. Orders` ·
+`11. Admin Panel` · `12. Order Status / Business Flow` · `13. Error Handling` ·
+`14. Performance` · `15. SEO` · `16. Accessibility` · `17. Responsive / Browser` ·
+`18. Full E2E` · `19. Testing / CI` · `20. Logging / Monitoring` ·
+`21. Backup / Recovery` · `22. Payment` · `23. Analytics` ·
+`24. Domain / Deployment` · `25. Final Launch`
 
 პუნქტები სრული სახით — `voltbox_pre_deployment_checklist.md` (საწყისი დოკუმენტი).
 
