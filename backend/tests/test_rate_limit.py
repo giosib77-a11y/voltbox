@@ -183,9 +183,10 @@ def test_trusting_every_source_is_refused_outright(monkeypatch: pytest.MonkeyPat
 
 
 def test_a_named_proxy_starts_normally(monkeypatch: pytest.MonkeyPatch) -> None:
-    conf = load_gunicorn_conf()
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.0.2")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    conf = load_gunicorn_conf()
 
     conf.on_starting(None)
 
@@ -209,9 +210,15 @@ def test_a_local_run_that_says_so_needs_no_proxy(monkeypatch: pytest.MonkeyPatch
 
 
 def _conf_with(monkeypatch: pytest.MonkeyPatch, **env: str) -> ModuleType:
-    """`workers` is read at import, so the environment is set before loading."""
+    """A deployment that is valid except for whatever the caller overrides.
+
+    `workers` is read at import, so the environment is set before loading.
+    """
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.0.2")
+    # Otherwise the shared-counter check below fires first and every test in
+    # this section fails for a reason it is not about.
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     for key in ("WEB_CONCURRENCY", "DB_POOL_SIZE", "DB_MAX_OVERFLOW", "DB_CONNECTION_BUDGET"):
         monkeypatch.delenv(key, raising=False)
     for key, value in env.items():
@@ -306,9 +313,49 @@ def test_an_unset_environment_is_named_as_such_in_the_message(
 
 @pytest.mark.parametrize("app_env", ["production", "staging"])
 def test_a_named_deployment_passes(monkeypatch: pytest.MonkeyPatch, app_env: str) -> None:
-    conf = load_gunicorn_conf()
     monkeypatch.delenv("ALLOW_NON_PRODUCTION_SERVER", raising=False)
     monkeypatch.setenv("APP_ENV", app_env)
     monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.0.2")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    conf = load_gunicorn_conf()
 
     conf.on_starting(None)
+
+
+# ── shared counters ──────────────────────────────────────────────────────────
+#
+# slowapi counts in the process when no Redis is configured, so each worker
+# allows the full limit on its own. Two workers turn "5 logins a minute" into
+# ten - the brute-force limit multiplied by a number nobody connected to it.
+
+
+def test_several_workers_without_redis_are_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    conf = _conf_with(monkeypatch, WEB_CONCURRENCY="2")
+    monkeypatch.delenv("REDIS_URL", raising=False)
+
+    with pytest.raises(SystemExit, match="no REDIS_URL"):
+        conf.on_starting(None)
+
+
+def test_one_worker_needs_no_redis(monkeypatch: pytest.MonkeyPatch) -> None:
+    """In-process counting is simply correct with a single worker."""
+    conf = _conf_with(monkeypatch, WEB_CONCURRENCY="1")
+    monkeypatch.delenv("REDIS_URL", raising=False)
+
+    conf.on_starting(None)
+
+
+def test_several_workers_with_redis_are_fine(monkeypatch: pytest.MonkeyPatch) -> None:
+    conf = _conf_with(monkeypatch, WEB_CONCURRENCY="2", REDIS_URL="redis://localhost:6379/0")
+
+    conf.on_starting(None)
+
+
+def test_a_blank_redis_url_does_not_count_as_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An env var set to whitespace is the shape a half-filled .env has."""
+    conf = _conf_with(monkeypatch, WEB_CONCURRENCY="2", REDIS_URL="   ")
+
+    with pytest.raises(SystemExit, match="no REDIS_URL"):
+        conf.on_starting(None)

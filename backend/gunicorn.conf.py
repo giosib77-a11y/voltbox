@@ -85,6 +85,29 @@ def _check_the_environment_is_named() -> None:
     )
 
 
+def _check_the_rate_limit_counters_are_shared() -> None:
+    """Refuse several workers with nowhere shared to count.
+
+    slowapi keeps its counters in the process when no Redis is configured, so
+    each worker allows the full limit on its own: two workers turn "5 logins a
+    minute" into ten, and the sixth attempt passes or fails depending on which
+    one answers. That is the brute-force limit, quietly multiplied by a number
+    nobody connected to it.
+
+    One worker is the case where in-process counting is simply correct, so it is
+    left alone rather than made to run a Redis it does not need.
+    """
+    if workers <= 1 or os.environ.get("REDIS_URL", "").strip():
+        return
+
+    raise SystemExit(
+        f"{workers} workers and no REDIS_URL. Rate limit counters would live in "
+        f"each worker separately, so every limit is {workers} times what it "
+        "says - including the one on login attempts. Set REDIS_URL, or run a "
+        "single worker with WEB_CONCURRENCY=1."
+    )
+
+
 def _check_connection_budget() -> None:
     """Refuse a worker count whose connection pools cannot all fit.
 
@@ -140,4 +163,5 @@ def on_starting(server: object) -> None:
             "limit bucket. Set it to the proxy's address."
         )
 
+    _check_the_rate_limit_counters_are_shared()
     _check_connection_budget()
