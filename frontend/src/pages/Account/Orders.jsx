@@ -9,14 +9,8 @@ import { useAsync } from '../../hooks/useProducts.js';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle.js';
 import * as api from '../../services/api.js';
 import { formatDateTime, formatPrice } from '../../utils/format.js';
-import { TEXT } from '../../constants/index.js';
+import { ORDER_STATUS_LABELS, TEXT, UNKNOWN_ORDER_STATUS } from '../../constants/index.js';
 
-const STATUS_LABELS = {
-  pending: { label: 'მუშავდება', tone: 'warning' },
-  processing: { label: 'მზადდება', tone: 'warning' },
-  shipped: { label: 'გზაშია', tone: 'neutral' },
-  delivered: { label: 'ჩაბარებულია', tone: 'success' },
-};
 
 export default function Orders() {
   useDocumentTitle('ჩემი შეკვეთები');
@@ -51,7 +45,7 @@ export default function Orders() {
   return (
     <ul className="space-y-4">
       {orders.map((order) => {
-        const status = STATUS_LABELS[order.status] || STATUS_LABELS.pending;
+        const status = ORDER_STATUS_LABELS[order.status] || UNKNOWN_ORDER_STATUS;
 
         return (
           <li key={order.orderNumber} className="rounded-card border border-ink-200 bg-white">

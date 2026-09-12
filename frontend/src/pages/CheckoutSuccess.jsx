@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, Copy, Package, Phone, Truck } from 'lucide-react';
+import { CheckCircle2, Copy, Package, Phone, Truck, XCircle } from 'lucide-react';
+import Badge from '../components/common/Badge.jsx';
 import Button from '../components/common/Button.jsx';
 import EmptyState from '../components/common/EmptyState.jsx';
 import ErrorState from '../components/common/ErrorState.jsx';
@@ -10,7 +11,13 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import { useToast } from '../hooks/useToast.js';
 import * as api from '../services/api.js';
 import { formatDateTime, formatPrice } from '../utils/format.js';
-import { PAYMENT_METHODS, SHIPPING, TEXT } from '../constants/index.js';
+import {
+  ORDER_STATUS_LABELS,
+  PAYMENT_METHODS,
+  SHIPPING,
+  TEXT,
+  UNKNOWN_ORDER_STATUS,
+} from '../constants/index.js';
 
 /** შეკვეთის დადასტურების გვერდი — ნომრით და სრული დეტალებით. */
 export default function CheckoutSuccess() {
@@ -62,18 +69,43 @@ export default function CheckoutSuccess() {
       .catch(() => toast.error('კოპირება ვერ მოხერხდა'));
   }
 
+  // This page is both the thank-you after checkout and the order's detail view,
+  // reached from "დეტალების ნახვა" in the account long afterwards. It used to
+  // show the same green tick and "შეკვეთა მიღებულია!" whatever had happened
+  // since - so a cancelled order greeted the person who placed it with a
+  // success message and a promise that an operator would call.
+  const cancelled = order.status === 'cancelled';
+  const delivered = order.status === 'delivered';
+  const status = ORDER_STATUS_LABELS[order.status] || UNKNOWN_ORDER_STATUS;
+
   return (
     <div className="container-page max-w-3xl py-8 lg:py-12">
       <div className="text-center">
-        <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success-50">
-          <CheckCircle2 className="h-9 w-9 text-success-600" aria-hidden="true" />
+        <span
+          className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${
+            cancelled ? 'bg-ink-100' : 'bg-success-50'
+          }`}
+        >
+          {cancelled ? (
+            <XCircle className="h-9 w-9 text-ink-500" aria-hidden="true" />
+          ) : (
+            <CheckCircle2 className="h-9 w-9 text-success-600" aria-hidden="true" />
+          )}
         </span>
         <h1 className="mt-5 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
-          შეკვეთა მიღებულია!
+          {cancelled ? 'შეკვეთა გაუქმებულია' : delivered ? 'შეკვეთა ჩაბარებულია' : 'შეკვეთა მიღებულია!'}
         </h1>
         <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-ink-600">
-          გმადლობთ შეკვეთისთვის. ოპერატორი დაგიკავშირდებათ მითითებულ ნომერზე დეტალების დასაზუსტებლად.
+          {cancelled
+            ? 'თუ ეს შეცდომაა, დაგვიკავშირდით შეკვეთის ნომრით.'
+            : delivered
+              ? 'გმადლობთ შეკვეთისთვის.'
+              : 'გმადლობთ შეკვეთისთვის. ოპერატორი დაგიკავშირდებათ მითითებულ ნომერზე დეტალების დასაზუსტებლად.'}
         </p>
+
+        <div className="mt-4">
+          <Badge tone={status.tone}>{status.label}</Badge>
+        </div>
 
         <div className="mt-5 inline-flex items-center gap-2 rounded-card border border-ink-200 bg-white px-4 py-2.5">
           <span className="text-sm text-ink-500">შეკვეთის ნომერი:</span>
@@ -168,10 +200,14 @@ export default function CheckoutSuccess() {
           </div>
         </dl>
 
-        <p className="mt-5 flex items-center gap-2 rounded-control bg-primary-50 px-3.5 py-3 text-xs text-primary-900">
-          <Truck className="h-4 w-4 shrink-0" aria-hidden="true" />
-          სავარაუდო მიწოდება — {SHIPPING.etaDays}.
-        </p>
+        {cancelled || delivered ? null : (
+          // A delivery estimate on an order that was cancelled, or that has
+          // already arrived, is the same false promise as the headline was.
+          <p className="mt-5 flex items-center gap-2 rounded-control bg-primary-50 px-3.5 py-3 text-xs text-primary-900">
+            <Truck className="h-4 w-4 shrink-0" aria-hidden="true" />
+            სავარაუდო მიწოდება — {SHIPPING.etaDays}.
+          </p>
+        )}
       </section>
 
       <div className="mt-6 flex flex-wrap justify-center gap-3">

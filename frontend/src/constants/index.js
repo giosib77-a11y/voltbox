@@ -159,6 +159,28 @@ export const PAYMENT_METHODS = [
   { value: 'card_on_delivery', label: 'ბარათით კურიერთან' },
 ];
 
+/**
+ * შეკვეთის სტატუსი მყიდველის ენაზე — ექვსივე.
+ *
+ * ექვსივე იმიტომ, რომ სერვერს ექვსი აქვს (app/services/order_status.py). სიაში
+ * ოთხი იყო და `confirmed`-იც და `cancelled`-იც `pending`-ზე ვარდებოდა — ანუ
+ * გაუქმებულ შეკვეთას მყიდველისთვის ეწერა, რომ მუშავდება.
+ *
+ * ერთ ადგილას, რომ ორმა გვერდმა ერთი და იგივე თქვას. ადმინის ფორმულირება სხვაა
+ * (src/admin/statuses.jsx) — იქ მაღაზიის თანამშრომელი კითხულობს.
+ */
+export const ORDER_STATUS_LABELS = {
+  pending: { label: 'მიღებულია', tone: 'warning' },
+  confirmed: { label: 'დადასტურებულია', tone: 'warning' },
+  processing: { label: 'მზადდება', tone: 'warning' },
+  shipped: { label: 'გზაშია', tone: 'neutral' },
+  delivered: { label: 'ჩაბარებულია', tone: 'success' },
+  cancelled: { label: 'გაუქმებულია', tone: 'danger' },
+};
+
+/** უცნობი სტატუსი არაფერს ამბობს — გამოცნობით დაიწერა ერთხელ „მუშავდება“ გაუქმებულზე. */
+export const UNKNOWN_ORDER_STATUS = { label: '—', tone: 'neutral' };
+
 /* -------------------------------------------------------------------------- */
 /*  გამეორებადი UI ტექსტები                                                    */
 /* -------------------------------------------------------------------------- */
