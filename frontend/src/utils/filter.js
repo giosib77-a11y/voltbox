@@ -53,8 +53,21 @@ export function parseFiltersFromParams(searchParams, categoryFilters = []) {
 
   const price = searchParams.get(QUERY_KEYS.price);
   if (price) {
-    const [min, max] = price.split('-').map((n) => Number(n));
-    if (Number.isFinite(min) && Number.isFinite(max) && max >= min) filters.price = [min, max];
+    // Both ends must actually be there. `Number('')` is 0, so `price=-50` split
+    // on the dash gives `['', '50']` and would read as the range 0–50: the
+    // sidebar would show a filter the server ignores, and the two would
+    // disagree about what is on screen. The server refuses the same shapes.
+    const parts = price.split('-');
+    const [min, max] = parts.map(Number);
+    if (
+      parts.length === 2 &&
+      parts.every((part) => part.trim() !== '') &&
+      Number.isFinite(min) &&
+      Number.isFinite(max) &&
+      max >= min
+    ) {
+      filters.price = [min, max];
+    }
   }
 
   return filters;
