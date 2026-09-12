@@ -43,6 +43,9 @@ services:
     environment:
       DATABASE_URL: postgresql://voltbox:voltbox@db:5432/voltbox
       APP_ENV: development
+      # gunicorn ჩვეულებრივ მხოლოდ დეპლოიში გვხვდება, ამიტომ არა-production
+      # გარემოში გაშვებაზე ის ჩერდება (იხ. gunicorn.conf.py). აქ ეს განზრახაა.
+      ALLOW_NON_PRODUCTION_SERVER: "1"
       # ორი worker-ის მთვლელები საერთო უნდა იყოს, თორემ ლიმიტი ორმაგდება
       REDIS_URL: redis://redis:6379/0
     env_file:

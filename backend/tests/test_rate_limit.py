@@ -190,10 +190,11 @@ def test_a_named_proxy_starts_normally(monkeypatch: pytest.MonkeyPatch) -> None:
     conf.on_starting(None)
 
 
-def test_local_development_needs_no_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_local_run_that_says_so_needs_no_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
     """Nothing sits in front, so gunicorn's loopback default is already right."""
     conf = load_gunicorn_conf()
     monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("ALLOW_NON_PRODUCTION_SERVER", "1")
     monkeypatch.delenv("FORWARDED_ALLOW_IPS", raising=False)
 
     conf.on_starting(None)
@@ -261,5 +262,53 @@ def test_development_is_left_alone(monkeypatch: pytest.MonkeyPatch) -> None:
     """The check belongs to deployments; locally gunicorn is not what runs."""
     conf = _conf_with(monkeypatch, WEB_CONCURRENCY="16")
     monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("ALLOW_NON_PRODUCTION_SERVER", "1")
+
+    conf.on_starting(None)
+
+
+# ── naming the environment ───────────────────────────────────────────────────
+#
+# APP_ENV defaults to `development`, which is the least safe value it can take:
+# the API docs go public, the refresh cookie loses Secure, object storage falls
+# back to process memory, and both checks above return early without running.
+# gunicorn only runs in a deployment, so it is the right place to insist.
+
+
+@pytest.mark.parametrize("app_env", [None, "", "development", "test"])
+def test_a_server_that_cannot_name_its_environment_refuses(
+    monkeypatch: pytest.MonkeyPatch, app_env: str | None
+) -> None:
+    conf = load_gunicorn_conf()
+    monkeypatch.delenv("ALLOW_NON_PRODUCTION_SERVER", raising=False)
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.0.2")
+    if app_env is None:
+        monkeypatch.delenv("APP_ENV", raising=False)
+    else:
+        monkeypatch.setenv("APP_ENV", app_env)
+
+    with pytest.raises(SystemExit, match="only runs in a deployment"):
+        conf.on_starting(None)
+
+
+def test_an_unset_environment_is_named_as_such_in_the_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reporting it as `development` would be a lie when nothing set it."""
+    conf = load_gunicorn_conf()
+    monkeypatch.delenv("ALLOW_NON_PRODUCTION_SERVER", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.0.2")
+
+    with pytest.raises(SystemExit, match="APP_ENV is not set"):
+        conf.on_starting(None)
+
+
+@pytest.mark.parametrize("app_env", ["production", "staging"])
+def test_a_named_deployment_passes(monkeypatch: pytest.MonkeyPatch, app_env: str) -> None:
+    conf = load_gunicorn_conf()
+    monkeypatch.delenv("ALLOW_NON_PRODUCTION_SERVER", raising=False)
+    monkeypatch.setenv("APP_ENV", app_env)
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.0.2")
 
     conf.on_starting(None)

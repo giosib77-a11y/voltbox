@@ -48,6 +48,43 @@ DEFAULT_POOL_SIZE = 5
 DEFAULT_MAX_OVERFLOW = 10
 
 
+#: Lets gunicorn be run locally on purpose - `docker compose --profile full up`
+#: does exactly that - without the check below turning it into a failure.
+LOCAL_RUN_OPT_OUT = "ALLOW_NON_PRODUCTION_SERVER"
+
+
+def _check_the_environment_is_named() -> None:
+    """Refuse a deployment that never said it was one.
+
+    `APP_ENV` defaults to `development`, and that default is the least safe
+    value it can take: `/docs` and `/openapi.json` serve the whole admin API
+    surface, the refresh cookie loses `Secure`, object storage falls back to a
+    dict in one worker's memory, and both checks in this file return early
+    without running. Five protections, all off, and the site still works - so
+    nothing reports it.
+
+    Forgetting an environment variable on a new host is the most ordinary
+    deployment mistake there is, and gunicorn only ever runs in a deployment,
+    so being unable to name the environment is the mistake itself.
+    """
+    configured = os.environ.get("APP_ENV", "").strip()
+
+    if configured in PRODUCTION_ENVS:
+        return
+
+    if os.environ.get(LOCAL_RUN_OPT_OUT, "").strip() == "1":
+        return
+
+    named = configured or "not set"
+    raise SystemExit(
+        f"APP_ENV is {named}, but gunicorn only runs in a deployment. Left this "
+        "way the API docs are public, the refresh cookie is not Secure, uploads "
+        "go to process memory and the proxy and connection-pool checks are both "
+        f"skipped. Set APP_ENV to one of {sorted(PRODUCTION_ENVS)}, or set "
+        f"{LOCAL_RUN_OPT_OUT}=1 if this really is a local run."
+    )
+
+
 def _check_connection_budget() -> None:
     """Refuse a worker count whose connection pools cannot all fit.
 
@@ -90,8 +127,10 @@ def on_starting(server: object) -> None:
             "which lets a caller choose their own client IP. Name the proxy."
         )
 
+    _check_the_environment_is_named()
+
     if os.environ.get("APP_ENV", "development") not in PRODUCTION_ENVS:
-        return
+        return  # an opted-out local run; nothing below applies to it
 
     if not configured:
         raise SystemExit(
