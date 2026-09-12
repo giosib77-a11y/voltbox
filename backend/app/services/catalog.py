@@ -37,6 +37,11 @@ SORTABLE: dict[str, tuple[ColumnElement[Any], ...]] = {
 }
 DEFAULT_SORT = "popular"
 
+#: The largest value `products.price` can hold - it is `Numeric(12, 2)`. Used to
+#: clamp a price filter, because a bound beyond every possible price means the
+#: same thing as no bound, and sending the original number to Postgres does not.
+PRICE_BOUND = Decimal("9999999999.99")
+
 
 def param_for(filter_config: dict[str, Any]) -> str:
     """`specs.ram` → `ram`. იგივე წესი, რაც frontend-ის `paramForFilter`-ში."""
@@ -81,15 +86,35 @@ def _condition(filter_config: dict[str, Any], raw: str) -> Any | None:
 
 
 def _price_condition(raw: str) -> Any | None:
-    """`price=100-500` — frontend-ის URL-ის ფორმატი."""
+    """`price=100-500` — frontend-ის URL-ის ფორმატი.
+
+    `Decimal` accepts more than the name suggests. "NaN" and "Infinity" both
+    parse, and neither is a price:
+
+      NaN       raises InvalidOperation on *every* comparison, which used to
+                escape this function entirely - the comparison below was outside
+                the try - and became a 500 on an unauthenticated GET.
+      Infinity  compares fine and reaches the database, where the driver refuses
+                it. Also a 500, one query later.
+
+    `is_finite()` is false for both, so one check covers them.
+    """
     parts = raw.replace(",", "-").split("-")
     if len(parts) != 2:
         return None
     try:
         low, high = Decimal(parts[0]), Decimal(parts[1])
+        if not (low.is_finite() and high.is_finite()):
+            return None
+        if high < low:
+            return None
+        # A finite Decimal can still be far larger than Postgres will accept,
+        # and `1e999999999` is one character away from `1e9`. Clamping keeps the
+        # meaning - a bound past every price is the same as no bound on that
+        # side - where refusing the whole filter would quietly widen it instead.
+        low = min(max(low, -PRICE_BOUND), PRICE_BOUND)
+        high = min(max(high, -PRICE_BOUND), PRICE_BOUND)
     except (ValueError, ArithmeticError):
-        return None
-    if high < low:
         return None
     return and_(Product.price >= low, Product.price <= high)
 

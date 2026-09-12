@@ -350,3 +350,87 @@ async def test_price_accepts_comma_as_well_as_dash(
     comma = await client.get("/api/v1/products", params={"category": "phones", "price": "600,3000"})
 
     assert dash.json()["total"] == comma.json()["total"] == 2
+
+
+class TestPriceFilterRefusesNonsense:
+    """A crafted `price=` must not become a 500.
+
+    `Decimal` accepts more than the name suggests. "NaN" and "Infinity" both
+    parse, and the comparison that rejected an inverted range used to sit
+    outside the try: a NaN raises InvalidOperation on every comparison, so it
+    escaped the function entirely. Infinity got further still - it compares
+    fine and was refused by the database driver instead.
+
+    Either way an unauthenticated GET on the main catalog endpoint answered 500,
+    which anyone could send at any rate they liked.
+    """
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "10-NaN",
+            "NaN-10",
+            "nan-nan",
+            "sNaN-1",
+            "Infinity-5",
+            "5-Infinity",
+            "10-inf",
+            "-inf-inf",
+        ],
+    )
+    async def test_nan_and_infinity_are_ignored(
+        self, client: httpx.AsyncClient, catalog: dict[str, object], raw: str
+    ) -> None:
+        everything = (await client.get("/api/v1/products")).json()["total"]
+
+        response = await client.get("/api/v1/products", params={"price": raw})
+
+        assert response.status_code == 200
+        # Ignored, like any other unparseable filter value.
+        assert response.json()["total"] == everything
+
+    @pytest.mark.parametrize("raw", ["1e999999999-2e999999999", "1e400-1e500"])
+    async def test_a_range_above_every_price_matches_nothing(
+        self, client: httpx.AsyncClient, catalog: dict[str, object], raw: str
+    ) -> None:
+        """Finite, but larger than Postgres numeric will take.
+
+        Clamping keeps the meaning - a floor above every price matches nothing -
+        where dropping the filter would have widened it to everything.
+        """
+        response = await client.get("/api/v1/products", params={"price": raw})
+
+        assert response.status_code == 200
+        assert response.json()["total"] == 0
+
+    async def test_a_ceiling_above_every_price_matches_everything(
+        self, client: httpx.AsyncClient, catalog: dict[str, object]
+    ) -> None:
+        everything = (await client.get("/api/v1/products")).json()["total"]
+
+        response = await client.get("/api/v1/products", params={"price": "0-1e999999999"})
+
+        assert response.status_code == 200
+        assert response.json()["total"] == everything
+
+    @pytest.mark.parametrize("raw", ["abc", "500-100", "10-", "-50", "1-2-3", ""])
+    async def test_malformed_ranges_are_ignored(
+        self, client: httpx.AsyncClient, catalog: dict[str, object], raw: str
+    ) -> None:
+        everything = (await client.get("/api/v1/products")).json()["total"]
+
+        response = await client.get("/api/v1/products", params={"price": raw})
+
+        assert response.status_code == 200
+        assert response.json()["total"] == everything
+
+    async def test_a_real_range_still_filters(
+        self, client: httpx.AsyncClient, catalog: dict[str, object]
+    ) -> None:
+        """Guards the guard: the tests above are vacuous if nothing filters."""
+        everything = (await client.get("/api/v1/products")).json()["total"]
+
+        response = await client.get("/api/v1/products", params={"price": "600-3000"})
+
+        assert response.status_code == 200
+        assert 0 < response.json()["total"] < everything
