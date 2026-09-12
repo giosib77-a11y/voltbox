@@ -404,14 +404,61 @@ price_asc მართლა ზრდადია · price_desc მართლ
 
 ---
 
-## 7–25 — ⬜ ჯერ არ დაწყებულა
+## 7. Search / Filtering — ✅ დახურულია (2026-09-12)
 
-`7. Search / Filtering` · `8. Cart` · `9. Checkout` · `10. Orders` ·
-`11. Admin Panel` · `12. Order Status / Business Flow` · `13. Error Handling` ·
-`14. Performance` · `15. SEO` · `16. Accessibility` · `17. Responsive / Browser` ·
-`18. Full E2E` · `19. Testing / CI` · `20. Logging / Monitoring` ·
-`21. Backup / Recovery` · `22. Payment` · `23. Analytics` ·
-`24. Domain / Deployment` · `25. Final Launch`
+- [x] search მუშაობს — პროდუქტი სახელით მოიძებნება
+- [x] search case-insensitive მუშაობს — ზედა და ქვედა რეგისტრი იდენტური
+- [x] empty search სწორად მუშაობს — ცარიელი და მხოლოდ-ჰარეები = ფილტრის გარეშე
+- [x] no results state არსებობს — 0 შედეგზე 200 და ცარიელი სია, არა შეცდომა
+- [x] category filtering მუშაობს — api=15 db=15
+- [x] product-specific filtering მუშაობს — brand, spec, toggle, price
+- [x] filter + search ერთად მუშაობს — ავიწროებს, არ აფართოებს
+- [x] filter reset მუშაობს — `clearFilters` სამივე ადგილას
+- [x] **ცუდი query backend-ს არ ამტვრევს** — გასწორდა, იხ. ქვემოთ
+- [x] search performance — trigram GIN ინდექსები `name`-სა და `search_text`-ზე
+
+### რა გასწორდა
+
+| # | პრობლემა | გასწორება |
+|---|---|---|
+| 🟡 | **`price=10-NaN` → HTTP 500.** `Decimal("NaN")` იქმნება, შედარება კი `try`-ს გარეთ იყო. `price=5-Infinity` კი შედარებას გაივლიდა და **ბაზამდე** აღწევდა. შვიდიდან ექვსი ჩავარდა | `is_finite()` + შედარება `try`-ში |
+| 🟡 | `price=1e999999999-...` — სასრული, მაგრამ Postgres-ს არ ეტევა | ჭერზე მიჭრა (`Numeric(12,2)`-ის მაქსიმუმზე) |
+| 🟢 | frontend `price=-50`-ს 0–50-ად კითხულობდა (`Number('')` = 0), სერვერი კი იგნორირებდა — გვერდითა პანელი აჩვენებდა ფილტრს, რომელიც შედეგებზე არ მოქმედებდა | ორივე მხარე ერთ წესზე |
+
+⚠️ 500 **ავტორიზაციის გარეშე** იყო მიღწევადი, კატალოგის მთავარ endpoint-ზე,
+ნებისმიერი სიხშირით.
+
+### რა იყო უკვე ძლიერი
+
+| | |
+|---|---|
+| **backend ↔ frontend ნორმალიზაციის პარიტეტი** | `normalize` და `tokenize` **261 query-ზე 0 განსხვავება** — ერთეულები, ათასეულები, ქართული სტემინგი, ტრანსლიტერაცია |
+| **მტრული query-ები** | SQL injection, `%`, `_`, `\`, 2000 სიმბოლო, `<script>`, NUL, emoji — ყველა სუფთად დამუშავებული, კატალოგი ხელუხლებელი |
+| **საზღვრები** | `q` > 200 → 400 · `page` < 1 → 400 · `limit` < 1 → 400 |
+
+### გადამოწმების მტკიცებულება
+
+```
+search e2e: 22/23 გაიარა (ერთი ჩავარდნა ჩემი არასწორი პარამეტრი იყო — minPrice
+            არ არსებობს, ფორმატია price=100-500)
+
+ნორმალიზაციის პარიტეტი:  47 ხელით შედგენილი + 261 რეალური სახელი → 0 განსხვავება
+ფასის ფილტრი გასწორების შემდეგ: 18 შემთხვევა → 0 ჩავარდნა
+   1e400-1e500     → 0 პროდუქტი  (ყველა ფასზე მაღლა)
+   0-1e999999999   → ყველა       (ყველა ფასის ქვემოთ)
+```
+
+12 ახალი ტესტი დამტკიცდა ბაგის დაბრუნებით — 9 backend-ზე, 3 frontend-ზე.
+
+---
+
+## 8–25 — ⬜ ჯერ არ დაწყებულა
+
+`8. Cart` · `9. Checkout` · `10. Orders` · `11. Admin Panel` ·
+`12. Order Status / Business Flow` · `13. Error Handling` · `14. Performance` ·
+`15. SEO` · `16. Accessibility` · `17. Responsive / Browser` · `18. Full E2E` ·
+`19. Testing / CI` · `20. Logging / Monitoring` · `21. Backup / Recovery` ·
+`22. Payment` · `23. Analytics` · `24. Domain / Deployment` · `25. Final Launch`
 
 პუნქტები სრული სახით — `voltbox_pre_deployment_checklist.md` (საწყისი დოკუმენტი).
 
