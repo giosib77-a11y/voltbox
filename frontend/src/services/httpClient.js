@@ -42,6 +42,27 @@ const CODE_MESSAGES = {
   ACCOUNT_DISABLED: 'ანგარიში დაბლოკილია. დაუკავშირდით მაღაზიას.',
   INVALID_TOKEN: 'სესიის ვადა ამოიწურა. გთხოვთ, ხელახლა შეხვიდეთ.',
   EMAIL_ALREADY_EXISTS: 'ამ ელ. ფოსტით მომხმარებელი უკვე რეგისტრირებულია.',
+
+  // The two a shopper meets most often. Both used to arrive in English —
+  // "Invalid email or password" on every mistyped login, "Not enough stock"
+  // when someone else took the last one first.
+  INVALID_CREDENTIALS: 'ელ. ფოსტა ან პაროლი არასწორია.',
+  INSUFFICIENT_STOCK: (details) => {
+    const available = Number(details?.available);
+    if (Number.isFinite(available) && available > 0) {
+      return `მარაგში მხოლოდ ${available} ცალი დარჩა. შეამცირეთ რაოდენობა კალათაში.`;
+    }
+    return 'პროდუქტი მარაგში აღარ არის. წაშალეთ ის კალათიდან.';
+  },
+
+  PRODUCT_NOT_FOUND: 'პროდუქტი ვეღარ მოიძებნა — შესაძლოა წაიშალა.',
+  PRODUCT_ARCHIVED: 'პროდუქტი დაარქივებულია.',
+  ORDER_NOT_FOUND: 'ასეთი შეკვეთა ვერ მოიძებნა. შეამოწმეთ ნომერი და კონტაქტი.',
+  ORDER_NOT_CANCELLABLE: 'ამ შეკვეთის გაუქმება ამ ეტაპზე შეუძლებელია.',
+  INVALID_QUANTITY: 'მითითებული რაოდენობა დაუშვებელია.',
+  INVALID_CURRENT_PASSWORD: 'მიმდინარე პაროლი არასწორია.',
+  // The server text names an idempotency key, which means nothing to a shopper.
+  IDEMPOTENCY_KEY_CONFLICT: 'კალათა შეიცვალა. განაახლეთ გვერდი და სცადეთ ხელახლა.',
 };
 
 /**
@@ -54,11 +75,17 @@ const CODE_MESSAGES = {
 function parseError(payload) {
   const envelope = payload?.error ?? payload ?? null;
   const code = envelope?.code || null;
+  const details = envelope?.details ?? null;
+
+  // A few codes carry something worth saying - how many are actually left, for
+  // one - so an entry may be a function of the details rather than a sentence.
+  const mapped = CODE_MESSAGES[code];
+  const text = typeof mapped === 'function' ? mapped(details) : mapped;
+
   return {
-    message:
-      CODE_MESSAGES[code] || envelope?.message || 'მოთხოვნის დამუშავება ვერ მოხერხდა',
+    message: text || envelope?.message || 'მოთხოვნის დამუშავება ვერ მოხერხდა',
     code,
-    details: envelope?.details ?? null,
+    details,
   };
 }
 

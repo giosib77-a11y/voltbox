@@ -208,6 +208,103 @@ describe('error messages the shopper sees', () => {
       message: 'a specific explanation',
     });
   });
+
+  it('answers a failed login in Georgian', async () => {
+    // The most frequently seen error on the whole site, and it used to read
+    // "Invalid email or password" on a page that is otherwise entirely Georgian.
+    global.fetch = vi.fn(async () =>
+      reply(
+        { error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' } },
+        401,
+      ),
+    );
+
+    // httpClient nests the envelope under `details` as `{ code, details }`.
+    await expect(httpApi.login({ email: 'a@b.ge', password: 'wrong' })).rejects.toMatchObject({
+      message: 'ელ. ფოსტა ან პაროლი არასწორია.',
+      details: { code: 'INVALID_CREDENTIALS' },
+    });
+  });
+
+  it('says how many are left when stock runs out mid-checkout', async () => {
+    // Racing another shopper for the last units is the ordinary way to meet
+    // this, and "Not enough stock" does not say what to do about it.
+    global.fetch = vi.fn(async () =>
+      reply(
+        {
+          error: {
+            code: 'INSUFFICIENT_STOCK',
+            message: 'Not enough stock',
+            details: { productId: 'p1', requested: 5, available: 2 },
+          },
+        },
+        409,
+      ),
+    );
+
+    await expect(
+      httpApi.createOrder({
+        items: [{ productId: 'p1', qty: 5 }],
+        customer: {},
+        paymentMethod: 'cash',
+        idempotencyKey: '6f1c2f7e-6a3f-4f2e-8a1e-4d9f0b2c7a10',
+      }),
+    ).rejects.toMatchObject({
+      message: 'მარაგში მხოლოდ 2 ცალი დარჩა. შეამცირეთ რაოდენობა კალათაში.',
+      details: { code: 'INSUFFICIENT_STOCK', details: { available: 2, requested: 5 } },
+    });
+  });
+
+  it('says the product is gone when nothing is left at all', async () => {
+    global.fetch = vi.fn(async () =>
+      reply(
+        {
+          error: {
+            code: 'INSUFFICIENT_STOCK',
+            message: 'Not enough stock',
+            details: { productId: 'p1', requested: 1, available: 0 },
+          },
+        },
+        409,
+      ),
+    );
+
+    await expect(
+      httpApi.createOrder({
+        items: [{ productId: 'p1', qty: 1 }],
+        customer: {},
+        paymentMethod: 'cash',
+        idempotencyKey: '6f1c2f7e-6a3f-4f2e-8a1e-4d9f0b2c7a10',
+      }),
+    ).rejects.toMatchObject({
+      message: 'პროდუქტი მარაგში აღარ არის. წაშალეთ ის კალათიდან.',
+    });
+  });
+
+  it('does not talk to the shopper about idempotency keys', async () => {
+    global.fetch = vi.fn(async () =>
+      reply(
+        {
+          error: {
+            code: 'IDEMPOTENCY_KEY_CONFLICT',
+            message: 'This idempotency key belongs to a different order',
+          },
+        },
+        409,
+      ),
+    );
+
+    await expect(
+      httpApi.createOrder({
+        items: [{ productId: 'p1', qty: 1 }],
+        customer: {},
+        paymentMethod: 'cash',
+        idempotencyKey: '6f1c2f7e-6a3f-4f2e-8a1e-4d9f0b2c7a10',
+      }),
+    ).rejects.toMatchObject({
+      message: 'კალათა შეიცვალა. განაახლეთ გვერდი და სცადეთ ხელახლა.',
+    });
+  });
 });
 
 describe('register payload', () => {
