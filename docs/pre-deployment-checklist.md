@@ -548,13 +548,77 @@ subtotal 80.00 · shipping 5.00 · total 85.00   ← სერვერზე
 
 ---
 
-## 10–25 — ⬜ ჯერ არ დაწყებულა
+## 10. Orders — ✅ დახურულია (2026-09-12)
 
-`10. Orders` · `11. Admin Panel` · `12. Order Status / Business Flow` ·
-`13. Error Handling` · `14. Performance` · `15. SEO` · `16. Accessibility` ·
-`17. Responsive / Browser` · `18. Full E2E` · `19. Testing / CI` ·
-`20. Logging / Monitoring` · `21. Backup / Recovery` · `22. Payment` ·
-`23. Analytics` · `24. Domain / Deployment` · `25. Final Launch`
+- [x] order იქმნება — 201, `VB-YYYYMMDD-NNNN`
+- [x] order number უნიკალურია — sequence-იდან, 6 შეკვეთა → 6 ნომერი
+- [x] order items სწორია
+- [x] product snapshot სწორად ინახება — **ფასის შეცვლის შემდეგაც უცვლელი**
+- [x] quantity სწორია
+- [x] unit price სწორია — 40.00, შეკვეთის მომენტისა
+- [x] total price სწორია — 80.00, სერვერზე გამოთვლილი
+- [x] customer information სწორია
+- [x] delivery information სწორია
+- [x] payment method სწორია
+- [x] order status იცვლება — მხოლოდ დაშვებული გადასვლებით
+- [x] stock სწორად ცვლილდება — 10 → 8, ledger-ის ჩანაწერით
+- [x] duplicate order არ იქმნება — `Idempotency-Key`
+- [x] failed transaction rollback — მარაგი და მწკრივი ორივე ხელუხლებელი
+- [x] user საკუთარ order-ებს ხედავს — 6/6
+- [x] user სხვისას ვერ ხედავს — §3-ში დამტკიცებული
+- [x] order details მუშაობს — მაღაზიაშიც და ადმინშიც
+
+### 🟡 რა გასწორდა
+
+**ადმინ პანელში ყველა შეკვეთას სახელის ნაცვლად „—" ეწერა.** ძებნა სახელითაც არ
+მუშაობდა — შეკვეთის პოვნა მხოლოდ ნომრით ან ტელეფონით შეიძლებოდა.
+
+```
+ბაზაში ინახება  :  first_name, last_name     (model_dump() → ველების სახელები)
+ადმინი კითხულობდა:  firstName, lastName       (API-ს camelCase alias-ები)
+                    → None → "—"
+```
+
+⚠️ **არაფერი ჩავარდნილა** — მაღაზია უბრალოდ ვერ ხედავდა, ვინ შეუკვეთა.
+
+**რატომ არ დაიჭირეს ტესტებმა:** ისინი snapshot-ს `create_order`-ის პირდაპირი
+გამოძახებით აწყობდნენ, camelCase-ით — ანუ ფიქსტურა production-ს არ ემთხვეოდა და
+ძველი კოდი სატესტო მონაცემებზე *სწორი* იყო.
+
+გასწორდა ორივე მხარე: ფიქსტურა რეალობას მიუსადაგდა, და 3 ახალი ტესტი შეკვეთას
+**API-ით** ათავსებს და ადმინის API-ით კითხულობს. ერთი მათგანი გასაღებების
+სახელებს პირდაპირ ამოწმებს, რომ ნებისმიერი მხარის ცვლილება ხმაურიანი იყოს.
+
+ეს ბაგი **პასუხის სხეულის წაკითხვით** ვიპოვე e2e-ში, არა ჩავარდნილი ტესტით.
+
+### გადამოწმების მტკიცებულება
+
+```
+orders e2e სუფთა ბაზაზე:  37/37
+
+stock 10 → 8 · ledger: order_placed −2
+ფასი 40 → 999 შეიცვალა → შეკვეთაში ისევ 40.00
+6 შეკვეთა → 6 უნიკალური ნომერი
+ჩავარდნილი შეკვეთა → მარაგი და მწკრივი უცვლელი
+სტუმრის lookup: სწორი ტელეფონით 200, არასწორით 404
+გაუქმება → მარაგი დაბრუნდა, ledger: order_cancelled
+ორჯერ გაუქმება → მარაგი ერთხელ
+უცნობი სტატუსი → 400 · pending → delivered → 409 · pending → confirmed → 200
+```
+
+⚠️ **მცირე შენიშვნა:** `order_number`-ის ბოლო 4 ციფრი `seq % 10000`-ია. ერთ დღეში
+10 000-ზე მეტი შეკვეთა ნომრის გამეორებას გამოიწვევდა — `uq_orders_order_number`
+ამას 500-ით დაიჭერდა. ამ მაღაზიისთვის მიუღწეველია, მაგრამ ჩაწერილია.
+
+---
+
+## 11–25 — ⬜ ჯერ არ დაწყებულა
+
+`11. Admin Panel` · `12. Order Status / Business Flow` · `13. Error Handling` ·
+`14. Performance` · `15. SEO` · `16. Accessibility` · `17. Responsive / Browser` ·
+`18. Full E2E` · `19. Testing / CI` · `20. Logging / Monitoring` ·
+`21. Backup / Recovery` · `22. Payment` · `23. Analytics` ·
+`24. Domain / Deployment` · `25. Final Launch`
 
 პუნქტები სრული სახით — `voltbox_pre_deployment_checklist.md` (საწყისი დოკუმენტი).
 
