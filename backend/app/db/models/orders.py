@@ -75,6 +75,14 @@ class Order(UUIDPrimaryKey, Timestamps, Base):
             "subtotal >= 0 AND shipping >= 0 AND total >= 0", name="totals_non_negative"
         ),
         Index("ix_orders_user_id_created_at", "user_id", text("created_at DESC")),
+        # Declared here as well as created in migration 0004. The migration
+        # builds them with raw SQL, and anything the database has that the
+        # model does not is something autogenerate offers to drop - so the next
+        # `alembic revision --autogenerate` would have written a migration
+        # removing both. Nothing would break loudly: the admin order list and
+        # the dashboard would just start scanning the table.
+        Index("ix_orders_status", "status"),
+        Index("ix_orders_created_at", text("created_at DESC")),
     )
 
 

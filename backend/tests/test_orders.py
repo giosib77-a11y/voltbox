@@ -9,6 +9,7 @@ from decimal import Decimal
 
 import httpx
 import pytest
+from app.core.rate_limit import LOOKUP_RATE_LIMIT, limiter
 from app.db.models import Product
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -429,3 +430,67 @@ async def test_authenticated_user_sees_only_their_own_orders(
 
     assert len(mine.json()) == 1
     assert theirs.json() == []
+
+
+async def test_the_guest_lookup_is_rate_limited(
+    client: httpx.AsyncClient, shop: dict[str, Product]
+) -> None:
+    """Order numbers are guessable, so the contact is the only thing in the way.
+
+    At the global 60/minute a single attacker holding a phone number walks a
+    whole day of order numbers in about three hours and reads names, addresses
+    and purchase histories. The endpoint carries its own limit.
+
+    The limiter is off for the suite - a 5/minute auth limit would reject the
+    third login any test performs - so it is switched on for this one test and
+    the counters are cleared either side of it.
+    """
+    number = (await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}])).json()[
+        "orderNumber"
+    ]
+
+    limiter.enabled = True
+    limiter.reset()
+    try:
+        statuses = [
+            (await _lookup(client, number, "599000000")).status_code
+            for _ in range(int(LOOKUP_RATE_LIMIT.split("/")[0]) + 1)
+        ]
+    finally:
+        limiter.reset()
+        limiter.enabled = False
+
+    # Every attempt is a wrong contact, so a 404 each until the limit bites.
+    assert statuses[:-1] == [404] * (len(statuses) - 1)
+    assert statuses[-1] == 429
+
+
+async def test_the_limit_does_not_reach_the_signed_in_path(
+    client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+) -> None:
+    """Reading your own orders is not a guessing game and is not throttled here."""
+    user = await make_user(db, email="reader@voltbox.ge")
+    headers = auth_header(user)
+    placed = await client.post(
+        "/api/v1/orders",
+        json={
+            "items": [{"productId": str(shop["cheap"].id), "qty": 1}],
+            "customer": CUSTOMER,
+            "paymentMethod": "cash",
+        },
+        headers=headers,
+    )
+    number = placed.json()["orderNumber"]
+
+    limiter.enabled = True
+    limiter.reset()
+    try:
+        statuses = [
+            (await client.get(f"/api/v1/orders/{number}", headers=headers)).status_code
+            for _ in range(int(LOOKUP_RATE_LIMIT.split("/")[0]) + 1)
+        ]
+    finally:
+        limiter.reset()
+        limiter.enabled = False
+
+    assert set(statuses) == {200}

@@ -67,6 +67,13 @@ jobs:
       - name: Migrations apply to an empty database
         run: alembic upgrade head
 
+      # მოდელები და მიგრაციები ერთმანეთს არ უნდა დაშორდნენ. ინდექსი, რომელსაც
+      # მიგრაცია raw SQL-ით ქმნის და მოდელი არ აცხადებს, autogenerate-ისთვის
+      # ზედმეტია — შემდეგი მიგრაცია მას წაშლიდა და არაფერი ხმამაღლა არ
+      # გატყდებოდა, უბრალოდ მოთხოვნები ნელა გახდებოდა.
+      - name: Models and migrations agree (alembic check)
+        run: alembic check
+
   # ცალკე job, განზრახ. ზემოთა `quality` დამოკიდებულებებს `.[dev]`-ით აყენებს —
   # ანუ dev-extra-ებთანაც ერთად. პროდაქშენის იმიჯი კი მხოლოდ
   # `[project.dependencies]`-ს იღებს. სწორედ ამ სხვაობაში დაიმალა

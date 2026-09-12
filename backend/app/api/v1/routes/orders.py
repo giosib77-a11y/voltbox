@@ -3,10 +3,11 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Header, status
+from fastapi import APIRouter, Header, Request, status
 
 from app.core.deps import CurrentUser, Db, OptionalUser
 from app.core.errors import ValidationError
+from app.core.rate_limit import LOOKUP_RATE_LIMIT, limiter
 from app.db.models import Order
 from app.schemas.order import (
     CreateOrderRequest,
@@ -120,7 +121,11 @@ async def list_orders(db: Db, user: CurrentUser) -> list[OrderOut]:
     ),
     response_model=OrderOut,
 )
-async def lookup_order(db: Db, user: OptionalUser, payload: OrderLookupRequest) -> OrderOut:
+@limiter.limit(LOOKUP_RATE_LIMIT)
+async def lookup_order(
+    request: Request, db: Db, user: OptionalUser, payload: OrderLookupRequest
+) -> OrderOut:
+    # `request` is what slowapi reads the client address from. Unused here.
     order = await order_service.get_by_number(
         db, payload.order_number, user=user, contact=payload.contact
     )
