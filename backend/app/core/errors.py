@@ -8,6 +8,7 @@
 ამიტომ ერთხელ დაფიქსირებული კოდი აღარ იცვლება (message-ის შეცვლა თავისუფალია).
 """
 
+import logging
 from typing import Any
 
 from fastapi import FastAPI, Request, status
@@ -15,6 +16,10 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from app.core.headers import BASE_HEADERS
+
+logger = logging.getLogger("voltbox.error")
 
 
 class AppError(Exception):
@@ -73,11 +78,23 @@ def error_body(code: str, message: str, details: Any = None) -> dict[str, Any]:
     return {"error": {"code": code, "message": message, "details": details}}
 
 
-def _with_request_id(response: JSONResponse, request: Request) -> JSONResponse:
-    """request_id პასუხშიც და header-შიც — ლოგებთან შესაბამისობისთვის."""
+def _finish(response: JSONResponse, request: Request) -> JSONResponse:
+    """request_id header-ში, და უსაფრთხოების header-ებიც.
+
+    The headers are set here as well as in SecurityHeadersMiddleware because one
+    response never passes through it: Starlette builds ServerErrorMiddleware
+    above every middleware the application adds, so an unhandled exception is
+    answered outside the stack. Every other status came back with four security
+    headers and the crash came back with none.
+
+    `setdefault` semantics are kept by writing only what is missing, so the
+    middleware stays the one authority for responses that do reach it.
+    """
     request_id = getattr(request.state, "request_id", None)
     if request_id:
         response.headers["X-Request-ID"] = request_id
+    for header, value in BASE_HEADERS.items():
+        response.headers.setdefault(header, value)
     return response
 
 
@@ -88,7 +105,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=exc.status_code,
             content=error_body(exc.code, exc.message, exc.details),
         )
-        return _with_request_id(response, request)
+        return _finish(response, request)
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(
@@ -108,7 +125,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             content=jsonable_encoder(error_body("VALIDATION_ERROR", "Invalid request", details)),
         )
-        return _with_request_id(response, request)
+        return _finish(response, request)
 
     @app.exception_handler(StarletteHTTPException)
     async def handle_http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
@@ -123,13 +140,32 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=exc.status_code,
             content=error_body(code, str(exc.detail)),
         )
-        return _with_request_id(response, request)
+        return _finish(response, request)
 
     @app.exception_handler(Exception)
     async def handle_unexpected(request: Request, exc: Exception) -> JSONResponse:
-        # დეტალები ლოგში რჩება; კლიენტს არასდროს ვუბრუნებთ stack trace-ს
+        # კლიენტს არასდროს ვუბრუნებთ stack trace-ს — ის ლოგში მიდის.
+        #
+        # This line used to be a comment and nothing else: the handler swallowed
+        # the exception and answered 500, and the traceback went nowhere. A
+        # failure in production was then a status code with no cause attached,
+        # and the request never reached the access log either, so there was not
+        # even a record that it had happened.
+        #
+        # The request id is the same one in the response header, so a customer
+        # quoting it leads straight to this line.
+        logger.exception(
+            "unhandled exception",
+            extra={
+                "extra_fields": {
+                    "request_id": getattr(request.state, "request_id", None),
+                    "method": request.method,
+                    "path": request.url.path,
+                }
+            },
+        )
         response = JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=error_body("INTERNAL_ERROR", "Internal server error"),
         )
-        return _with_request_id(response, request)
+        return _finish(response, request)

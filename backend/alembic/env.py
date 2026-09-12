@@ -19,7 +19,13 @@ from sqlalchemy.pool import NullPool
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False, or this call switches off every logger
+    # that is not named in alembic.ini - which is all of the application's own.
+    # The test suite runs migrations at session start, so voltbox.access and
+    # voltbox.error were dead for the whole run and nothing could assert on a
+    # log line. The same would happen to any process that ran a migration
+    # before serving.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 config.set_main_option("sqlalchemy.url", settings.database_url)
 target_metadata = Base.metadata

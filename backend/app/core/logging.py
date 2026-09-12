@@ -63,11 +63,25 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
 
         started = time.perf_counter()
-        response = await call_next(request)
-        duration_ms = round((time.perf_counter() - started) * 1000, 2)
+        try:
+            response = await call_next(request)
+        except Exception:
+            # Not a swallow - it is re-raised on the next line, and
+            # ServerErrorMiddleware still turns it into the 500. Without this
+            # the one request worth seeing was the one that never appeared:
+            # an exception passes straight through here, so a crash left no
+            # access line at all and a spike of 500s was invisible in the log
+            # everybody reads first. The traceback itself is written by the
+            # handler in core/errors.py, under the same request_id.
+            self._log(request, request_id, 500, started)
+            raise
 
         response.headers[REQUEST_ID_HEADER] = request_id
+        self._log(request, request_id, response.status_code, started)
+        return response
 
+    @staticmethod
+    def _log(request: Request, request_id: str, status: int, started: float) -> None:
         is_sensitive = request.url.path.startswith(SENSITIVE_PATH_PREFIXES)
         access_logger.info(
             "request",
@@ -77,9 +91,8 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                     "method": request.method,
                     "path": request.url.path,
                     "query": "" if is_sensitive else str(request.url.query),
-                    "status": response.status_code,
-                    "duration_ms": duration_ms,
+                    "status": status,
+                    "duration_ms": round((time.perf_counter() - started) * 1000, 2),
                 }
             },
         )
-        return response
