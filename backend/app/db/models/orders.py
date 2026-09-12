@@ -138,4 +138,9 @@ class OrderItem(UUIDPrimaryKey, Base):
         CheckConstraint("quantity > 0", name="quantity_positive"),
         CheckConstraint("unit_price >= 0 AND line_total >= 0", name="amounts_non_negative"),
         Index("ix_order_items_order_id", "order_id"),
+        # Postgres indexes the referenced side of a foreign key, never the
+        # referencing one. Deleting a product runs this lookup twice - once in
+        # admin_product.delete_product to report how many orders block it, and
+        # again as the RESTRICT check - and both scanned the whole table.
+        Index("ix_order_items_product_id", "product_id"),
     )
