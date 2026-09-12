@@ -1,5 +1,6 @@
 """Phase 4 — ავტორიზაციის ტესტები."""
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -8,8 +9,11 @@ import pytest
 from app.core.config import settings
 from app.core.security import decode_access_token
 from app.db.models import RefreshToken, User
+from app.db.session import get_db
+from app.main import app
+from httpx import ASGITransport
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 REGISTRATION = {
     "firstName": "ნინო",
@@ -607,3 +611,171 @@ async def test_an_ordinary_logout_does_not_sign_out_the_other_devices(
     await client.post("/api/v1/auth/logout")
 
     assert (await client.get("/api/v1/auth/me", headers=header)).status_code == 200
+
+
+# ── brute force, counted on the account ──────────────────────────────────────
+#
+# The limiter in front of /auth/login counts per IP, and a rented proxy list is
+# a thousand times that allowance against one email. The account is the one
+# thing every attempt against it has in common.
+
+
+@pytest.fixture
+async def realistic_client(db: AsyncSession) -> AsyncIterator[httpx.AsyncClient]:
+    """A client whose requests each get their own session, and roll back on error.
+
+    The shared-session client every other test uses cannot see this class of
+    bug. Its `get_db` override hands the same session to every request and never
+    rolls back, so a failed attempt keeps its changes and a missing commit looks
+    like a working one. Production opens a session per request and discards it
+    on an exception, which is exactly what has to be true for a failed sign-in
+    to still be counted.
+    """
+    connection = await db.connection()
+    factory = async_sessionmaker(
+        bind=connection, expire_on_commit=False, join_transaction_mode="create_savepoint"
+    )
+
+    async def override_get_db() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            try:
+                yield session
+            except Exception:
+                await session.rollback()
+                raise
+
+    app.dependency_overrides[get_db] = override_get_db
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as http_client:
+        yield http_client
+    app.dependency_overrides.clear()
+
+
+async def _fail_login(client: httpx.AsyncClient, times: int) -> httpx.Response:
+    response = None
+    for _ in range(times):
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"email": REGISTRATION["email"], "password": "definitely-not-it"},
+        )
+    assert response is not None
+    return response
+
+
+async def test_enough_wrong_passwords_lock_the_account(
+    realistic_client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    client = realistic_client
+    await _register(client)
+
+    await _fail_login(client, settings.max_failed_logins)
+
+    # Read back from the row, not from the instance this session is holding.
+    # A failed request is rolled back by `get_db`, so the count only survives
+    # if the route commits it - and the in-memory object would keep the
+    # increment either way, which would make this test pass without the fix.
+    user = await db.scalar(select(User).where(User.email == REGISTRATION["email"]))
+    assert user is not None
+    await db.refresh(user)
+    assert user.locked_until is not None, "the failed attempts were not recorded"
+
+    # Even the right password is refused now, and the answer says why.
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": REGISTRATION["email"], "password": REGISTRATION["password"]},
+    )
+
+    assert response.status_code == 401
+    body = response.json()["error"]
+    assert body["code"] == "TOO_MANY_LOGIN_ATTEMPTS"
+    assert body["details"]["retryAfterSeconds"] > 0
+
+
+async def test_the_lock_needs_the_whole_threshold(
+    realistic_client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """One short, and signing in still works - a typo must not cost the account."""
+    client = realistic_client
+    await _register(client)
+
+    await _fail_login(client, settings.max_failed_logins - 1)
+
+    user = await db.scalar(select(User).where(User.email == REGISTRATION["email"]))
+    assert user is not None
+    await db.refresh(user)
+    # The attempts were counted; they simply have not added up yet.
+    assert user.failed_login_count == settings.max_failed_logins - 1
+    assert user.locked_until is None
+
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": REGISTRATION["email"], "password": REGISTRATION["password"]},
+    )
+
+    assert response.status_code == 200
+
+
+async def test_signing_in_wipes_the_count(client: httpx.AsyncClient, db: AsyncSession) -> None:
+    """Getting in proves the earlier attempts were the same person forgetting."""
+    await _register(client)
+    await _fail_login(client, settings.max_failed_logins - 1)
+
+    await client.post(
+        "/api/v1/auth/login",
+        json={"email": REGISTRATION["email"], "password": REGISTRATION["password"]},
+    )
+
+    user = await db.scalar(select(User).where(User.email == REGISTRATION["email"]))
+    assert user is not None
+    await db.refresh(user)
+    assert user.failed_login_count == 0
+    assert user.locked_until is None
+
+
+async def test_a_lock_that_has_expired_lets_them_back_in(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    await _register(client)
+    await _fail_login(client, settings.max_failed_logins)
+
+    # Wind the clock forward rather than waiting fifteen minutes.
+    await db.execute(
+        update(User)
+        .where(User.email == REGISTRATION["email"])
+        .values(locked_until=datetime.now(UTC) - timedelta(seconds=1))
+        .execution_options(synchronize_session="fetch")
+    )
+    await db.commit()
+
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": REGISTRATION["email"], "password": REGISTRATION["password"]},
+    )
+
+    assert response.status_code == 200
+
+
+async def test_locking_one_account_does_not_touch_another(client: httpx.AsyncClient) -> None:
+    await _register(client)
+    await _register(client, email="untouched@example.ge")
+
+    await _fail_login(client, settings.max_failed_logins)
+
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "untouched@example.ge", "password": REGISTRATION["password"]},
+    )
+
+    assert response.status_code == 200
+
+
+async def test_an_unknown_email_still_answers_the_same_way(client: httpx.AsyncClient) -> None:
+    """No account, nothing to count - and nothing new to learn from the reply."""
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "nobody-at-all@example.ge", "password": "whatever-here"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "INVALID_CREDENTIALS"

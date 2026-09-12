@@ -37,6 +37,21 @@ class Settings(BaseSettings):
     access_token_ttl_minutes: int = 30
     refresh_token_ttl_days: int = 30
 
+    # --- brute force ----------------------------------------------------------
+    # The rate limit on /auth/login counts per IP, and an attacker renting a
+    # thousand of those gets a thousand times the allowance against one account.
+    # These count on the account instead, which every attempt has in common.
+    #
+    # Ten is far more than a person mistypes and few enough that guessing is
+    # hopeless: 10 per 15 minutes is under a thousand tries a day.
+    #
+    # The cost is that someone who knows an email can keep that account locked
+    # by failing on purpose. It is bounded - the lock expires on its own, an
+    # existing session keeps working because refresh does not go through here -
+    # and the alternative is leaving a botnet unlimited attempts.
+    max_failed_logins: int = 10
+    login_lock_minutes: int = 15
+
     # --- refresh cookie -------------------------------------------------------
     # The refresh token is the long-lived credential, so it never reaches
     # JavaScript: httpOnly means an XSS can use the session while the page is

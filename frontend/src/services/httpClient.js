@@ -47,6 +47,14 @@ const CODE_MESSAGES = {
   // "Invalid email or password" on every mistyped login, "Not enough stock"
   // when someone else took the last one first.
   INVALID_CREDENTIALS: 'ელ. ფოსტა ან პაროლი არასწორია.',
+  TOO_MANY_LOGIN_ATTEMPTS: (details) => {
+    const seconds = Number(details?.retryAfterSeconds);
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      return 'ზედიზედ ბევრი მცდელობა იყო. ცოტა ხანში სცადეთ ხელახლა.';
+    }
+    const minutes = Math.ceil(seconds / 60);
+    return `ზედიზედ ბევრი მცდელობა იყო. სცადეთ ${minutes} წუთში.`;
+  },
   INSUFFICIENT_STOCK: (details) => {
     const available = Number(details?.available);
     if (Number.isFinite(available) && available > 0) {

@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from math import ceil
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.errors import ConflictError, UnauthorizedError, ValidationError
 from app.core.security import (
     create_access_token,
@@ -88,16 +90,61 @@ async def register(
     return await _issue_session(db, user)
 
 
+def _locked_for(user: User) -> int:
+    """Seconds left on the lock, or 0. Rounded up so it never reads as "0 left"."""
+    if user.locked_until is None:
+        return 0
+    remaining = (user.locked_until - datetime.now(UTC)).total_seconds()
+    return max(0, ceil(remaining))
+
+
+async def _record_failure(db: AsyncSession, user: User) -> None:
+    """Count a wrong password, and lock the account once there are too many.
+
+    The count is on the account, not on the caller's address: the limiter in
+    front of this endpoint is per IP, and a thousand rented proxies is a
+    thousand times the allowance against one email. Every attempt against an
+    account has the account in common, and nothing else.
+    """
+    user.failed_login_count += 1
+    if user.failed_login_count >= settings.max_failed_logins:
+        user.locked_until = datetime.now(UTC) + timedelta(minutes=settings.login_lock_minutes)
+        user.failed_login_count = 0
+    await db.flush()
+
+
 async def login(db: AsyncSession, *, email: str, password: str) -> dict[str, object]:
     user = await db.scalar(select(User).where(User.email == email.strip().lower()))
 
     if user is None:
         verify_password(password, _DUMMY_HASH)  # დროის გათანაბრება
         raise UnauthorizedError(INVALID_CREDENTIALS, code="INVALID_CREDENTIALS")
+
+    # Before the hash, deliberately. Argon2 is expensive on purpose, and that
+    # cost belongs to people signing in rather than to whoever is guessing.
+    #
+    # This answer does say the account exists, which the generic one above
+    # avoids. Registration already answers that question - EMAIL_ALREADY_EXISTS
+    # - so hiding it here buys nothing, and a shopper locked out deserves to be
+    # told why rather than being left to retype a password that is correct.
+    if (locked := _locked_for(user)) > 0:
+        raise UnauthorizedError(
+            "Too many failed sign-in attempts",
+            code="TOO_MANY_LOGIN_ATTEMPTS",
+            details={"retryAfterSeconds": locked},
+        )
+
     if not verify_password(password, user.password_hash):
+        await _record_failure(db, user)
         raise UnauthorizedError(INVALID_CREDENTIALS, code="INVALID_CREDENTIALS")
     if not user.is_active:
         raise UnauthorizedError("Account is disabled", code="ACCOUNT_DISABLED")
+
+    if user.failed_login_count or user.locked_until:
+        # Getting in is the proof the attempts before it were the same person
+        # forgetting, so the slate is wiped rather than carried forward.
+        user.failed_login_count = 0
+        user.locked_until = None
 
     return await _issue_session(db, user)
 

@@ -50,6 +50,20 @@ class User(UUIDPrimaryKey, Timestamps, Base):
     #: of the two has to be guessed wrong. A version has no such edge.
     token_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
 
+    #: Consecutive failed sign-ins, cleared by a successful one. Counted on the
+    #: account rather than on the caller's address, because the rate limit in
+    #: front of `/auth/login` is per IP and a list of proxies buys as many of
+    #: those as the attacker cares to pay for - the account is the one thing
+    #: every attempt against it has in common.
+    failed_login_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+
+    #: Set once the count crosses the threshold. Until it passes, a sign-in is
+    #: refused without hashing the password, which also takes the Argon2 cost
+    #: out of an attacker's reach.
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     addresses: Mapped[list["Address"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", lazy="selectin"
     )

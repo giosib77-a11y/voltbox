@@ -14,6 +14,7 @@ from fastapi import APIRouter, Cookie, Request, Response, status
 
 from app.core.config import settings
 from app.core.deps import CurrentUser, Db
+from app.core.errors import UnauthorizedError
 from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -95,7 +96,15 @@ async def register(
 @router.post("/login", summary="Log in", response_model=SessionOut)
 @limiter.limit(AUTH_RATE_LIMIT)
 async def login(request: Request, response: Response, db: Db, payload: LoginRequest) -> SessionOut:
-    session = await auth_service.login(db, email=payload.email, password=payload.password)
+    try:
+        session = await auth_service.login(db, email=payload.email, password=payload.password)
+    except UnauthorizedError:
+        # The failed attempt has to outlive the request that failed. `get_db`
+        # rolls back on an exception, which would discard the count that decides
+        # when to lock the account - so a thousand wrong passwords would each
+        # roll back their own evidence and the lock would never arrive.
+        await db.commit()
+        raise
     await db.commit()
     return _session(session, response)
 
