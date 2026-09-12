@@ -5,6 +5,7 @@ Alembic-ის autogenerate-ს ყველა მოდელი ერთ ა
 """
 
 from app.db.models.audit import AdminAuditLog
+from app.db.models.cart import MAX_CART_ITEMS, Cart
 from app.db.models.catalog import Brand, Category, Product, ProductImage
 from app.db.models.inventory import (
     MANUAL_REASONS,
@@ -31,6 +32,7 @@ from app.db.models.users import (
 
 __all__ = [
     "MANUAL_REASONS",
+    "MAX_CART_ITEMS",
     "MOVEMENT_REASONS",
     "ORDER_STATUSES",
     "REASONS_REQUIRING_NOTE",
@@ -47,6 +49,7 @@ __all__ = [
     "Address",
     "AdminAuditLog",
     "Brand",
+    "Cart",
     "Category",
     "InventoryMovement",
     "Order",
