@@ -48,6 +48,24 @@ const EMPTY = {
   isNew: false,
 };
 
+/**
+ * The fields that have an error slot on screen.
+ *
+ * Anything else the API rejects - a negative stock threshold, an over-long spec
+ * value, too many tags - has to reach the author through the banner instead.
+ * Without this list a message mapped onto a field nobody renders counted as
+ * "handled", and the save failed in silence.
+ */
+const SHOWN_FIELDS = new Set([
+  'name',
+  'slug',
+  'sku',
+  'categoryId',
+  'brandId',
+  'price',
+  'oldPrice',
+]);
+
 /** Maps the API's error details onto field names the form knows. */
 function fieldErrorsFrom(error) {
   const details = error?.details?.details;
@@ -222,7 +240,11 @@ export default function ProductForm() {
     } catch (caught) {
       const mapped = fieldErrorsFrom(caught);
       setErrors(mapped);
-      if (!Object.keys(mapped).length) setFormError(caught);
+      // The banner is the fallback: shown when nothing could be mapped, and
+      // also when something was mapped onto a field with no slot to show it in.
+      // Otherwise the form would simply refuse to save and say nothing.
+      const keys = Object.keys(mapped);
+      if (!keys.length || keys.some((field) => !SHOWN_FIELDS.has(field))) setFormError(caught);
     } finally {
       setSaving(false);
     }
@@ -254,6 +276,10 @@ export default function ProductForm() {
   }
 
   const archived = Boolean(product?.archivedAt);
+  const missing = [
+    categories.length ? null : { to: '/admin/categories', label: 'კატეგორია' },
+    brands.length ? null : { to: '/admin/brands', label: 'ბრენდი' },
+  ].filter(Boolean);
 
   return (
     <form onSubmit={handleSubmit} noValidate>
@@ -303,6 +329,21 @@ export default function ProductForm() {
       {formError ? (
         <p role="alert" className="mb-4 rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">
           {formError.message}
+        </p>
+      ) : null}
+
+      {missing.length ? (
+        // A new shop has neither, and both selects are required. Without this
+        // the first product anybody tries to add is a form that refuses to save
+        // next to two empty dropdowns, with nothing saying why.
+        <p className="mb-4 flex flex-wrap items-center gap-1 rounded-lg bg-warning-50 px-3 py-2 text-sm text-warning-600">
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>პროდუქტს სჭირდება კატეგორიაც და ბრენდიც. ჯერ შექმენით:</span>
+          {missing.map((item) => (
+            <Link key={item.to} to={item.to} className="font-medium underline">
+              {item.label}
+            </Link>
+          ))}
         </p>
       ) : null}
 

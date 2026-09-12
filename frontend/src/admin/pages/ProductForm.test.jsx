@@ -72,6 +72,28 @@ describe('ProductForm validation', () => {
     ).toBeInTheDocument();
   });
 
+  it('says what is missing when the shop has no categories or brands yet', async () => {
+    // The state of every new shop. Both selects are required, so without this
+    // the first product anybody adds is a form that refuses to save beside two
+    // empty dropdowns.
+    adminApi.listCategories.mockResolvedValue([]);
+    adminApi.listBrands.mockResolvedValue([]);
+    renderForm();
+
+    expect(await screen.findByRole('link', { name: 'კატეგორია' })).toHaveAttribute(
+      'href',
+      '/admin/categories',
+    );
+    expect(screen.getByRole('link', { name: 'ბრენდი' })).toHaveAttribute('href', '/admin/brands');
+  });
+
+  it('says nothing of the sort once both exist', async () => {
+    renderForm();
+    await screen.findByLabelText(/კატეგორია/);
+
+    expect(screen.queryByRole('link', { name: 'კატეგორია' })).not.toBeInTheDocument();
+  });
+
   it('shows the category filter spec keys once a category is chosen', async () => {
     renderForm();
     const categorySelect = await screen.findByLabelText(/კატეგორია/);
@@ -104,6 +126,62 @@ describe('ProductForm server errors', () => {
     await userEvent.click(screen.getByRole('button', { name: 'შენახვა' }));
 
     expect(await screen.findByText('ეს SKU სხვა პროდუქტს უკვე უკავია')).toBeInTheDocument();
+  });
+
+  it('never swallows a rejection whose field the form cannot show', async () => {
+    // The form draws an error slot for seven fields. The API validates more
+    // than seven - a negative stock threshold, an over-long spec value, too
+    // many tags. Mapping one of those onto `errors.lowStockThreshold` puts the
+    // message somewhere nothing renders, and if that also counted as "handled"
+    // the save would fail in silence: no message, no navigation, nothing.
+    const rejected = Object.assign(new Error('Invalid request'), {
+      status: 400,
+      details: {
+        code: 'VALIDATION_ERROR',
+        details: [
+          { field: 'lowStockThreshold', message: 'Input should be greater than or equal to 0' },
+        ],
+      },
+    });
+    vi.spyOn(adminApi, 'createProduct').mockRejectedValue(rejected);
+
+    renderForm();
+    await screen.findByLabelText(/კატეგორია/);
+
+    await userEvent.type(screen.getByLabelText(/სახელი/), 'ტესტი');
+    await userEvent.type(screen.getByLabelText(/^ფასი/), '10');
+    await userEvent.selectOptions(screen.getByLabelText(/კატეგორია/), 'cat-1');
+    await userEvent.selectOptions(screen.getByLabelText(/ბრენდი/), 'brand-1');
+    await userEvent.click(screen.getByRole('button', { name: 'შენახვა' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid request');
+  });
+
+  it('still shows only the field message when the form can render it', async () => {
+    // The banner is the fallback, not a second copy: a message that lands on
+    // its own field must not also appear at the top of the form.
+    const rejected = Object.assign(new Error('Invalid request'), {
+      status: 400,
+      details: {
+        code: 'VALIDATION_ERROR',
+        details: [{ field: 'price', message: 'Input should be greater than or equal to 0' }],
+      },
+    });
+    vi.spyOn(adminApi, 'createProduct').mockRejectedValue(rejected);
+
+    renderForm();
+    await screen.findByLabelText(/კატეგორია/);
+
+    await userEvent.type(screen.getByLabelText(/სახელი/), 'ტესტი');
+    await userEvent.type(screen.getByLabelText(/^ფასი/), '10');
+    await userEvent.selectOptions(screen.getByLabelText(/კატეგორია/), 'cat-1');
+    await userEvent.selectOptions(screen.getByLabelText(/ბრენდი/), 'brand-1');
+    await userEvent.click(screen.getByRole('button', { name: 'შენახვა' }));
+
+    expect(
+      await screen.findByText('Input should be greater than or equal to 0'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('sends money exactly as typed, never parsed into a float', async () => {
