@@ -66,6 +66,14 @@ class Order(UUIDPrimaryKey, Timestamps, Base):
             "status IN ('pending','confirmed','processing','shipped','delivered','cancelled')",
             name="status_allowed",
         ),
+        # Both mean "on delivery" - there is no online payment - so nothing here
+        # moves money. What an arbitrary value could do is reach the admin panel
+        # reading "already paid" beside an order that is not, which is a courier
+        # handing goods over for nothing. `status` has had this from the start.
+        CheckConstraint(
+            "payment_method IN ('cash','card_on_delivery')",
+            name="payment_method_allowed",
+        ),
         # სტუმრის შეკვეთას მაინც უნდა ჰქონდეს საკონტაქტო არხი
         CheckConstraint(
             "user_id IS NOT NULL OR guest_email IS NOT NULL OR guest_phone IS NOT NULL",

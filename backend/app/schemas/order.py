@@ -8,6 +8,7 @@
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import Field
@@ -33,10 +34,19 @@ class CustomerRequest(ApiRequest):
     email: str | None = Field(default=None, max_length=255)
 
 
+#: The ways this shop can be paid. Both mean "on delivery" - there is no online
+#: payment - so nothing here moves money, and a made-up value could not steal
+#: anything. What it could do is arrive in the admin panel reading "already
+#: paid" beside an order that is not, which is a courier handing goods over for
+#: nothing. `orders.status` has had an enum from the start; this is the same
+#: idea, applied to the other field an operator acts on.
+PAYMENT_METHODS = ("cash", "card_on_delivery")
+
+
 class CreateOrderRequest(ApiRequest):
     items: list[OrderItemRequest] = Field(min_length=1, max_length=50)
     customer: CustomerRequest
-    payment_method: str = Field(default="cash", max_length=32)
+    payment_method: Literal["cash", "card_on_delivery"] = "cash"
 
 
 class OrderItemSnapshot(ApiModel):

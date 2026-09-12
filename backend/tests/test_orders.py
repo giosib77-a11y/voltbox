@@ -11,7 +11,7 @@ import httpx
 import pytest
 from app.core.rate_limit import LOOKUP_RATE_LIMIT, limiter
 from app.db.models import Product, ProductImage
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.factories import auth_header, make_brand, make_category, make_product, make_user
@@ -571,3 +571,73 @@ async def test_knowing_the_contact_does_not_open_the_signed_in_route(
     )
 
     assert response.status_code == 404
+
+
+class TestPaymentMethod:
+    """Only the two ways this shop can actually be paid.
+
+    Both mean "on delivery" - there is no online payment - so nothing here moves
+    money and a made-up value could not steal anything. What it could do is
+    arrive in the admin panel reading "already paid" beside an order that is
+    not, which is a courier handing goods over for nothing.
+
+    `status` has had an enum since the first migration. This is the same idea
+    applied to the other field an operator acts on, and it was free text from
+    the request body all the way to the order list.
+    """
+
+    @pytest.mark.parametrize("method", ["cash", "card_on_delivery"])
+    async def test_the_two_real_methods_are_accepted(
+        self, client: httpx.AsyncClient, shop: dict[str, Product], method: str
+    ) -> None:
+        response = await client.post(
+            "/api/v1/orders",
+            json={
+                "items": [{"productId": str(shop["cheap"].id), "qty": 1}],
+                "customer": CUSTOMER,
+                "paymentMethod": method,
+            },
+        )
+
+        assert response.status_code == 201
+        assert response.json()["paymentMethod"] == method
+
+    @pytest.mark.parametrize(
+        "method",
+        ["already paid", "bank_transfer", "CASH", "", "crypto", "cash "],
+    )
+    async def test_anything_else_is_refused(
+        self, client: httpx.AsyncClient, shop: dict[str, Product], method: str
+    ) -> None:
+        response = await client.post(
+            "/api/v1/orders",
+            json={
+                "items": [{"productId": str(shop["cheap"].id), "qty": 1}],
+                "customer": CUSTOMER,
+                "paymentMethod": method,
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    async def test_the_database_refuses_it_too(
+        self, db: AsyncSession, shop: dict[str, Product]
+    ) -> None:
+        """The schema is one half; this is the half that survives new code.
+
+        A second way of creating an order - a script, an admin action, a future
+        endpoint - would not go through CreateOrderRequest.
+        """
+        from sqlalchemy.exc import IntegrityError
+
+        with pytest.raises(IntegrityError):
+            await db.execute(
+                text(
+                    "INSERT INTO orders (id, order_number, status, payment_method, "
+                    "subtotal, shipping, total, customer, guest_phone) "
+                    "VALUES (gen_random_uuid(), 'VB-TEST-0001', 'pending', 'already paid', "
+                    "0, 0, 0, '{}'::jsonb, '555123456')"
+                )
+            )
+        await db.rollback()
