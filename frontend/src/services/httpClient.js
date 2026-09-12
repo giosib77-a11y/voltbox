@@ -22,6 +22,25 @@ import { getAccessToken, isAuthPath, readSession, refreshSession } from './sessi
 
 const BASE_URL = (import.meta.env?.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
+/**
+ * How long to wait before giving up on a request, in milliseconds.
+ *
+ * Long, deliberately. A free-tier host puts the API to sleep after idling and
+ * the first request afterwards waits for the process to start, so a tight
+ * deadline would turn a slow first page into a failed one.
+ */
+const REQUEST_TIMEOUT_MS = 45_000;
+
+/** An abort signal that fires after the deadline, where the browser has one. */
+function timeoutSignal() {
+  // Guarded: AbortSignal.timeout is recent enough that an older browser, or a
+  // test environment, may not have it. Without it the request simply behaves
+  // as it did before rather than throwing here.
+  return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+    ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    : undefined;
+}
+
 /** ავტორიზაციის ტოკენი — რეალურ backend-ზე httpOnly cookie სჯობს. */
 function authHeader() {
   const token = getAccessToken();
@@ -71,6 +90,68 @@ const CODE_MESSAGES = {
   INVALID_CURRENT_PASSWORD: 'მიმდინარე პაროლი არასწორია.',
   // The server text names an idempotency key, which means nothing to a shopper.
   IDEMPOTENCY_KEY_CONFLICT: 'კალათა შეიცვალა. განაახლეთ გვერდი და სცადეთ ხელახლა.',
+  INVALID_IDEMPOTENCY_KEY: 'მოთხოვნა ვერ დამუშავდა. განაახლეთ გვერდი და სცადეთ ხელახლა.',
+  INVALID_REFRESH_TOKEN: 'სესიის ვადა ამოიწურა. გთხოვთ, ხელახლა შეხვიდეთ.',
+  ADDRESS_NOT_FOUND: 'ეს მისამართი ვეღარ მოიძებნა.',
+  CART_TOO_LARGE: 'კალათაში ძალიან ბევრი პროდუქტია. წაშალეთ რამდენიმე და სცადეთ ხელახლა.',
+
+  // The generic ones. A 500 is the one anybody can meet, on any page, and it
+  // used to arrive as the English "Internal server error" - the server's own
+  // message is written for a log, not for the person reading the screen.
+  INTERNAL_ERROR: 'სერვერზე მოულოდნელი შეცდომა მოხდა. სცადეთ ცოტა ხანში.',
+  VALIDATION_ERROR: 'შეყვანილი მონაცემები არასწორია. შეამოწმეთ ველები.',
+  NOT_FOUND: 'მოთხოვნილი გვერდი ან ჩანაწერი ვერ მოიძებნა.',
+  UNAUTHORIZED: 'გასაგრძელებლად გთხოვთ შეხვიდეთ.',
+  FORBIDDEN: 'ამ მოქმედების უფლება არ გაქვთ.',
+  METHOD_NOT_ALLOWED: 'მოთხოვნა ვერ შესრულდა.',
+  CONFLICT: 'მონაცემები შეიცვალა. განაახლეთ გვერდი და სცადეთ ხელახლა.',
+
+  /* ------------------------------------------------------- ადმინ პანელი --- */
+  // The panel shows these in a banner. The forms map a few of them onto their
+  // own fields first (SKU_TAKEN next to the SKU box, and so on); these are the
+  // words for every case that reaches the banner instead, which until now was
+  // the server's English.
+  PRODUCT_IN_USE: 'პროდუქტი შეკვეთებშია და წაშლა შეუძლებელია — გადაიტანეთ არქივში.',
+  CATEGORY_IN_USE: 'კატეგორიაში პროდუქტებია. ჯერ გადაიტანეთ ისინი სხვაგან.',
+  BRAND_IN_USE: 'ბრენდს პროდუქტები აქვს. ჯერ გადაიტანეთ ისინი სხვაგან.',
+  ALREADY_ARCHIVED: 'პროდუქტი უკვე არქივშია.',
+  NOT_ARCHIVED: 'პროდუქტი არქივში არაა.',
+  CATEGORY_NOT_FOUND: 'კატეგორია ვერ მოიძებნა.',
+  BRAND_NOT_FOUND: 'ბრენდი ვერ მოიძებნა.',
+  CUSTOMER_NOT_FOUND: 'მომხმარებელი ვერ მოიძებნა.',
+  PARENT_NOT_FOUND: 'მშობელი კატეგორია ვერ მოიძებნა.',
+  CATEGORY_CYCLE: 'კატეგორია საკუთარ შვილში ვერ მოთავსდება.',
+  CATEGORY_SELF_PARENT: 'კატეგორია საკუთარი თავის მშობელი ვერ იქნება.',
+  CATEGORY_TOO_DEEP: 'ჩადგმა ძალიან ღრმაა.',
+  SKU_TAKEN: 'ეს SKU სხვა პროდუქტს უკვე უკავია.',
+  SLUG_TAKEN: 'ეს slug უკვე დაკავებულია.',
+  INVALID_SLUG: 'slug არასწორია — გამოიყენეთ ლათინური ასოები, ციფრები და დეფისი.',
+  INVALID_OLD_PRICE: 'ძველი ფასი მიმდინარეზე მაღალი უნდა იყოს.',
+  BRAND_NAME_TAKEN: 'ასეთი ბრენდი უკვე არსებობს.',
+  CANNOT_BLOCK_SELF: 'საკუთარი ანგარიშის დაბლოკვა შეუძლებელია.',
+  CANNOT_BLOCK_ADMIN: 'ადმინისტრატორის დაბლოკვა პანელიდან შეუძლებელია.',
+  INVALID_DATE: 'თარიღი არასწორია — ფორმატი: წწწწ-თთ-დდ.',
+
+  // Stock
+  EMPTY_ADJUSTMENT: 'ცვლილება ნულის ტოლი ვერ იქნება.',
+  NOTE_REQUIRED: 'ამ მიზეზისთვის კომენტარი სავალდებულოა.',
+  REASON_NOT_MANUAL: 'ეს მიზეზი ხელით არ ირჩევა — მას სისტემა წერს.',
+  UNKNOWN_REASON: 'უცნობი მიზეზი.',
+  UNKNOWN_SORT: 'უცნობი დალაგება.',
+  UNKNOWN_STATUS: 'უცნობი სტატუსი.',
+  INVALID_TRANSITION: 'ამ სტატუსიდან ასეთი გადასვლა შეუძლებელია.',
+
+  // Images
+  NO_IMAGES: 'სურათი არ აირჩა.',
+  EMPTY_FILE: 'ფაილი ცარიელია.',
+  INVALID_IMAGE: 'ფაილი სურათი არ არის.',
+  UNSUPPORTED_IMAGE_FORMAT: 'ასეთი ფორმატი არ მიიღება — გამოიყენეთ JPEG, PNG ან WebP.',
+  IMAGE_TOO_LARGE: 'სურათი ძალიან დიდია.',
+  IMAGE_TOO_MANY_PIXELS: 'სურათის გარჩევადობა ძალიან მაღალია.',
+  TOO_MANY_IMAGES: 'პროდუქტს ამაზე მეტი სურათი ვერ ექნება.',
+  IMAGE_NOT_FOUND: 'სურათი ვერ მოიძებნა.',
+  INCOMPLETE_IMAGE_ORDER: 'თანმიმდევრობაში ყველა სურათი უნდა იყოს ჩამოთვლილი.',
+  STORAGE_UPLOAD_FAILED: 'სურათის ატვირთვა ვერ მოხერხდა. სცადეთ ხელახლა.',
 };
 
 /**
@@ -135,7 +216,13 @@ export async function request(path, options = {}) {
   try {
     response = await fetch(url, {
       method,
-      signal,
+      // A caller's own signal wins. Otherwise a default deadline, because
+      // `fetch` has none: a server that accepts the connection and then never
+      // answers leaves the spinner turning for as long as the tab is open, with
+      // nothing to retry and nothing to read. Generous on purpose — the API
+      // sleeps when idle on the current host and the first request after that
+      // pays for the wake-up.
+      signal: signal ?? timeoutSignal(),
       headers: {
         // FormData-ს boundary-ს ბრაუზერი თვითონ აყენებს — ხელით მითითება ტეხს
         ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
@@ -146,7 +233,14 @@ export async function request(path, options = {}) {
       body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
     });
   } catch (cause) {
-    throw new ApiError('სერვერთან კავშირი ვერ დამყარდა', 0, cause);
+    // A deadline that ran out and a connection that never opened are different
+    // things to the reader: one is worth retrying now, the other means check
+    // the connection.
+    const message =
+      cause?.name === 'TimeoutError'
+        ? 'სერვერმა დროულად ვერ უპასუხა. სცადეთ ხელახლა.'
+        : 'სერვერთან კავშირი ვერ დამყარდა';
+    throw new ApiError(message, 0, cause);
   }
 
   // ვადაგასული ტოკენი: ერთი განახლება ყველა პარალელური მოთხოვნისთვის საერთოა

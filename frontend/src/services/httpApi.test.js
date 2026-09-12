@@ -12,6 +12,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as httpApi from './httpApi.js';
+import { request } from './httpClient.js';
 import {
   __resetSessionStateForTests,
   readSession,
@@ -511,5 +512,88 @@ describe('one refresh for a burst, one logout for a failure', () => {
     });
 
     await expect(httpApi.getProfile()).resolves.toEqual({ ok: true });
+  });
+});
+
+describe('when the server does not answer', () => {
+  it('gives up after a deadline instead of turning forever', async () => {
+    // `fetch` has no timeout of its own. A server that accepts the connection
+    // and then goes quiet used to leave the spinner running for as long as the
+    // tab stayed open, with nothing to read and nothing to retry.
+    global.fetch = vi.fn(async (_url, init) => {
+      expect(init.signal).toBeDefined();
+      const error = new Error('timed out');
+      error.name = 'TimeoutError';
+      throw error;
+    });
+
+    await expect(httpApi.getProducts()).rejects.toMatchObject({
+      status: 0,
+      message: 'სერვერმა დროულად ვერ უპასუხა. სცადეთ ხელახლა.',
+    });
+  });
+
+  it('says something different when the connection never opened', async () => {
+    global.fetch = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+
+    await expect(httpApi.getProducts()).rejects.toMatchObject({
+      status: 0,
+      message: 'სერვერთან კავშირი ვერ დამყარდა',
+    });
+  });
+
+  it("lets a caller's own signal replace the deadline", async () => {
+    // Through `request` directly: no api.js function forwards a signal today,
+    // and the rule belongs to the client rather than to any one endpoint.
+    const controller = new AbortController();
+    let seen;
+    global.fetch = vi.fn(async (_url, init) => {
+      seen = init.signal;
+      return reply({ ok: true });
+    });
+
+    await request('/products', { signal: controller.signal });
+
+    expect(seen).toBe(controller.signal);
+  });
+});
+
+describe('what the reader is told', () => {
+  it('translates the server code rather than showing its English message', async () => {
+    // The envelope's `message` is written for a log. A shopper reads Georgian.
+    global.fetch = vi.fn(async () =>
+      reply({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } }, 500),
+    );
+
+    await expect(httpApi.getProducts()).rejects.toMatchObject({
+      status: 500,
+      message: 'სერვერზე მოულოდნელი შეცდომა მოხდა. სცადეთ ცოტა ხანში.',
+    });
+  });
+
+  it('falls back to the server text only for a code it does not know', async () => {
+    global.fetch = vi.fn(async () =>
+      reply({ error: { code: 'SOMETHING_NEW', message: 'a message' } }, 500),
+    );
+
+    await expect(httpApi.getProducts()).rejects.toMatchObject({ message: 'a message' });
+  });
+
+  it('says something readable when there is no envelope at all', async () => {
+    // A proxy or a load balancer answering with HTML, for instance.
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new Error('not json');
+      },
+    }));
+
+    await expect(httpApi.getProducts()).rejects.toMatchObject({
+      status: 502,
+      message: 'მოთხოვნის დამუშავება ვერ მოხერხდა',
+    });
   });
 });
