@@ -1,7 +1,12 @@
 """Phase 4 — ავტორიზაციის ტესტები."""
 
+from datetime import UTC, datetime, timedelta
+
 import httpx
 import pytest
+from app.db.models import RefreshToken, User
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 REGISTRATION = {
     "firstName": "ნინო",
@@ -276,3 +281,117 @@ async def test_refresh_without_a_cookie_is_the_same_401_as_a_bad_one(
 
     assert missing.status_code == bad.status_code == 401
     assert missing.json() == bad.json()
+
+
+async def _families(db: AsyncSession, email: str) -> list[tuple[str, bool]]:
+    """(family, is_revoked) for every refresh token of one account."""
+    rows = (
+        await db.execute(
+            select(RefreshToken.family_id, RefreshToken.revoked_at)
+            .join(User, User.id == RefreshToken.user_id)
+            .where(User.email == email)
+            .order_by(RefreshToken.created_at)
+        )
+    ).all()
+    return [(str(r.family_id), r.revoked_at is not None) for r in rows]
+
+
+async def test_a_replayed_token_ends_the_session_it_belonged_to(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """Rotation makes theft visible; this is the part that acts on it.
+
+    A token that has been exchanged can never legitimately come back, so a
+    second appearance means two copies exist. Answering 401 and leaving the
+    thief's freshly rotated token working - which is what happened before -
+    detects the theft and then ignores it.
+    """
+    await _register(client)
+    stolen = client.cookies.get(COOKIE)
+
+    # The real client rotates normally and carries on.
+    assert (await client.post("/api/v1/auth/refresh")).status_code == 200
+    live = client.cookies.get(COOKIE)
+
+    # Outside the retry grace window, the replay is theft.
+    await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.revoked_at.is_not(None))
+        .values(revoked_at=datetime.now(UTC) - timedelta(minutes=5))
+    )
+    await db.flush()
+
+    replay = await client.post("/api/v1/auth/refresh", headers={"Cookie": f"{COOKIE}={stolen}"})
+
+    assert replay.status_code == 401
+    # And the token the thief would have rotated into is dead too.
+    after = await client.post("/api/v1/auth/refresh", headers={"Cookie": f"{COOKIE}={live}"})
+    assert after.status_code == 401
+
+    assert all(revoked for _, revoked in await _families(db, "nino@example.ge"))
+
+
+async def test_a_lost_response_is_a_retry_and_not_a_theft(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """The false positive worth avoiding.
+
+    When a refresh succeeds but its reply never arrives, the browser still
+    holds the token it spent - the Set-Cookie was in the lost reply - and its
+    next attempt looks exactly like a replay. Ending the session over a dropped
+    packet would be worse than the attack.
+    """
+    await _register(client)
+    spent = client.cookies.get(COOKIE)
+    assert (await client.post("/api/v1/auth/refresh")).status_code == 200
+    live = client.cookies.get(COOKIE)
+
+    # Immediately, i.e. inside REUSE_GRACE.
+    replay = await client.post("/api/v1/auth/refresh", headers={"Cookie": f"{COOKIE}={spent}"})
+
+    assert replay.status_code == 401
+    # The session survives: the client can still refresh with what it has.
+    assert (
+        await client.post("/api/v1/auth/refresh", headers={"Cookie": f"{COOKIE}={live}"})
+    ).status_code == 200
+
+
+async def test_one_devices_theft_does_not_sign_out_the_others(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """Families exist for this: the victim keeps the sessions that were safe."""
+    await _register(client)
+    phone = client.cookies.get(COOKIE)
+
+    # A second login is a second family - another device.
+    laptop_login = await client.post(
+        "/api/v1/auth/login", json={"email": "nino@example.ge", "password": "supersecret1"}
+    )
+    laptop = laptop_login.cookies.get(COOKIE)
+
+    # The phone's token is rotated, then the old one is replayed later.
+    await client.post("/api/v1/auth/refresh", headers={"Cookie": f"{COOKIE}={phone}"})
+    await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.revoked_at.is_not(None))
+        .values(revoked_at=datetime.now(UTC) - timedelta(minutes=5))
+    )
+    await db.flush()
+    await client.post("/api/v1/auth/refresh", headers={"Cookie": f"{COOKIE}={phone}"})
+
+    # The laptop was never in danger.
+    still_valid = await client.post(
+        "/api/v1/auth/refresh", headers={"Cookie": f"{COOKIE}={laptop}"}
+    )
+    assert still_valid.status_code == 200
+
+
+async def test_rotation_keeps_a_session_in_one_family(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    await _register(client)
+    for _ in range(3):
+        assert (await client.post("/api/v1/auth/refresh")).status_code == 200
+
+    families = {family for family, _ in await _families(db, "nino@example.ge")}
+    assert len(families) == 1

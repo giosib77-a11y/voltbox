@@ -7,7 +7,8 @@ refresh-ტოკენები rotation-on-use პრინციპით მ
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import uuid
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,11 +34,31 @@ _DUMMY_HASH = (
 )
 
 
-async def _issue_session(db: AsyncSession, user: User) -> dict[str, object]:
+#: How long after a rotation a replay of the old token is read as a retry
+#: rather than as theft.
+#:
+#: A refresh whose response never reaches the browser leaves it holding the
+#: token it already spent - the Set-Cookie was in the reply that was lost - and
+#: its next attempt looks exactly like an attacker replaying a stolen token.
+#: Treating that as theft would sign people out over a dropped packet. Ten
+#: seconds is far longer than the round trip and far shorter than any useful
+#: window for someone who has actually stolen the value.
+REUSE_GRACE = timedelta(seconds=10)
+
+
+async def _issue_session(
+    db: AsyncSession, user: User, *, family_id: uuid.UUID | None = None
+) -> dict[str, object]:
+    """A new access/refresh pair. `family_id=None` starts a new login."""
     access_token, expires_at = create_access_token(user.id)
     raw_refresh, refresh_hash, refresh_expires = generate_refresh_token()
 
-    db.add(RefreshToken(user_id=user.id, token_hash=refresh_hash, expires_at=refresh_expires))
+    token = RefreshToken(user_id=user.id, token_hash=refresh_hash, expires_at=refresh_expires)
+    # A token rotated out of an existing session stays in that session's family;
+    # a fresh login opens one. The row's own id is the family's name, which
+    # needs no separate sequence and cannot collide.
+    token.family_id = family_id or uuid.uuid4()
+    db.add(token)
     await db.flush()
 
     return {
@@ -90,6 +111,41 @@ def invalid_refresh_token() -> UnauthorizedError:
     return UnauthorizedError("Refresh token is invalid or expired", code="INVALID_REFRESH_TOKEN")
 
 
+async def _handle_possible_reuse(db: AsyncSession, token_hash: str) -> None:
+    """A spent token came back. Decide whether that means theft, and act.
+
+    Rotation is what makes theft visible: once a token has been exchanged it can
+    never legitimately be presented again, so a second appearance means two
+    copies of it exist. Noticing that and doing nothing - which is what happened
+    before - leaves the thief holding a session that keeps renewing itself.
+
+    The whole family goes, not the whole account: the person's other devices
+    were never in danger and signing them out would punish the victim. And a
+    replay inside REUSE_GRACE is left alone, because a refresh whose response
+    was lost produces exactly this shape and is not an attack.
+
+    Never raises. The caller's answer is the same 401 either way, and the reason
+    for it is not the client's business.
+    """
+    spent = await db.scalar(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+    if spent is None or spent.revoked_at is None:
+        # Unknown or merely expired: nothing to conclude from it.
+        return
+
+    if datetime.now(UTC) - spent.revoked_at <= REUSE_GRACE:
+        return
+
+    await db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.family_id == spent.family_id,
+            RefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=func.now())
+        .execution_options(synchronize_session=False)
+    )
+
+
 async def refresh(db: AsyncSession, *, raw_token: str) -> dict[str, object]:
     """Exchange a refresh token for a new session, exactly once.
 
@@ -115,7 +171,7 @@ async def refresh(db: AsyncSession, *, raw_token: str) -> dict[str, object]:
                 RefreshToken.expires_at > func.now(),
             )
             .values(revoked_at=func.now())
-            .returning(RefreshToken.user_id)
+            .returning(RefreshToken.user_id, RefreshToken.family_id)
             # Nothing in this session holds the row, so there is nothing to
             # synchronise and the extra SELECT it would cost is pointless.
             .execution_options(synchronize_session=False)
@@ -123,6 +179,7 @@ async def refresh(db: AsyncSession, *, raw_token: str) -> dict[str, object]:
     ).one_or_none()
 
     if claimed is None:
+        await _handle_possible_reuse(db, token_hash)
         raise invalid_refresh_token()
 
     user = await db.scalar(select(User).where(User.id == claimed.user_id))
@@ -131,7 +188,7 @@ async def refresh(db: AsyncSession, *, raw_token: str) -> dict[str, object]:
         # account that is re-enabled keeps the sessions it had.
         raise UnauthorizedError("Account is not available", code="ACCOUNT_DISABLED")
 
-    return await _issue_session(db, user)
+    return await _issue_session(db, user, family_id=claimed.family_id)
 
 
 async def logout(db: AsyncSession, *, raw_token: str | None) -> None:

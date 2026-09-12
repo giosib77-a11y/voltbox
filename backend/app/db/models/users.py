@@ -94,6 +94,12 @@ class RefreshToken(UUIDPrimaryKey, Base):
 
     ბაზის გაჟონვისას ნედლი ტოკენები ვერ გამოიყენება. rotation-on-use:
     გამოყენებულ ტოკენს `revoked_at` ეწერება და ახალი გაიცემა.
+
+    `family_id` ties one login to every token rotated out of it. Rotation only
+    *detects* theft if something acts on the detection: a token that has
+    already been spent turning up again means two copies of it exist. Revoking
+    that family ends the session it belongs to without touching the same
+    person's other devices, which is why the column exists at all.
     """
 
     __tablename__ = "refresh_tokens"
@@ -102,10 +108,15 @@ class RefreshToken(UUIDPrimaryKey, Base):
         PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # One value per login, inherited by every token rotated out of it.
+    family_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )
 
-    __table_args__ = (Index("ix_refresh_tokens_user_id", "user_id"),)
+    __table_args__ = (
+        Index("ix_refresh_tokens_user_id", "user_id"),
+        Index("ix_refresh_tokens_family_id", "family_id"),
+    )
