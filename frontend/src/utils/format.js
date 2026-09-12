@@ -35,10 +35,25 @@ export function formatPrice(value) {
   return `${formatNumber(value)} ${CURRENCY_SYMBOL}`;
 }
 
-/** 0.15 არა — გვაძლევს მთელ პროცენტს: (2799, 2499) → 11 */
+/**
+ * 0.15 არა — გვაძლევს მთელ პროცენტს: (2799, 2499) → 11
+ *
+ * Counted in whole tetri, which is not fussiness. Written as
+ * `((oldPrice - price) / oldPrice) * 100`, the division lands on a value the
+ * float cannot hold: (200 − 171) / 200 × 100 is 14.5 on paper and
+ * 14.499999999999998 in IEEE754, so `Math.round` answers 14 where the backend's
+ * `Decimal` answers 15. Integers up to 2^53 are exact, so scaling first removes
+ * the error rather than hiding it.
+ *
+ * The backend computes the same number in schemas/mappers.py and the storefront
+ * shows *its* value, so a disagreement here only ever surfaced in mock mode -
+ * on the demo, which is the worst place to be told a different discount.
+ */
 export function calcDiscountPercent(price, oldPrice) {
   if (!oldPrice || !price || oldPrice <= price) return 0;
-  return Math.round(((oldPrice - price) / oldPrice) * 100);
+  const tetri = Math.round(price * 100);
+  const oldTetri = Math.round(oldPrice * 100);
+  return Math.round(((oldTetri - tetri) * 100) / oldTetri);
 }
 
 /** 11 → "-11%" */
