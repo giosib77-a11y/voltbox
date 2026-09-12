@@ -32,8 +32,10 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=__version__,
         description="REST API for the VoltBox electronics store.",
-        openapi_url=None if settings.is_production else "/openapi.json",
-        docs_url=None if settings.is_production else "/docs",
+        # Off wherever the API is reachable. The schema lists every admin route
+        # with its request shape, which is a map worth not publishing.
+        openapi_url=None if settings.is_deployed else "/openapi.json",
+        docs_url=None if settings.is_deployed else "/docs",
         redoc_url=None,
         lifespan=lifespan,
     )

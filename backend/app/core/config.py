@@ -128,6 +128,17 @@ class Settings(BaseSettings):
         return self.app_env == "production"
 
     @property
+    def is_deployed(self) -> bool:
+        """Reachable from the internet, whichever of the two it calls itself.
+
+        Staging is a deployment with a public address; the only thing it does
+        not have is real customers. Anything hidden in production for being
+        reachable has to be hidden there too - `gunicorn.conf.py` already
+        treats the pair the same way.
+        """
+        return self.app_env in {"production", "staging"}
+
+    @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 

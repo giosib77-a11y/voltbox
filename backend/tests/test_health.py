@@ -1,6 +1,12 @@
 """Phase 0 — ჩონჩხის ტესტები: health, შეცდომის კონვერტი, request-id."""
 
+import inspect
+from pathlib import Path
+
 import httpx
+import pytest
+from app.core.config import Settings
+from app.main import create_app
 
 
 async def test_health_reports_ok_and_database_up(client: httpx.AsyncClient) -> None:
@@ -40,3 +46,39 @@ async def test_health_response_is_camel_case(client: httpx.AsyncClient) -> None:
     body = await client.get("/api/v1/health")
 
     assert "_" not in "".join(body.json().keys())
+
+
+class TestApiDocsExposure:
+    """`/docs` and `/openapi.json` must be off wherever the API is reachable.
+
+    The schema lists every admin route with its request shape - a map of the
+    surface worth attacking. Staging counts: it is a deployment with a public
+    address, and the only thing it lacks is real customers.
+    """
+
+    @pytest.mark.parametrize("app_env", ["production", "staging"])
+    def test_hidden_in_a_deployment(self, app_env: str) -> None:
+        settings = Settings(
+            app_env=app_env,
+            database_url="postgresql://voltbox:voltbox@localhost:55432/voltbox",
+            jwt_secret="x" * 40,
+        )
+
+        assert settings.is_deployed is True
+
+    @pytest.mark.parametrize("app_env", ["development", "test"])
+    def test_available_locally(self, app_env: str) -> None:
+        settings = Settings(
+            app_env=app_env,
+            database_url="postgresql://voltbox:voltbox@localhost:55432/voltbox",
+            jwt_secret="x" * 40,
+        )
+
+        assert settings.is_deployed is False
+
+    def test_the_app_actually_wires_it_to_the_docs_urls(self) -> None:
+        """The property is only worth anything if create_app reads it."""
+        source = Path(inspect.getfile(create_app)).read_text(encoding="utf-8")
+
+        assert "openapi_url=None if settings.is_deployed" in source
+        assert "docs_url=None if settings.is_deployed" in source
