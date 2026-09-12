@@ -58,25 +58,54 @@ token families          → როტაცია ოჯახს ინარ�
 
 ---
 
-## 1. Database / Supabase — ⬜
+## 1. Database / Supabase — 🟡 თითქმის დახურული (2026-09-12)
 
-- [ ] Production database სწორად შექმნილია
-- [ ] ყველა migration სწორად გაშვებულია
-- [ ] database schema სრულად განახლებულია
-- [ ] ყველა foreign key შემოწმებულია
-- [ ] ყველა საჭირო unique constraint შემოწმებულია
-- [ ] ყველა საჭირო index შემოწმებულია
-- [ ] Product მონაცემები სწორად ინახება
-- [ ] Category მონაცემები სწორად ინახება
-- [ ] User მონაცემები სწორად ინახება
-- [ ] Order მონაცემები სწორად ინახება
-- [ ] Cart მონაცემები სწორად ინახება
-- [ ] Stock მონაცემები სწორად ცვლილდება
-- [ ] concurrent order / stock შემცირება ტესტირებულია
-- [ ] transaction boundaries შემოწმებულია
-- [ ] connection/pool configuration შემოწმებულია
-- [ ] production backup ჩართულია
-- [ ] backup restore პროცედურაც ტესტირებულია
+- [x] Production database სწორად შექმნილია — PostgreSQL 17.6, eu-central-1
+- [ ] ყველა migration სწორად გაშვებულია — **`0006` Supabase-ზე ჯერ არ გაშვებულა**
+- [x] database schema სრულად განახლებულია — `alembic check` სუფთა (`0005`-ზე)
+- [x] ყველა foreign key შემოწმებულია — 15, ყველა მოდელს ემთხვევა
+- [x] ყველა საჭირო unique constraint შემოწმებულია — 9
+- [x] ყველა საჭირო index შემოწმებულია — 44 (+1 დაემატა)
+- [x] Product მონაცემები სწორად ინახება — `Numeric(12,2)`, 4 CHECK
+- [x] Category მონაცემები სწორად ინახება — self-FK SET NULL, unique slug
+- [x] User მონაცემები სწორად ინახება — `citext` email, unique
+- [x] Order მონაცემები სწორად ინახება — 3 CHECK, unique order_number + idempotency_key
+- [ ] Cart მონაცემები სწორად ინახება — **ბაზაში cart არ არსებობს** (იხ. ქვემოთ) → §8
+- [x] Stock მონაცემები სწორად ცვლილდება — `inventory_movements` ledger, 3 CHECK
+- [x] concurrent order / stock შემცირება ტესტირებულია — 8 ტესტი რეალურ Postgres-ზე
+- [x] transaction boundaries შემოწმებულია — თითო მოთხოვნა ერთი სესია, შეცდომაზე rollback
+- [x] connection/pool configuration შემოწმებულია — გასწორდა, იხ. ქვემოთ
+- [ ] production backup ჩართულია — **Dashboard-ში შენ უნდა შეამოწმო**
+- [x] backup restore პროცედურაც ტესტირებულია — `docs/backup-restore.md`, 0 შეუსაბამობა
+
+### რა გასწორდა
+
+| # | პრობლემა | გასწორება |
+|---|---|---|
+| 🟡 | `order_items.product_id` ინდექსის გარეშე. პროდუქტის წაშლა ცხრილს **ორჯერ** სკანირებდა (count + RESTRICT). გაზომილი: 13.6 ms → 1.25 ms 200k მწკრივზე | მიგრაცია `0006` |
+| 🟡 | `workers × (pool+overflow)` = 30/30 ბიუჯეტიდან. `WEB_CONCURRENCY=4` → 60 კავშირი, ლიმიტს გადააჭარბებდა და დატვირთვაზე შემთხვევით 500-ებს მოგვცემდა | გაშვების შემოწმება `gunicorn.conf.py`-ში |
+| 🟡 | `pg_dump`-ის შედეგი **არ აღდგებოდა**: ვერცერთი `CREATE EXTENSION` (საჭიროა citext, pg_trgm, unaccent) + PG17→PG16 შეუთავსებლობა | `docs/backup-restore.md` — გაშვებული და გადამოწმებული |
+
+### გადამოწმების მტკიცებულება
+
+```
+restore სუფთა PG17-ში, შედარება ცოცხალთან:
+  tables 13/13 · columns 129/129 · indexes 44/44
+  fkeys 15/15 · checks 12/12 · uniques 9/9 · alembic 0005/0005
+  MISMATCHES: 0
+```
+
+მიგრაცია `0006` ლოკალურად ორივე მიმართულებით გაშვებულია (upgrade + downgrade),
+`alembic check` შემდეგ სუფთაა. კავშირების დაცვის 6 ტესტი დამტკიცდა ბაგის
+დროებით დაბრუნებით.
+
+### გადატანილი სხვა სექციებში
+
+| რა | სად |
+|---|---|
+| **Cart ბაზაში არ ინახება** — მხოლოდ ბრაუზერშია. მოწყობილობებს შორის არ სინქრონდება | §8 Cart |
+| ლოკალური Postgres **16**, production **17.6** — production-ის backup ლოკალურად ვერ აღდგება; პროცედურა `docs/backup-restore.md` §3-შია | §19 Testing / CI |
+| Supabase-ის backup retention — გეგმაზეა დამოკიდებული | §21 Backup / Recovery |
 
 ---
 
