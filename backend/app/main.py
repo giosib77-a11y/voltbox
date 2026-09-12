@@ -15,6 +15,7 @@ from app import __version__
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.errors import error_body, register_exception_handlers
+from app.core.headers import SecurityHeadersMiddleware
 from app.core.logging import RequestContextMiddleware, configure_logging
 from app.core.rate_limit import limiter
 from app.db.session import engine
@@ -63,6 +64,10 @@ def create_app() -> FastAPI:
     )
     if settings.trusted_host_list != ["*"]:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_host_list)
+
+    # Added last, so it sits outermost and the headers reach error responses and
+    # CORS preflights too. A 500 is exactly when a browser should not improvise.
+    app.add_middleware(SecurityHeadersMiddleware)
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
