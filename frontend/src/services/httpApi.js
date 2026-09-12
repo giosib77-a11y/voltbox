@@ -205,5 +205,46 @@ export async function deleteAddress(id) {
   return request(`/addresses/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+/* --- cart ------------------------------------------------------------------ */
+//
+// The browser stays the source of truth while shopping: every `+` and `-` is
+// local and instant, and these calls are the copy that follows a signed-in
+// shopper between devices. Only the id and quantity travel - the server reads
+// the name, price and image back from the catalogue, so a saved cart can never
+// quote a stale price.
+
+/** Lines as the API takes them: everything else in a cart entry is local. */
+function cartPayload(items = []) {
+  return {
+    items: items.map((item) => ({ productId: item.productId, qty: item.qty })),
+  };
+}
+
+// GET /cart
+export async function getCart() {
+  const { items } = await request('/cart');
+  return items;
+}
+
+// PUT /cart
+export async function saveCart(items) {
+  const { items: saved } = await request('/cart', { method: 'PUT', body: cartPayload(items) });
+  return saved;
+}
+
+// POST /cart/merge — for signing in with a basket already in this browser
+export async function mergeCart(items) {
+  const { items: merged } = await request('/cart/merge', {
+    method: 'POST',
+    body: cartPayload(items),
+  });
+  return merged;
+}
+
+// DELETE /cart
+export async function clearCart() {
+  return request('/cart', { method: 'DELETE' });
+}
+
 export const implementation = 'http';
 export { ApiError, AuthError, ConflictError, NotFoundError, ValidationError } from './errors.js';

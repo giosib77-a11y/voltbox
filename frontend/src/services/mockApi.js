@@ -421,6 +421,74 @@ export async function deleteAddress(id) {
   return next.filter((a) => a.userId === session.user.id);
 }
 
+/* --- cart ------------------------------------------------------------------ */
+//
+// The same contract as the HTTP layer, so CartContext does not need to know
+// which one it is talking to. There is no second device to sync with in mock
+// mode, so the "saved" cart is simply another key in this browser - what it
+// proves is that the calls are made at the right moments.
+
+const SAVED_CART_KEY = 'voltbox-mock-saved-cart';
+
+/** Ids and quantities, priced from the catalogue - exactly as the API answers. */
+function resolveCart(entries = []) {
+  return entries
+    .map(({ productId, qty }) => {
+      const product = rawProducts.find((p) => p.id === productId);
+      if (!product) return null;
+      return {
+        productId,
+        qty: Math.min(qty, product.stock || qty),
+        snapshot: {
+          name: product.name,
+          slug: product.slug,
+          image: product.images?.[0] ?? '',
+          price: String(product.price),
+          oldPrice: product.oldPrice ? String(product.oldPrice) : null,
+          stock: product.stock,
+        },
+      };
+    })
+    .filter(Boolean);
+}
+
+const readSavedCart = () => readJSON(SAVED_CART_KEY, []);
+const writeSavedCart = (entries) => writeJSON(SAVED_CART_KEY, entries);
+const asEntries = (items = []) => items.map(({ productId, qty }) => ({ productId, qty }));
+
+export async function getCart() {
+  await delay();
+  requireSession();
+  return resolveCart(readSavedCart());
+}
+
+export async function saveCart(items) {
+  await delay();
+  requireSession();
+  const entries = asEntries(items);
+  writeSavedCart(entries);
+  return resolveCart(entries);
+}
+
+export async function mergeCart(items) {
+  await delay();
+  requireSession();
+  // The larger quantity, never the sum - see services/cart.py for why.
+  const merged = new Map(readSavedCart().map((e) => [e.productId, e.qty]));
+  for (const { productId, qty } of asEntries(items)) {
+    merged.set(productId, Math.max(merged.get(productId) ?? 0, qty));
+  }
+  const entries = [...merged].map(([productId, qty]) => ({ productId, qty }));
+  writeSavedCart(entries);
+  return resolveCart(entries);
+}
+
+export async function clearCart() {
+  await delay();
+  requireSession();
+  writeSavedCart([]);
+}
+
 /** დიაგნოსტიკისთვის — რომელი იმპლემენტაცია მუშაობს. */
 export const implementation = 'mock';
 export { ApiError, AuthError, ConflictError, NotFoundError, ValidationError } from './errors.js';

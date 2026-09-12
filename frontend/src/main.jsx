@@ -6,6 +6,7 @@ import ErrorBoundary from './components/common/ErrorBoundary.jsx';
 import { ToastProvider } from './context/ToastContext.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { CartProvider } from './context/CartContext.jsx';
+import CartAccountSync from './context/CartAccountSync.jsx';
 
 import './index.css';
 
@@ -15,6 +16,7 @@ createRoot(document.getElementById('root')).render(
       <ToastProvider>
         <AuthProvider>
           <CartProvider>
+            <CartAccountSync />
             <App />
           </CartProvider>
         </AuthProvider>

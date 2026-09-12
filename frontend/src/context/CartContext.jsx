@@ -2,6 +2,32 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import { STORAGE_KEYS } from '../constants/index.js';
 import { readJSON, writeJSON } from '../utils/storage.js';
 import { calcTotals } from '../utils/pricing.js';
+import * as api from '../services/api.js';
+
+/**
+ * How long to wait before pushing a change to the account.
+ *
+ * Holding `+` on a quantity is a burst of states, and every one of them is a
+ * cart worth saving only if it is the last. The local cart is written
+ * immediately regardless, so nothing on screen waits for this.
+ */
+const SAVE_DEBOUNCE_MS = 800;
+
+/** API lines -> the shape the reducer stores. */
+function fromApi(lines = []) {
+  return lines.map((line) => ({
+    productId: line.productId,
+    qty: line.qty,
+    snapshot: {
+      name: line.snapshot?.name ?? '',
+      slug: line.snapshot?.slug ?? '',
+      image: line.snapshot?.image ?? '',
+      price: Number(line.snapshot?.price) || 0,
+      oldPrice: line.snapshot?.oldPrice ? Number(line.snapshot.oldPrice) : null,
+      stock: Number(line.snapshot?.stock) || 0,
+    },
+  }));
+}
 
 /**
  * კალათა — Context + useReducer.
@@ -123,6 +149,11 @@ export function cartReducer(state, action) {
 export function CartProvider({ children }) {
   const [state, dispatch] = useReducer(cartReducer, initialState);
   const hydratedRef = useRef(false);
+  // Read inside a callback that must not re-create itself on every change.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  // Whether an account is signed in and therefore worth saving to.
+  const savingRef = useRef(false);
 
   // ჰიდრაცია mount-ზე
   useEffect(() => {
@@ -145,6 +176,52 @@ export function CartProvider({ children }) {
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
+
+  /**
+   * Sign-in: fold this browser's basket into the one saved on the account.
+   *
+   * Merged rather than replaced in either direction, because both can be real -
+   * something added here before signing in, and something added last week on a
+   * phone. Whichever direction "won" would throw the other away without asking.
+   *
+   * A failure is swallowed on purpose. The cart in this browser is untouched
+   * either way, and an error toast about syncing is not what somebody who just
+   * signed in needs to read.
+   */
+  const mergeWithAccount = useCallback(async () => {
+    try {
+      const merged = await api.mergeCart(stateRef.current.items);
+      dispatch({ type: ACTIONS.HYDRATE, payload: fromApi(merged) });
+      savingRef.current = true;
+    } catch {
+      /* the local cart stands, and nothing is pushed to an account */
+    }
+  }, []);
+
+  /**
+   * Sign-out: stop writing to the account, and empty the cart in this browser.
+   *
+   * Emptying is the point. The cart is saved on the account now, so nothing is
+   * lost - and leaving it on screen would show the next person to use a shared
+   * computer what the last one was about to buy.
+   */
+  const detachFromAccount = useCallback(() => {
+    savingRef.current = false;
+    dispatch({ type: ACTIONS.CLEAR });
+  }, []);
+
+  // Push local changes to the account, once signed in. Skipped before hydration
+  // for the same reason the localStorage write is: an empty initial state must
+  // not overwrite a real cart.
+  useEffect(() => {
+    if (!state.hydrated || !savingRef.current) return undefined;
+    const timer = setTimeout(() => {
+      api.saveCart(state.items).catch(() => {
+        /* the local cart is authoritative while shopping */
+      });
+    }, SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [state.items, state.hydrated]);
 
   const addItem = useCallback((product, qty = 1) => {
     dispatch({ type: ACTIONS.ADD, payload: { product, qty } });
@@ -199,6 +276,8 @@ export function CartProvider({ children }) {
 
   const value = useMemo(
     () => ({
+      mergeWithAccount,
+      detachFromAccount,
       items: state.items,
       hydrated: state.hydrated,
       itemsCount: totals.itemsCount,
@@ -213,7 +292,19 @@ export function CartProvider({ children }) {
       clear,
       restoreItem,
     }),
-    [state.items, state.hydrated, totals, quantities, addItem, removeItem, setQty, clear, restoreItem],
+    [
+      state.items,
+      state.hydrated,
+      totals,
+      quantities,
+      addItem,
+      removeItem,
+      setQty,
+      clear,
+      restoreItem,
+      mergeWithAccount,
+      detachFromAccount,
+    ],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
