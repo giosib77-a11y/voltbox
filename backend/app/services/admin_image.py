@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.db.models import OrderItem, Product, ProductImage
-from app.services.storage import StorageBackend, object_key, validate_image
+from app.services.storage import StorageBackend, object_key, shrink_to_fit, validate_image
 
 MAX_IMAGES_PER_PRODUCT = 12
 
@@ -60,7 +60,12 @@ async def add_image(
             code="TOO_MANY_IMAGES",
         )
 
-    _, extension = validate_image(data, declared_type)
+    image_format, extension = validate_image(data, declared_type)
+    # Stored at a sane size rather than at whatever the camera produced. A
+    # product photo straight off a phone is several megabytes and is rendered
+    # into a card a few hundred pixels wide; the shopper paid for the difference
+    # on every page.
+    data = shrink_to_fit(data, image_format)
     key = object_key(product_id, extension)
     url = await storage.upload(key, data, CONTENT_TYPES[extension])
 
