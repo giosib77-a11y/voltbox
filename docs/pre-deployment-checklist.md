@@ -113,17 +113,51 @@ restore სუფთა PG17-ში, შედარება ცოცხალ
 
 ---
 
-## 2. Environment Variables / Secrets — ⬜
+## 2. Environment Variables / Secrets — ✅ დახურულია (2026-09-12)
 
-- [ ] Development და Production environment-ები გამიჯნულია
-- [ ] ყველა საჭირო env variable ჩამოწერილია
-- [ ] production secrets GitHub-ში არ არის
-- [ ] `.env` ფაილები repository-ში არ არის — *(ნაწილობრივ: §0-ში frontend/.env მოიხსნა)*
-- [ ] API keys დაცულია
-- [ ] JWT/session secrets დაცულია
-- [ ] database credentials დაცულია
-- [ ] frontend-ში secret მნიშვნელობები არ ხვდება
-- [ ] production configuration values განახლებულია
+- [x] Development და Production environment-ები გამიჯნულია — გასწორდა, იხ. ქვემოთ
+- [x] ყველა საჭირო env variable ჩამოწერილია — 32 პარამეტრიდან 27 `.env.example`-ში
+- [x] production secrets GitHub-ში არ არის — **მთელი ისტორია** შემოწმებულია
+- [x] `.env` ფაილები repository-ში არ არის — `backend/.env` და `frontend/.env` (§0)
+- [x] API keys დაცულია — `SUPABASE_SERVICE_ROLE_KEY` მხოლოდ backend-ზე
+- [x] JWT/session secrets დაცულია — ისტორიაში ნამდვილი მნიშვნელობა არასოდეს ყოფილა
+- [x] database credentials დაცულია — ისტორიაში მხოლოდ `voltbox:voltbox` (ლოკალური/CI)
+- [x] frontend-ში secret მნიშვნელობები არ ხვდება — ბანდლი შემოწმებულია
+- [x] production configuration values განახლებულია — გასწორდა, იხ. ქვემოთ
+
+### რა გასწორდა
+
+| # | პრობლემა | გასწორება |
+|---|---|---|
+| 🔴 | `APP_ENV` დაყენების დავიწყება **ხუთივე დაცვას ერთდროულად ხსნიდა**: `/docs` საჯარო, cookie `Secure`-ის გარეშე, storage მეხსიერებაში, proxy-ისა და pool-ის შემოწმებები გამოტოვებული — და საიტი მაინც მუშაობდა | `gunicorn.conf.py` ჩერდება; ლოკალურ გაშვებას `ALLOW_NON_PRODUCTION_SERVER=1` სჭირდება |
+| 🟡 | `/docs` და `/openapi.json` **staging-ზე საჯარო იყო** — `is_production` მხოლოდ `production`-ს ცნობდა | ახალი `is_deployed` — staging-იც დეპლოია |
+| 🟡 | 12 პარამეტრი მხოლოდ კოდში არსებობდა, მათ შორის `TRUSTED_HOSTS=*`, `DB_SSL_MODE`, `DB_ECHO` | `.env.example` შევსებულია, თითოეულთან რისკის ახსნით |
+
+### გადამოწმების მტკიცებულება
+
+```
+git log --all -p  →  ვერცერთი ნამდვილი პაროლი, გასაღები ან JWT_SECRET
+CI workflows      →  secrets.* საერთოდ არ გამოიყენება
+frontend dist/    →  არც VITE_ სახელი, არც Supabase, არც გასაღები
+                     API base = "/api/v1" — ბრაუზერი Supabase-ს არ ხედავს
+
+APP_ENV=development  /docs: True    ← ლოკალური
+APP_ENV=staging      /docs: False
+APP_ENV=production   /docs: False
+
+gunicorn, APP_ENV დაუყენებელი  →  REFUSED
+gunicorn, APP_ENV=production   →  STARTED
+```
+
+12 ახალი ტესტი დამტკიცდა ორივე დაცვის დროებით მოხსნით — 6 ჩავარდა, დაბრუნებაზე გაიარა.
+
+### გადატანილი სხვა სექციებში
+
+| რა | სად |
+|---|---|
+| `TRUSTED_HOSTS=*` — Host-ის შემოწმება გამორთულია (ახლა დოკუმენტირებულია, მაგრამ დეპლოიზე უნდა დაყენდეს) | §4 Security |
+| `DB_SSL_MODE=require` — შიფრავს, სერვერს არ ამოწმებს. `verify-full` ითხოვს CA-ს ჩამოტვირთვას | §4 Security |
+| `CORS_ORIGINS` დეპლოიზე რეალური დომენით | §24 Domain / Deployment |
 
 ---
 
