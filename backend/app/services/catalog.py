@@ -10,7 +10,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Select, and_, func, select
+from sqlalchemy import Select, Text, and_, cast, func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
@@ -180,15 +180,31 @@ async def compute_facets(
     ფილტრის გათვალისწინებით. ასე ერთი ჯგუფის შიგნით ოფციები არჩევისას არ ქრება
     და მომხმარებელს ჩანს, რას მიიღებდა სხვა არჩევანით.
     """
-    values: dict[str, dict[str, int]] = {}
+    # Every group is initialised, because a group with no matching rows returns
+    # nothing from the query below and the caller expects a key for each filter.
+    values: dict[str, dict[str, int]] = {str(c["key"]): {} for c in filter_config}
 
+    # One statement for every group, not one per group. Each carries its own
+    # WHERE - the counts for a group deliberately ignore that group's own
+    # selection - so they cannot share a query, but UNION ALL still puts them in
+    # a single round trip. That is what actually costs: the database answers
+    # each of these in single-digit milliseconds and the trip to it takes a
+    # hundred, so five groups meant half a second of waiting and nothing else.
+    parts = []
     for config in filter_config:
         key = str(config["key"])
         column = _column_for(key)
         conditions = collect_conditions(filter_config, query_params, skip_key=key)
 
         stmt = (
-            select(column.label("value"), func.count(Product.id).label("hits"))
+            select(
+                # A literal per branch, so one result set can carry them all.
+                # Cast because UNION requires the branches to agree on types and
+                # `specs ->> key` is text while a brand name is varchar.
+                cast(literal(key), Text).label("facet"),
+                cast(column, Text).label("value"),
+                func.count(Product.id).label("hits"),
+            )
             .select_from(Product)
             .join(Brand, Product.brand_id == Brand.id)
             .join(Category, Product.category_id == Category.id)
@@ -197,15 +213,44 @@ async def compute_facets(
         )
         for condition in conditions + extra_conditions:
             stmt = stmt.where(condition)
+        parts.append(stmt)
 
-        rows = (await db.execute(stmt)).all()
-        values[key] = {str(row.value): int(row.hits) for row in rows if row.value is not None}
+    if parts:
+        combined = parts[0] if len(parts) == 1 else union_all(*parts)
+        for row in (await db.execute(combined)).all():
+            if row.value is not None:
+                values[str(row.facet)][str(row.value)] = int(row.hits)
 
     # ფასის საზღვრები: min/max — მთელი (გაფილტრული) ნაკრებისა, სლაიდერის დიაპაზონისთვის;
-    # current* — მიმდინარე შედეგისა
+    # current* — მიმდინარე შედეგისა.
+    #
+    # Both in one statement. The current set is the slider's set narrowed by the
+    # price filter and nothing else, so the narrower pair is the same aggregate
+    # under a FILTER clause rather than a second trip to the database for a
+    # query that reads the same rows.
     bounds_conditions = collect_conditions(filter_config, query_params, skip_key="price")
+    price_only = [
+        condition
+        for condition in collect_conditions(filter_config, query_params)
+        if condition not in bounds_conditions
+    ]
+
+    # Annotated loosely: `.filter()` returns a FunctionFilter, not the Function
+    # it was called on, so the two branches have genuinely different types.
+    current_min_expr: ColumnElement[Any] = func.min(Product.price)
+    current_max_expr: ColumnElement[Any] = func.max(Product.price)
+    if price_only:
+        narrowing = and_(*price_only)
+        current_min_expr = current_min_expr.filter(narrowing)
+        current_max_expr = current_max_expr.filter(narrowing)
+
     price_stmt = (
-        select(func.min(Product.price), func.max(Product.price))
+        select(
+            func.min(Product.price).label("overall_min"),
+            func.max(Product.price).label("overall_max"),
+            current_min_expr.label("current_min"),
+            current_max_expr.label("current_max"),
+        )
         .select_from(Product)
         .join(Brand, Product.brand_id == Brand.id)
         .join(Category, Product.category_id == Category.id)
@@ -213,18 +258,10 @@ async def compute_facets(
     )
     for condition in bounds_conditions + extra_conditions:
         price_stmt = price_stmt.where(condition)
-    overall_min, overall_max = (await db.execute(price_stmt)).one()
 
-    current_stmt = (
-        select(func.min(Product.price), func.max(Product.price))
-        .select_from(Product)
-        .join(Brand, Product.brand_id == Brand.id)
-        .join(Category, Product.category_id == Category.id)
-        .where(Product.is_active.is_(True))
-    )
-    for condition in collect_conditions(filter_config, query_params) + extra_conditions:
-        current_stmt = current_stmt.where(condition)
-    current_min, current_max = (await db.execute(current_stmt)).one()
+    prices = (await db.execute(price_stmt)).one()
+    overall_min, overall_max = prices.overall_min, prices.overall_max
+    current_min, current_max = prices.current_min, prices.current_max
 
     return {
         "values": values,
