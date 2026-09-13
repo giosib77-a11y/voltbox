@@ -15,7 +15,34 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+Georgian:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <link rel="canonical" href="__SITE_URL__/" />
     <title>VoltBox — ელექტრონიკის აქსესუარები</title>
+
+    <!--
+      What a shared link looks like.
+
+      These are static on purpose. Facebook, Messenger, Viber and Telegram do
+      not run JavaScript, so anything React sets later is invisible to them -
+      a link pasted into a chat showed a bare URL with no title, no text and no
+      picture. What is here is the shop's own card, which every page falls back
+      to. Per-product previews would need the page rendered on a server; that
+      decision is recorded in the checklist.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="VoltBox" />
+    <meta property="og:locale" content="ka_GE" />
+    <meta property="og:url" content="__SITE_URL__/" />
+    <meta property="og:title" content="VoltBox — ელექტრონიკის აქსესუარები" />
+    <meta
+      property="og:description"
+      content="ტელეფონები, კაბელები, დამტენები, Power Bank-ები და ყურსასმენები — ერთ სივრცეში."
+    />
+    <!-- PNG, not the site's SVG favicon: no chat app renders SVG in a preview. -->
+    <meta property="og:image" content="__SITE_URL__/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="VoltBox — ელექტრონიკა და აქსესუარები" />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="root"></div>
