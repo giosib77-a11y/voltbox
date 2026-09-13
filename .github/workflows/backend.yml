@@ -2,9 +2,16 @@ name: backend
 
 on:
   push:
-    paths: ["backend/**", ".github/workflows/backend.yml"]
+    paths: &backend-paths
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+      # tests/test_error_messages.py reads this file: it asserts that every
+      # error code the API can send has Georgian text on the other side. A
+      # frontend-only change that removed one would not have run this job, and
+      # the guard would have been silent about exactly the change it exists for.
+      - "frontend/src/services/httpClient.js"
   pull_request:
-    paths: ["backend/**", ".github/workflows/backend.yml"]
+    paths: *backend-paths
 
 defaults:
   run:
@@ -16,7 +23,11 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16-alpine
+        # 17, because that is what Supabase runs. CI used to test against 16
+        # while production was 17.6, so any behaviour that differs between the
+        # two would have passed here and failed there - which is the one place
+        # a version gap is guaranteed to be expensive.
+        image: postgres:17-alpine
         env:
           POSTGRES_USER: voltbox
           POSTGRES_PASSWORD: voltbox
