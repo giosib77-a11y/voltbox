@@ -10,6 +10,7 @@ const Select = forwardRef(function Select(
     label,
     options = [],
     error = '',
+    hint = '',
     required = false,
     placeholder = '',
     className = '',
@@ -20,6 +21,12 @@ const Select = forwardRef(function Select(
 ) {
   const generatedId = useId();
   const id = providedId || generatedId;
+  const errorId = `${id}-error`;
+  const hintId = `${id}-hint`;
+
+  // Without this a reader announces "invalid" and stops: the sentence saying
+  // why is on screen a few pixels below and belongs to nothing.
+  const describedBy = [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(' ');
 
   return (
     <div className="w-full">
@@ -35,6 +42,7 @@ const Select = forwardRef(function Select(
           id={id}
           required={required}
           aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy || undefined}
           className={[
             'h-11 w-full appearance-none rounded-control border bg-white pl-3.5 pr-10 text-sm text-ink-900',
             'transition-colors focus:outline-none focus:ring-2',
@@ -63,7 +71,17 @@ const Select = forwardRef(function Select(
           aria-hidden="true"
         />
       </div>
-      {error && <p className="mt-1.5 text-xs font-medium text-danger-600">{error}</p>}
+      {error ? (
+        <p id={errorId} className="mt-1.5 text-xs font-medium text-danger-600">
+          {error}
+        </p>
+      ) : (
+        hint && (
+          <p id={hintId} className="mt-1.5 text-xs text-ink-500">
+            {hint}
+          </p>
+        )
+      )}
     </div>
   );
 });

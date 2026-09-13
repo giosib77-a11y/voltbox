@@ -7,6 +7,12 @@ const Textarea = forwardRef(function Textarea(
 ) {
   const generatedId = useId();
   const id = providedId || generatedId;
+  const errorId = `${id}-error`;
+  const hintId = `${id}-hint`;
+
+  // Same reason as Input: `aria-invalid` alone tells a reader that something is
+  // wrong without telling it what.
+  const describedBy = [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(' ');
 
   return (
     <div className="w-full">
@@ -22,6 +28,7 @@ const Textarea = forwardRef(function Textarea(
         rows={rows}
         required={required}
         aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy || undefined}
         className={[
           'w-full rounded-control border bg-white px-3.5 py-2.5 text-sm text-ink-900 transition-colors',
           'placeholder:text-ink-500 focus:outline-none focus:ring-2',
@@ -35,9 +42,15 @@ const Textarea = forwardRef(function Textarea(
         {...rest}
       />
       {error ? (
-        <p className="mt-1.5 text-xs font-medium text-danger-600">{error}</p>
+        <p id={errorId} className="mt-1.5 text-xs font-medium text-danger-600">
+          {error}
+        </p>
       ) : (
-        hint && <p className="mt-1.5 text-xs text-ink-500">{hint}</p>
+        hint && (
+          <p id={hintId} className="mt-1.5 text-xs text-ink-500">
+            {hint}
+          </p>
+        )
       )}
     </div>
   );
