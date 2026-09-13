@@ -11,6 +11,9 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
+# `vitest run --coverage` writes here. A report is a measurement of one moment,
+# not a fact about the project, and it is regenerated in a second.
+frontend/coverage/
 # ბილდის გადამრთველები საიდუმლო არაა, მაგრამ `.env` ისაა, სადაც საიდუმლო
 # ბუნებრივად ეწერება. ნიმუშისთვის: frontend/.env.example
 frontend/.env
