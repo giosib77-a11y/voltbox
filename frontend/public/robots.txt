@@ -1,0 +1,22 @@
+# VoltBox
+
+# Nothing here is secret - `require_admin` and the session decide that, not this
+# file. What it does is keep pages with no public value out of the index: an
+# admin login form ranking for the shop's name looks like a break-in, and a
+# crawler walking checkout wastes the budget that should go to products.
+User-agent: *
+Disallow: /admin
+Disallow: /checkout
+Disallow: /account
+Disallow: /cart
+
+# Search results are endless combinations of the same products. Letting them be
+# indexed splits a product's ranking across pages that all say the same thing.
+Disallow: /search?
+
+Allow: /
+
+# The sitemap lives on the API, which is the only side that knows what is in
+# the catalogue. The line needs the real host and is filled in at deploy -
+# see docs/pre-deployment-checklist.md §15.
+# Sitemap: https://<api host>/sitemap.xml

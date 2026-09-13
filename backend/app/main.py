@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse
 
 from app import __version__
 from app.api.v1.router import api_router
+from app.api.v1.routes import sitemap
 from app.core.config import settings
 from app.core.errors import error_body, register_exception_handlers
 from app.core.headers import SecurityHeadersMiddleware
@@ -82,6 +83,10 @@ def create_app() -> FastAPI:
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
+    # Outside the versioned prefix on purpose: a crawler looks for /sitemap.xml
+    # and nowhere else, and the file is part of the site's contract rather than
+    # part of the API.
+    app.include_router(sitemap.router)
     return app
 
 

@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://localhost:4173"
     trusted_hosts: str = "*"
 
+    #: Where the shop lives, as a visitor types it. Every URL in the sitemap is
+    #: built from this, so a wrong value publishes a map of pages that do not
+    #: exist. No trailing slash.
+    site_url: str = "http://localhost:5173"
+
     # --- rate limiting --------------------------------------------------------
     # Empty means in-process counters. Those are per worker, so with the two
     # gunicorn workers the Dockerfile starts, "5 logins per minute" silently
