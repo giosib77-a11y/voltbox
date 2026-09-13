@@ -18,7 +18,7 @@ import ErrorState from '../../components/common/ErrorState.jsx';
 import Skeleton from '../../components/common/Skeleton.jsx';
 import ProductImage from '../../components/common/ProductImage.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
-import { ORDER_STATUSES, OrderStatusBadge } from '../statuses.jsx';
+import { ORDER_STATUSES, PAYMENT_METHODS, OrderStatusBadge } from '../statuses.jsx';
 import { dateTime, money } from '../format.js';
 import * as adminApi from '../adminApi.js';
 
@@ -170,7 +170,7 @@ export default function OrderDetail() {
           <section className="rounded-xl border border-ink-200 bg-white p-4 text-sm">
             <h2 className="mb-2 text-sm font-semibold text-ink-900">გადახდა</h2>
             <p className="text-ink-700">
-              {order.paymentMethod === 'cash' ? 'ნაღდი მიწოდებისას' : order.paymentMethod}
+              {PAYMENT_METHODS[order.paymentMethod] || order.paymentMethod}
             </p>
           </section>
         </aside>

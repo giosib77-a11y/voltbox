@@ -17,6 +17,19 @@ export const ORDER_STATUSES = {
   cancelled: { label: 'გაუქმებული', className: 'bg-danger-50 text-danger-700' },
 };
 
+/**
+ * How an order will be paid, in the operator's words.
+ *
+ * Short on purpose - the shop says "ნაღდი ანგარიშსწორება მიღებისას" to a
+ * customer choosing; the person packing a box needs to know what the courier
+ * collects. Both methods are here, which they were not: the detail page had a
+ * ternary on 'cash' and printed the raw `card_on_delivery` for the other one.
+ */
+export const PAYMENT_METHODS = {
+  cash: 'ნაღდი მიწოდებისას',
+  card_on_delivery: 'ბარათით კურიერთან',
+};
+
 export const MOVEMENT_REASONS = {
   initial: 'საწყისი მარაგი',
   restock: 'შევსება',
