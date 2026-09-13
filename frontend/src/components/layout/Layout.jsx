@@ -14,8 +14,16 @@ import { useCategories } from '../../hooks/useProducts.js';
 export default function Layout() {
   const { data: categories } = useCategories();
 
+  // min-h-dvh behind a @supports guard, with 100vh as the fallback.
+  //
+  // On mobile Safari and Chrome, 100vh is the height of the viewport with the
+  // browser chrome hidden, which is taller than what is actually on screen - so
+  // a short page (an empty cart, a 404) ends up a little taller than the phone
+  // and scrolls for no reason. `dvh` is the visible height. The guard keeps the
+  // old behaviour on a browser that does not know the unit, where dropping to
+  // `auto` would let the footer float up the page.
   return (
-    <div className="flex min-h-screen flex-col bg-ink-50">
+    <div className="flex min-h-screen flex-col bg-ink-50 [@supports(min-height:100dvh)]:min-h-[100dvh]">
       <a href="#main-content" className="skip-link">
         მთავარ კონტენტზე გადასვლა
       </a>
