@@ -14,6 +14,7 @@ import ProductGrid from '../components/product/ProductGrid.jsx';
 import { useCatalogParams } from '../hooks/useQueryParams.js';
 import { useCategories, useProducts } from '../hooks/useProducts.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
+import { usePageMeta } from '../hooks/usePageMeta.js';
 import { countActiveFilters } from '../utils/filter.js';
 import { formatItemsCount, formatNumber } from '../utils/format.js';
 import { PAGE_SIZE, TEXT } from '../constants/index.js';
@@ -44,6 +45,10 @@ export default function Category() {
   const { data, loading, error, reload } = useProducts(params, { skip: !category });
 
   useDocumentTitle(category ? category.name : 'კატალოგი');
+  usePageMeta({
+    description: category?.description || undefined,
+    canonical: category ? `/category/${category.slug}` : '/category',
+  });
 
 
   if (!categoriesLoading && !category) {

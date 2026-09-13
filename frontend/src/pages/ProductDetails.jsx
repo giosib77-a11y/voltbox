@@ -14,6 +14,7 @@ import QuantityStepper from '../components/cart/QuantityStepper.jsx';
 import ProductCarousel from '../components/product/ProductCarousel.jsx';
 import { useProduct, useRelatedProducts, useCategories } from '../hooks/useProducts.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
+import { productStructuredData, usePageMeta } from '../hooks/usePageMeta.js';
 import { useCart } from '../hooks/useCart.js';
 import { useToast } from '../hooks/useToast.js';
 import { formatPrice, formatSpecValue } from '../utils/format.js';
@@ -43,6 +44,13 @@ export default function ProductDetails() {
   }, [slug]);
 
   useDocumentTitle(product?.name || (loading ? 'იტვირთება…' : 'პროდუქტი'));
+  usePageMeta({
+    description: product?.shortDescription,
+    canonical: product ? `/product/${product.slug}` : undefined,
+    // Google renders the page, so this reaches it. The price and the
+    // availability are the two fields it shows beside a result.
+    structuredData: productStructuredData(product),
+  });
 
   const category = useMemo(
     () => (categories || []).find((c) => c.id === product?.category) || null,
