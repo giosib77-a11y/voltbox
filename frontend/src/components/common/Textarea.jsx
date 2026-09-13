@@ -30,7 +30,7 @@ const Textarea = forwardRef(function Textarea(
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy || undefined}
         className={[
-          'w-full rounded-control border bg-white px-3.5 py-2.5 text-sm text-ink-900 transition-colors',
+          'field-text w-full rounded-control border bg-white px-3.5 py-2.5 text-ink-900 transition-colors',
           'placeholder:text-ink-500 focus:outline-none focus:ring-2',
           error
             ? 'border-danger-500 focus:border-danger-500 focus:ring-danger-500/30'

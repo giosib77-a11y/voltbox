@@ -44,7 +44,7 @@ const Select = forwardRef(function Select(
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
           className={[
-            'h-11 w-full appearance-none rounded-control border bg-white pl-3.5 pr-10 text-sm text-ink-900',
+            'field-text h-11 w-full appearance-none rounded-control border bg-white pl-3.5 pr-10 text-ink-900',
             'transition-colors focus:outline-none focus:ring-2',
             error
               ? 'border-danger-500 focus:border-danger-500 focus:ring-danger-500/30'

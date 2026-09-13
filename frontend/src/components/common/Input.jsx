@@ -50,7 +50,7 @@ const Input = forwardRef(function Input(
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
           className={[
-            'h-11 w-full rounded-control border bg-white px-3.5 text-sm text-ink-900 transition-colors',
+            'field-text h-11 w-full rounded-control border bg-white px-3.5 text-ink-900 transition-colors',
             'placeholder:text-ink-500 focus:outline-none focus:ring-2 focus:ring-offset-0',
             LeftIcon ? 'pl-9' : '',
             rightSlot ? 'pr-11' : '',

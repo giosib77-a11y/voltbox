@@ -6,7 +6,7 @@ import { TEXT } from '../../constants/index.js';
  */
 
 const SIZES = {
-  sm: { wrap: 'h-9', button: 'h-9 w-9', input: 'w-10 text-sm' },
+  sm: { wrap: 'h-9', button: 'h-9 w-9', input: 'w-10 field-text' },
   md: { wrap: 'h-11', button: 'h-11 w-11', input: 'w-12 text-base' },
 };
 

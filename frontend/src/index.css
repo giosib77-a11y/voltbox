@@ -53,6 +53,20 @@
     @apply mx-auto w-full max-w-container px-4 sm:px-6 lg:px-8;
   }
 
+  /**
+   * ველის ტექსტის ზომა — ტელეფონზე 16px, დესკტოპზე 14px.
+   *
+   * iOS Safari აზუმებს გვერდს, როცა ფოკუსში მოხვედრილი ველის შრიფტი 16px-ზე
+   * ნაკლებია. ყველა ველი `text-sm` (14px) იყო, ანუ ძებნაზე ან checkout-ის
+   * ნებისმიერ ველზე დაჭერა გვერდს ახტუნებდა და მყიდველს უკან უნდა დაეპატარავებინა.
+   *
+   * ალტერნატივა `maximum-scale=1`-ია viewport-ში — ის ზუმს საერთოდ კრძალავს,
+   * მათ შორის იმ ადამიანისთვის, ვისაც ის მართლა სჭირდება. ეს გამორიცხულია.
+   */
+  .field-text {
+    @apply text-base sm:text-sm;
+  }
+
   .skip-link {
     @apply sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[80] focus:rounded-control
            focus:bg-primary-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white;

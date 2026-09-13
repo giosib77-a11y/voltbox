@@ -18,7 +18,7 @@ export default function SortSelect({ value, onChange, options = SORT_OPTIONS, cl
         id="sort-select"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full appearance-none rounded-control border border-ink-300 bg-white pl-9 pr-8 text-sm font-medium text-ink-800 transition-colors hover:border-ink-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 sm:w-auto"
+        className="field-text h-10 w-full appearance-none rounded-control border border-ink-300 bg-white pl-9 pr-8 font-medium text-ink-800 transition-colors hover:border-ink-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 sm:w-auto"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>

@@ -81,7 +81,7 @@ export default function PriceRangeSlider({ min = 0, max = 100, value = null, onC
             max={high}
             onChange={(e) => updateLow(e.target.value)}
             onBlur={commit}
-            className="h-9 w-full rounded-control border border-ink-300 px-2.5 text-sm tabular-nums focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+            className="field-text h-9 w-full rounded-control border border-ink-300 px-2.5 tabular-nums focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
           />
         </label>
         <span className="text-ink-400" aria-hidden="true">
@@ -96,7 +96,7 @@ export default function PriceRangeSlider({ min = 0, max = 100, value = null, onC
             max={bounds.max}
             onChange={(e) => updateHigh(e.target.value)}
             onBlur={commit}
-            className="h-9 w-full rounded-control border border-ink-300 px-2.5 text-sm tabular-nums focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+            className="field-text h-9 w-full rounded-control border border-ink-300 px-2.5 tabular-nums focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
           />
         </label>
         <span className="text-sm text-ink-500">{CURRENCY_SYMBOL}</span>
