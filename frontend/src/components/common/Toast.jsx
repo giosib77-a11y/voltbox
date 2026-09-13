@@ -35,6 +35,18 @@ export default function ToastViewport() {
       className="pointer-events-none fixed inset-x-0 bottom-0 z-toast flex flex-col items-center gap-2 p-4 sm:inset-x-auto sm:right-0 sm:items-end"
       role="region"
       aria-label="შეტყობინებები"
+      // The live region is the container, not the toast.
+      //
+      // A screen reader announces changes *inside* a region that already
+      // existed. `aria-live` used to sit on each toast, which is created at the
+      // same moment as its text - so there was no change to announce, and NVDA,
+      // JAWS and VoiceOver said nothing. This element is mounted in Layout for
+      // the life of the page, so a toast dropped into it is a change.
+      //
+      // Not `role="status"`, whose implicit aria-atomic is true: that would
+      // re-read every toast still on screen each time one arrives.
+      aria-live="polite"
+      aria-atomic="false"
     >
       {toasts.map((toast) => {
         const style = STYLES[toast.type] || STYLES.info;
@@ -43,8 +55,6 @@ export default function ToastViewport() {
         return (
           <div
             key={toast.id}
-            role="status"
-            aria-live="polite"
             className={`pointer-events-auto flex w-full max-w-sm animate-slide-up items-start gap-3 rounded-card border px-4 py-3 shadow-popover ${style.wrapper}`}
           >
             <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${style.iconClass}`} aria-hidden="true" />
