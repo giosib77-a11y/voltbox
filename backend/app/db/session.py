@@ -17,6 +17,13 @@ engine = create_async_engine(
     pool_size=settings.db_pool_size,
     max_overflow=settings.db_max_overflow,
     pool_pre_ping=True,  # pooler-მა შეიძლება უმოქმედო კავშირი დახუროს
+    # A SQLAlchemy error carries the statement *and its bound parameters*. On
+    # the registration path those parameters are the customer's email and their
+    # Argon2 password hash, and the unhandled-error handler writes the whole
+    # traceback to the log - so a single unique violation put a credential in
+    # a file. The statement and the constraint name still appear, which is what
+    # a developer is actually reading the line for.
+    hide_parameters=True,
     connect_args=build_connect_args(),
 )
 

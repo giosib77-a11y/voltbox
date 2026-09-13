@@ -6,6 +6,7 @@
 
 import json
 import logging
+import re
 import sys
 import time
 import uuid
@@ -17,6 +18,22 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 REQUEST_ID_HEADER = "X-Request-ID"
+
+#: Postgres names the offending value when a constraint is violated:
+#:
+#:     DETAIL:  Key (email)=(nino@example.ge) already exists.
+#:
+#: That line is part of the database's own error message, so it survives
+#: SQLAlchemy's hide_parameters and lands in the traceback the error handler
+#: logs. The column is the half worth keeping; the value is a customer's email,
+#: phone or order number.
+PG_DETAIL_VALUE = re.compile(r"(Key \([^)]*\)=\()[^)]*\)")
+
+
+def scrub(text: str) -> str:
+    """Remove the values a database error quotes back, keeping the column."""
+    return PG_DETAIL_VALUE.sub(r"\1…)", text)
+
 
 # ამ პრეფიქსებზე მოთხოვნის სხეული და query არასდროს არ ილოგება
 SENSITIVE_PATH_PREFIXES = ("/api/v1/auth",)
@@ -35,7 +52,8 @@ class JsonFormatter(logging.Formatter):
         if extra := getattr(record, "extra_fields", None):
             payload.update(extra)
         if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
+            # Scrubbed: a traceback is not a neutral object. See `scrub`.
+            payload["exception"] = scrub(self.formatException(record.exc_info))
         return json.dumps(payload, ensure_ascii=False)
 
 
