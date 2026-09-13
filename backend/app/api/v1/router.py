@@ -2,11 +2,22 @@
 
 from fastapi import APIRouter
 
-from app.api.v1.routes import addresses, auth, cart, catalog_meta, health, orders, products, search
+from app.api.v1.routes import (
+    addresses,
+    auth,
+    cart,
+    catalog_meta,
+    client_errors,
+    health,
+    orders,
+    products,
+    search,
+)
 from app.api.v1.routes.admin import admin_router
 
 api_router = APIRouter()
 api_router.include_router(health.router)
+api_router.include_router(client_errors.router)
 api_router.include_router(auth.router)
 api_router.include_router(addresses.router)
 api_router.include_router(cart.router)

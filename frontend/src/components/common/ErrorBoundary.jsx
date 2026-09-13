@@ -1,6 +1,8 @@
 import { Component } from 'react';
 import { AlertOctagon } from 'lucide-react';
 
+import { reportError } from '../../services/reportError.js';
+
 /**
  * მთელი აპლიკაციის ErrorBoundary.
  * React-ში ეს მხოლოდ class კომპონენტით შეიძლება.
@@ -17,7 +19,11 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    // TODO: connect backend — გაგზავნე შეცდომა მონიტორინგის სერვისში
+    // Sent to the API, which writes it to the same log as everything else.
+    // Not a monitoring service - the smallest thing that stops a blank screen
+    // in somebody's browser from being invisible to the shop.
+    reportError(error, info);
+
     if (import.meta.env?.DEV) {
       // eslint-disable-next-line no-console
       console.error('ErrorBoundary:', error, info?.componentStack);

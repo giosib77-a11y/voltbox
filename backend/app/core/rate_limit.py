@@ -51,6 +51,12 @@ AUTH_RATE_LIMIT = "5/minute"
 #: through, and only per-order-number attempt counting would close that.
 LOOKUP_RATE_LIMIT = "10/minute"
 
+#: Crash reports from the browser. Unauthenticated by necessity - a crash
+#: happens to guests too - so the only thing standing between this endpoint and
+#: a filled disk is the limit. Twenty a minute is far more than a broken page
+#: produces and far less than a flood.
+CLIENT_ERROR_RATE_LIMIT = "20/minute"
+
 DEFAULT_LIMIT = "60/minute"
 
 #: What slowapi gets when no Redis is configured: counters in this process only.
