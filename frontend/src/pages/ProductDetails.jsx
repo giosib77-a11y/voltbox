@@ -278,7 +278,10 @@ function ProductTabs({ product, tab, onTabChange }) {
           <div role="tabpanel" id="panel-delivery" aria-labelledby="tab-delivery" className="grid gap-5 sm:grid-cols-2">
             {DELIVERY_INFO.map((info) => (
               <div key={info.title}>
-                <h3 className="text-sm font-bold text-ink-900">{info.title}</h3>
+                {/* h2, not h3: the page has one h1 (the product name) and nothing
+                    between, and a reader navigating by heading level should not
+                    find a gap. The size comes from the class either way. */}
+                <h2 className="text-sm font-bold text-ink-900">{info.title}</h2>
                 <p className="mt-1.5 text-sm leading-relaxed text-ink-600">{info.text}</p>
               </div>
             ))}
