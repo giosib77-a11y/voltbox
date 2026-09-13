@@ -18,7 +18,8 @@ Monorepo ორი თანაბარმნიშვნელოვანი 
 voltbox/
 ├── frontend/          React SPA
 │   ├── src/           components, pages, context, hooks, services, data, utils
-│   ├── public/        favicon + 183 დაგენერირებული SVG
+│   │   └── admin/     ადმინ პანელი — ცალკე chunk-ებში, მაღაზიის ბანდლში არ ხვდება
+│   ├── public/        favicon · og-image · robots.txt · fonts/ · 183 SVG
 │   ├── scripts/       gen-images.mjs
 │   ├── .env           ← VITE_API_MODE (mock | http)   [კომიტდება არ უნდა]
 │   └── vite.config.js  package.json  tailwind.config.js  postcss.config.js
@@ -26,13 +27,18 @@ voltbox/
 ├── backend/           FastAPI REST API
 │   ├── app/           core, db, schemas, api/v1/routes, services
 │   ├── alembic/       მიგრაციები
-│   ├── scripts/       seed.py, import_products.py, reindex_search.py, export_mock_data.mjs
-│   ├── tests/         110 ტესტი
+│   ├── scripts/       seed.py, import_products.py, manage_admin.py, verify_restore.py
+│   │   └── e2e/       up.sh + journey.py — სრული სისტემა ნამდვილ სერვერზე
+│   ├── tests/         pytest
+│   ├── backups/       dump-ები (gitignore-შია — მომხმარებლის მონაცემებია)
 │   ├── .env           ← DATABASE_URL, JWT_SECRET       [კომიტდება არ უნდა]
 │   └── pyproject.toml  alembic.ini  docker-compose.yml  Dockerfile
 │
+├── docs/              deployment · backup-restore · pre-deployment-checklist
+│                      dependency-audit · admin-brief · admin-progress
 ├── .github/workflows/ frontend.yml · backend.yml
 ├── README.md          ეს ფაილი
+├── TODO.md            რა დარჩა გაშვებამდე
 ├── ASSUMPTIONS.md     მიღებული ტექნიკური გადაწყვეტილებები და მათი მიზეზები
 └── ROADMAP.md         რაზეც ვისაუბრეთ და განზრახ გადავდეთ
 ```
@@ -122,7 +128,10 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 
 იმიჯი განზრახ ცალკე მოწმდება: ის მხოლოდ `[project.dependencies]`-ს იღებს,
 `.venv` კი `.[dev]`-საც — ამ სხვაობაში ერთხელ უკვე დაიმალა ბაგი, რომელსაც
-110 მწვანე ტესტი ვერ ხედავდა ([ASSUMPTIONS.md §8.11](./ASSUMPTIONS.md)).
+**მთელი მწვანე ნაკრები ვერ ხედავდა** ([ASSUMPTIONS.md §8.11](./ASSUMPTIONS.md)).
+
+ტესტების რაოდენობა აქ განზრახ არ წერია — ის ყოველთვის მოძველდება. ერთადერთი
+სანდო წყარო `pytest -q`-სა და `npm test`-ის გამოტანაა.
 
 ---
 
