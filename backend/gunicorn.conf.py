@@ -19,6 +19,7 @@ rate-limit bucket covers the whole site. That is the bug this guards.
 """
 
 import os
+from urllib.parse import SplitResult, urlsplit
 
 wsgi_app = "app.main:app"
 worker_class = "uvicorn.workers.UvicornWorker"
@@ -34,6 +35,10 @@ graceful_timeout = 30
 LOOPBACK_ONLY = "127.0.0.1"
 
 PRODUCTION_ENVS = {"production", "staging"}
+
+#: Hostnames that only ever mean "this machine". An origin built on one is a
+#: development leftover - no customer's browser sends it.
+LOCAL_ORIGIN_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 #: How many server connections this deployment may occupy in total. Supabase's
 #: smaller instances allow 60, of which three are reserved for superusers and
@@ -132,6 +137,102 @@ def _check_the_hosts_are_named() -> None:
     )
 
 
+def _split_origin(origin: str) -> SplitResult | None:
+    """An origin's parts, or None for a value urlsplit cannot read at all.
+
+    Without a scheme urlsplit reads `localhost:5173` as scheme + path, so the
+    host is put where it will be found. A bracket it cannot close - `[::1`, or a
+    wildcard written as `[*]` - makes it raise instead, and a startup check that
+    ends in a traceback says nothing about what to set.
+    """
+    try:
+        return urlsplit(origin if "://" in origin else f"//{origin}")
+    except ValueError:
+        return None
+
+
+def _name_the_origin(origin: str, position: int) -> str:
+    """How a refusal names one CORS_ORIGINS entry: the origin, and nothing else.
+
+    The rule app/core/logging.py applies to a database error - keep what
+    identifies it, drop the value. An origin is a scheme, a host and a port, and
+    those are public: the server hands them back to every browser. Anything else
+    in the entry came from a pasted URL, where the part before `@` is a password
+    and a path or query can be a token.
+
+    Read from the text rather than `.hostname`, which drops the port, so a `*`
+    written in the host or the port still shows. An entry that cannot be read,
+    or whose only `*` sits in a part that is not printed, is named by position:
+    printed raw it could carry the secret, and printed without its `*` it would
+    look like a valid origin.
+    """
+    parts = _split_origin(origin)
+    if parts is None:
+        return f"entry {position}"
+
+    host = parts.netloc.rpartition("@")[2]
+    named = f"{parts.scheme}://{host}" if parts.scheme else host
+    if not host or ("*" in origin and "*" not in named):
+        return f"entry {position}"
+    return named
+
+
+def _check_the_origins_are_named() -> None:
+    """Refuse a deployment whose browser allow-list is empty, a wildcard or local.
+
+    Two failures with opposite symptoms. `*` looks merely permissive and is
+    worse: with `allow_credentials=True` Starlette does not send `*`, it echoes
+    whatever Origin asked, so every site is treated as the storefront. What
+    keeps another *site* away from /auth/refresh today is the refresh cookie
+    being SameSite=strict; a subdomain of the same site is not covered by that,
+    since SameSite is site-based rather than origin-based. And
+    REFRESH_COOKIE_SAMESITE is a setting: the day it becomes `none`, this is the
+    only thing between any site and /auth/refresh.
+
+    The other failure is quiet the opposite way. `CORS_ORIGINS` defaults to the
+    two localhost origins, so a deployment that forgets it starts, serves the
+    storefront, and has every API call from it refused by the browser.
+    """
+    configured = os.environ.get("CORS_ORIGINS", "")
+    # Numbered as written, blanks included, so "entry 3" is the third item
+    # between commas - where an operator will count to.
+    origins = [
+        (position, entry.strip())
+        for position, entry in enumerate(configured.split(","), start=1)
+        if entry.strip()
+    ]
+
+    if not origins:
+        raise SystemExit(
+            "CORS_ORIGINS is not set, so no browser on the storefront's domain is "
+            "allowed to call the API - the site loads and every request from it "
+            "fails. Set it to the storefront's origin, for example "
+            "https://voltbox.ge."
+        )
+
+    for position, origin in origins:
+        if "*" in origin:
+            named = _name_the_origin(origin, position)
+            raise SystemExit(
+                f"CORS_ORIGINS contains a wildcard ({named}). With credentials "
+                "allowed the middleware does not send '*' - it echoes whatever "
+                "Origin asked, so any site is treated as the storefront; and a "
+                "pattern such as https://*.voltbox.ge is not supported at all and "
+                "matches nothing. List the exact origins, comma separated."
+            )
+
+    for position, origin in origins:
+        parts = _split_origin(origin)
+        if parts is not None and parts.hostname in LOCAL_ORIGIN_HOSTS:
+            named = _name_the_origin(origin, position)
+            raise SystemExit(
+                f"CORS_ORIGINS still lists {named}, a local development origin. "
+                "No customer's browser sends it, and it usually means the real "
+                "storefront origin was never added. Replace it with the "
+                "storefront's origin."
+            )
+
+
 def _check_connection_budget() -> None:
     """Refuse a worker count whose connection pools cannot all fit.
 
@@ -188,5 +289,6 @@ def on_starting(server: object) -> None:
         )
 
     _check_the_hosts_are_named()
+    _check_the_origins_are_named()
     _check_the_rate_limit_counters_are_shared()
     _check_connection_budget()

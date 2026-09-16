@@ -187,6 +187,7 @@ def test_a_named_proxy_starts_normally(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.0.2")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("TRUSTED_HOSTS", "voltbox.ge")
+    monkeypatch.setenv("CORS_ORIGINS", "https://voltbox.ge")
     conf = load_gunicorn_conf()
 
     conf.on_starting(None)
@@ -221,6 +222,9 @@ def _conf_with(monkeypatch: pytest.MonkeyPatch, **env: str) -> ModuleType:
     # this section fails for a reason it is not about.
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("TRUSTED_HOSTS", "voltbox.ge")
+    # Same reason: the origins check runs before the counters and the budget, so
+    # without a valid value it would answer for every test in those sections.
+    monkeypatch.setenv("CORS_ORIGINS", "https://voltbox.ge")
     for key in ("WEB_CONCURRENCY", "DB_POOL_SIZE", "DB_MAX_OVERFLOW", "DB_CONNECTION_BUDGET"):
         monkeypatch.delenv(key, raising=False)
     for key, value in env.items():
@@ -320,6 +324,7 @@ def test_a_named_deployment_passes(monkeypatch: pytest.MonkeyPatch, app_env: str
     monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.0.2")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("TRUSTED_HOSTS", "voltbox.ge")
+    monkeypatch.setenv("CORS_ORIGINS", "https://voltbox.ge")
     conf = load_gunicorn_conf()
 
     conf.on_starting(None)
@@ -398,6 +403,103 @@ def test_a_local_run_is_not_asked_for_hostnames(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("ALLOW_NON_PRODUCTION_SERVER", "1")
     monkeypatch.delenv("TRUSTED_HOSTS", raising=False)
+    conf = load_gunicorn_conf()
+
+    conf.on_starting(None)
+
+
+# ── naming the origins ───────────────────────────────────────────────────────
+#
+# `CORS_ORIGINS` goes wrong in two opposite directions. With credentials allowed,
+# `*` is not sent as `*`: Starlette echoes whatever Origin asked, so every site
+# is treated as the storefront. And the default is the two localhost origins, so
+# a deployment that forgets the variable starts, serves pages, and has every API
+# call from the real domain refused by the browser.
+
+
+@pytest.mark.parametrize("value", ["*", "https://voltbox.ge,*", "https://*.voltbox.ge"])
+def test_a_deployment_that_lets_any_site_in_is_refused(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """A partial pattern is refused too: it is not supported and matches nothing."""
+    conf = _conf_with(monkeypatch, CORS_ORIGINS=value)
+
+    with pytest.raises(SystemExit, match="wildcard"):
+        conf.on_starting(None)
+
+
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_a_deployment_with_no_origins_is_refused(
+    monkeypatch: pytest.MonkeyPatch, value: str | None
+) -> None:
+    conf = _conf_with(monkeypatch)
+    if value is None:
+        monkeypatch.delenv("CORS_ORIGINS", raising=False)
+    else:
+        monkeypatch.setenv("CORS_ORIGINS", value)
+
+    with pytest.raises(SystemExit, match="CORS_ORIGINS is not set"):
+        conf.on_starting(None)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "http://localhost:5173,http://localhost:4173",
+        "https://voltbox.ge,http://127.0.0.1:5173",
+        "localhost:5173",
+    ],
+)
+def test_a_development_origin_left_in_production_is_refused(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """The first case is the shipped default, which is what forgetting it leaves."""
+    conf = _conf_with(monkeypatch, CORS_ORIGINS=value)
+
+    with pytest.raises(SystemExit, match="local development origin"):
+        conf.on_starting(None)
+
+
+def test_a_refusal_names_the_entry_and_not_its_userinfo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The rule app/core/logging.py keeps: the identifier stays, the value goes.
+
+    One test across every way an entry gets named, because the promise is about
+    the message rather than a branch - a password pasted along with an origin
+    must not reach a deploy log from any of them, and the operator must still be
+    told which entry to fix.
+    """
+    cases = [
+        ("https://voltbox.ge,https://probe:s3cret@*.voltbox.ge", "(https://*.voltbox.ge)"),
+        ("https://voltbox.ge,http://probe:s3cret@localhost:5173", "lists http://localhost:5173,"),
+        # urlsplit cannot read it at all; the blank item still counts as one.
+        ("https://voltbox.ge,,https://probe:s3cret@[*", "(entry 3)"),
+        # The only `*` is in the password, so the origin alone would look valid.
+        ("https://probe:s3cret*@voltbox.ge", "(entry 1)"),
+    ]
+    for value, kept in cases:
+        conf = _conf_with(monkeypatch, CORS_ORIGINS=value)
+
+        with pytest.raises(SystemExit) as refused:
+            conf.on_starting(None)
+
+        message = str(refused.value)
+        assert "s3cret" not in message, message
+        assert "probe" not in message, message
+        assert "@" not in message, message
+        assert kept in message, message
+
+
+def test_named_origins_start_normally(monkeypatch: pytest.MonkeyPatch) -> None:
+    conf = _conf_with(monkeypatch, CORS_ORIGINS="https://voltbox.ge,https://www.voltbox.ge")
+
+    conf.on_starting(None)
+
+
+def test_a_local_run_is_not_asked_for_origins(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`docker compose --profile full up` runs gunicorn on the localhost default."""
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("ALLOW_NON_PRODUCTION_SERVER", "1")
+    monkeypatch.setenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:4173")
     conf = load_gunicorn_conf()
 
     conf.on_starting(None)
