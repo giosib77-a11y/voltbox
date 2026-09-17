@@ -260,9 +260,7 @@ alembic upgrade <ძველი>:<ახალი> --sql > migration.sql
 # ხელით დაამატეთ public. ყველა ცხრილის სახელს, მერე SQL Editor-ში
 ```
 
-ამჟამად ბაზა `0010`-ზეა, კოდი — `0011`-ზე. `0011` მხოლოდ ინდექსს ამატებს
-`refresh_tokens.expires_at`-ზე (§2, cron job): მის გარეშე prune-ი მუშაობს,
-ოღონდ ცხრილს მთლიანად scan-ავს, და `alembic check` Supabase-ზე drift-ს აჩვენებს.
+ამჟამად ბაზა `0011`-ზეა და `alembic check` სუფთაა.
 
 ---
 
