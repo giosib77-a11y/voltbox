@@ -146,8 +146,33 @@ const CODE_MESSAGES = {
   EMPTY_FILE: 'ფაილი ცარიელია.',
   INVALID_IMAGE: 'ფაილი სურათი არ არის.',
   UNSUPPORTED_IMAGE_FORMAT: 'ასეთი ფორმატი არ მიიღება — გამოიყენეთ JPEG, PNG ან WebP.',
-  IMAGE_TOO_LARGE: 'სურათი ძალიან დიდია.',
-  IMAGE_TOO_MANY_PIXELS: 'სურათის გარჩევადობა ძალიან მაღალია.',
+  // The two an admin meets with a photo their phone has just taken. Both used
+  // to say only that something was wrong with it, which reads like the upload
+  // is broken rather than like something to fix in three seconds.
+  IMAGE_TOO_LARGE: (details) => {
+    const bytes = Number(details?.maxBytes);
+    if (!Number.isFinite(bytes) || bytes <= 0) {
+      return 'სურათი ძალიან დიდია. შეინახეთ უფრო მცირე ზომით და სცადეთ ხელახლა.';
+    }
+    const limit = Math.round(bytes / (1024 * 1024));
+    return `სურათი ${limit} MB-ზე დიდია. შეინახეთ უფრო მცირე ზომით და სცადეთ ხელახლა.`;
+  },
+  IMAGE_TOO_MANY_PIXELS: (details) => {
+    const width = Number(details?.maxWidth);
+    const height = Number(details?.maxHeight);
+    // The size that would pass, in this photo's own proportions. Saying only
+    // "too many pixels" leaves the admin guessing how much to cut.
+    if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+      return (
+        `სურათს ძალიან ბევრი პიქსელი აქვს. შეამცირეთ ${width}×${height}-მდე და ატვირთეთ ხელახლა — ` +
+        'საიტზე სურათი ისედაც 1600px-მდე მცირდება, ასე რომ ხარისხს ეს არაფერს დააკლებს.'
+      );
+    }
+    return (
+      'სურათს ძალიან ბევრი პიქსელი აქვს. ატვირთეთ უფრო მცირე ზომის სურათი — ტელეფონზე ' +
+      '12 MP საკმარისია, საიტზე სურათი ისედაც 1600px-მდე მცირდება.'
+    );
+  },
   TOO_MANY_IMAGES: 'პროდუქტს ამაზე მეტი სურათი ვერ ექნება.',
   IMAGE_NOT_FOUND: 'სურათი ვერ მოიძებნა.',
   INCOMPLETE_IMAGE_ORDER: 'თანმიმდევრობაში ყველა სურათი უნდა იყოს ჩამოთვლილი.',

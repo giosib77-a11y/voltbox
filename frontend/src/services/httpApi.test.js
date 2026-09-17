@@ -227,6 +227,48 @@ describe('error messages the shopper sees', () => {
     });
   });
 
+  it('tells an admin what size of photo would be accepted', async () => {
+    // A phone photo refused for its resolution is the ordinary way to meet
+    // this, and the admin has no way to guess how much to cut without a number.
+    global.fetch = vi.fn(async () =>
+      reply(
+        {
+          error: {
+            code: 'IMAGE_TOO_MANY_PIXELS',
+            message: 'The image resolution is too large',
+            details: { width: 5664, height: 4248, maxWidth: 4216, maxHeight: 3162 },
+          },
+        },
+        400,
+      ),
+    );
+
+    await expect(request('/admin/products/p1/images', { method: 'POST' })).rejects.toMatchObject({
+      message:
+        'სურათს ძალიან ბევრი პიქსელი აქვს. შეამცირეთ 4216×3162-მდე და ატვირთეთ ხელახლა — ' +
+        'საიტზე სურათი ისედაც 1600px-მდე მცირდება, ასე რომ ხარისხს ეს არაფერს დააკლებს.',
+    });
+  });
+
+  it('names the file size limit when a photo is too heavy', async () => {
+    global.fetch = vi.fn(async () =>
+      reply(
+        {
+          error: {
+            code: 'IMAGE_TOO_LARGE',
+            message: 'The image must be at most 5 MB',
+            details: { maxBytes: 5 * 1024 * 1024 },
+          },
+        },
+        400,
+      ),
+    );
+
+    await expect(request('/admin/products/p1/images', { method: 'POST' })).rejects.toMatchObject({
+      message: 'სურათი 5 MB-ზე დიდია. შეინახეთ უფრო მცირე ზომით და სცადეთ ხელახლა.',
+    });
+  });
+
   it('says how many are left when stock runs out mid-checkout', async () => {
     // Racing another shopper for the last units is the ordinary way to meet
     // this, and "Not enough stock" does not say what to do about it.

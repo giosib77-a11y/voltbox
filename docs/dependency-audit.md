@@ -70,7 +70,12 @@ argon2-cffi, slowapi, redis, orjson, pillow, python-multipart, httpx, tzdata.
 
 `pillow` ცალკე აღსანიშნავია — ატვირთული სურათები **ნამდვილად იხსნება**
 ვალიდაციისთვის, ანუ მისი ხარვეზები პირდაპირ გვეხება. `MAX_IMAGE_BYTES` და
-`MAX_IMAGE_PIXELS` სწორედ ამიტომ არსებობს.
+`MAX_IMAGE_DECODE_BYTES` სწორედ ამიტომ არსებობს.
+
+⚠️ `pillow`-ის ვერსიის აწევისას: `storage.py`-ის `DECODE_COST` გაზომილი
+რიცხვებია, და დეკოდერის ცვლილება მათ ჩუმად გააძვირებს. ამას
+`TestDecodeMemoryIsBounded` იჭერს — ის ყოველ ფორმატის ყველაზე დიდ მიღებულ
+სურათს ცალკე პროცესში შლის და პიკს ბიუჯეტს ადარებს.
 
 ---
 

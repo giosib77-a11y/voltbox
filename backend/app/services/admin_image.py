@@ -65,6 +65,14 @@ async def add_image(
     # product photo straight off a phone is several megabytes and is rendered
     # into a card a few hundred pixels wide; the shopper paid for the difference
     # on every page.
+    #
+    # Both calls are synchronous, on the event loop, and that is what bounds the
+    # memory: a worker decodes one image at a time however many uploads arrive,
+    # so the process never holds more than MAX_IMAGE_DECODE_BYTES for this, and
+    # the deployment never more than WEB_CONCURRENCY times that. Moving the
+    # decode into a threadpool (`run_in_threadpool`, or a `def` route) would
+    # multiply the ceiling by the pool size - 40 by default in anyio - and is
+    # the point at which limiting concurrent uploads would start to be worth it.
     data = shrink_to_fit(data, image_format)
     key = object_key(product_id, extension)
     url = await storage.upload(key, data, CONTENT_TYPES[extension])

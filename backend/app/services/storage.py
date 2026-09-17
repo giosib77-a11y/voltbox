@@ -17,7 +17,7 @@ import uuid
 from typing import Protocol
 
 import httpx
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, JpegImagePlugin, UnidentifiedImageError
 
 from app.core.config import settings
 from app.core.errors import ValidationError
@@ -25,6 +25,85 @@ from app.core.errors import ValidationError
 #: Only these three. SVG is deliberately absent: it is a document format that
 #: can carry scripts, and it would be served from the same origin as the site.
 ALLOWED_FORMATS = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
+
+_MIB = 1024 * 1024
+
+#: What one upload costs to verify, decode and shrink, as `(fixed, per pixel)`.
+#:
+#: Measured, not derived: `validate_image` + `shrink_to_fit` on one image per
+#: case in a fresh process, Pillow 12.3, peak commit on Windows and peak RSS in
+#: the production image, fitted over two sizes and rounded up. The audit that
+#: asked for this limit assumed one number for every format - 50M pixels x 4
+#: bytes, around 200 MB - where a WebP at that resolution actually peaks at
+#: 812 MB. That spread is why the limit cannot be a single pixel count: it would
+#: be either unsafe for a WebP or useless for a photo.
+#:
+#: Each pair is the most expensive variant of its path, because the ceiling is
+#: set by the worst file the validation accepts, not by the average upload. The
+#: fixed part is mostly the re-encode of the 1600px result, which is why WebP -
+#: saved with `method=6` - carries most of it, and it is rounded up well past the
+#: measurement on purpose: the peak does not grow smoothly with the pixel count.
+#: Measured on Linux, a 2250x1688 WebP peaks 9 MiB above a 2190x1643 one, which
+#: is the allocator handing out whole blocks. The margin lives in the fixed part
+#: because that is where such a jump is largest relative to the total.
+#:
+#: The smallest limit any of these produces at the default budget is 2.62M
+#: pixels, which is more than 1600x1600: an image already small enough to be
+#: stored untouched is never refused, whatever its format. Measured at each of
+#: these limits, the peak lands within 10% of the budget and under it.
+DECODE_COST = {
+    # Measured 6.47 B/px + 9.8 MB. The bitmap (4 bytes per pixel even for RGB),
+    # reduce()'s half-size copy on the way to MAX_STORED_EDGE, and a coefficient
+    # buffer. Admits 13.3 megapixels, which covers every phone's default photo.
+    "JPEG": (11 * _MIB, 7),
+    # Measured 12.03 B/px + 1.3 MB. Full-resolution chroma (4:4:4, 4:2:2) or
+    # four components (CMYK) make that coefficient buffer two to four times
+    # bigger. Cameras do not write these; image editors exporting at high
+    # quality do.
+    "JPEG_FULL_CHROMA": (3 * _MIB, 13),
+    # Measured 8.98 B/px + 15.6 MB, the fixed part rounded up for the same
+    # reason as WebP's. RGBA is the worst case: resize() premultiplies into a
+    # second full-size copy (RGBa) and skips reduce() while both are alive.
+    "PNG": (24 * _MIB, 9),
+    # Measured 15.77 B/px + 38.6 MB, the fixed part carrying the margin above.
+    # libwebp's animation decoder - the only WebP path Pillow has - holds a
+    # current and a previous canvas, Pillow copies the frame out as `bytes`, and
+    # only then fills its own bitmap. Three times a JPEG's pixel for the same
+    # picture, which is why a WebP is held to 2.6 megapixels and a photo to 13.3.
+    "WEBP": (60 * _MIB, 16),
+}
+
+
+def _decode_cost(probe: Image.Image, image_format: str) -> tuple[int, int]:
+    """The `(fixed, per pixel)` cost of decoding this particular image.
+
+    Everything read here comes from the header: `Image.open` parses the format,
+    the mode and the JPEG sampling factors without materialising a pixel, which
+    is what lets the cost be checked before anything is allocated.
+
+    JPEG is split in two because a progressive file makes libjpeg hold every DCT
+    coefficient of the image at once, and how much that is depends on the chroma
+    sampling. A baseline single-scan file needs none of it, but the header cannot
+    promise that a file is single-scan - the scan count is only known once the
+    whole file has been read - so both classes are priced as if the buffer were
+    there. Grayscale and 4:2:0 are the cheap class, and they are also what every
+    phone camera writes.
+    """
+    if image_format != "JPEG":
+        return DECODE_COST[image_format]
+    subsampled = probe.mode == "L" or JpegImagePlugin.get_sampling(probe) == 2
+    return DECODE_COST["JPEG" if subsampled else "JPEG_FULL_CHROMA"]
+
+
+def _max_pixels(probe: Image.Image, image_format: str) -> int:
+    """How many pixels of this image fit in the decode budget.
+
+    Never negative: a budget below the fixed cost leaves room for nothing, and
+    the answer is then zero rather than a negative limit that would accept
+    everything.
+    """
+    fixed, per_pixel = _decode_cost(probe, image_format)
+    return max(0, (settings.max_image_decode_bytes - fixed) // per_pixel)
 
 
 class StorageBackend(Protocol):
@@ -45,33 +124,72 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
     The filename extension and the client-declared MIME type are both supplied
     by the caller and neither is evidence of anything, so the file is actually
     decoded. `Image.verify()` parses the structure without materialising the
-    pixels, which is what makes the size check meaningful before any allocation.
+    pixels, which is what makes the checks below meaningful before any
+    allocation: both the resolution and what it will cost to decode are known
+    while the bitmap still does not exist.
     """
     if not data:
         raise ValidationError("The file is empty", code="EMPTY_FILE")
     if len(data) > settings.max_image_bytes:
         limit_mb = settings.max_image_bytes // (1024 * 1024)
-        raise ValidationError(f"The image must be at most {limit_mb} MB", code="IMAGE_TOO_LARGE")
+        raise ValidationError(
+            f"The image must be at most {limit_mb} MB",
+            code="IMAGE_TOO_LARGE",
+            # The panel turns this into advice. A photo straight off a phone is
+            # the ordinary way to meet this limit, and "too large" on its own
+            # reads like the feature is broken.
+            details={"maxBytes": settings.max_image_bytes},
+        )
 
     try:
         with Image.open(io.BytesIO(data)) as probe:
             image_format = (probe.format or "").upper()
             width, height = probe.size
+            # While the header is still open: verify() releases it, and the
+            # sampling factors are only readable from the probe.
+            allowed = image_format in ALLOWED_FORMATS
+            pixel_budget = _max_pixels(probe, image_format) if allowed else 0
             probe.verify()
+    except Image.DecompressionBombError as exc:
+        # Pillow has a guard of its own: it warns above MAX_IMAGE_PIXELS
+        # (89,478,485) and raises above twice that, inside open(), before the
+        # size above is ever read. DecompressionBombError is a plain Exception -
+        # not an OSError, not a ValueError - so it used to pass straight through
+        # the handler below and reach the client as a 500 for an image that was
+        # merely too big. The budget here is far stricter than Pillow's limit at
+        # any sane setting, so the two guards now agree on the answer as well as
+        # on the verdict.
+        raise ValidationError(
+            "The image resolution is too large", code="IMAGE_TOO_MANY_PIXELS"
+        ) from exc
     except (UnidentifiedImageError, OSError, ValueError) as exc:
         raise ValidationError("This file is not a readable image", code="INVALID_IMAGE") from exc
 
-    if image_format not in ALLOWED_FORMATS:
+    if not allowed:
         raise ValidationError(
             "Only JPEG, PNG and WebP images are accepted",
             code="UNSUPPORTED_IMAGE_FORMAT",
             details={"detected": image_format or "unknown", "declared": declared_type},
         )
 
-    # A decompression bomb is small on disk and enormous once decoded; refusing
-    # by pixel count is the only check that catches it.
-    if width * height > settings.max_image_pixels:
-        raise ValidationError("The image resolution is too large", code="IMAGE_TOO_MANY_PIXELS")
+    # A decompression bomb is small on disk and enormous once decoded, and the
+    # decode is what allocates - so the limit is memory, converted into a pixel
+    # count at this file's own cost. A WebP buys roughly a third of the pixels a
+    # phone's JPEG does for the same memory.
+    if width * height > pixel_budget:
+        # The largest version of *this* image that would fit, so the panel can
+        # name a size to export instead of only refusing one.
+        scale = (pixel_budget / (width * height)) ** 0.5
+        raise ValidationError(
+            "The image resolution is too large",
+            code="IMAGE_TOO_MANY_PIXELS",
+            details={
+                "width": width,
+                "height": height,
+                "maxWidth": max(1, int(width * scale)),
+                "maxHeight": max(1, int(height * scale)),
+            },
+        )
 
     return image_format, ALLOWED_FORMATS[image_format]
 

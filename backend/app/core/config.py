@@ -106,7 +106,22 @@ class Settings(BaseSettings):
     store_timezone: str = "Asia/Tbilisi"
 
     max_image_bytes: int = 5 * 1024 * 1024
-    max_image_pixels: int = 50_000_000
+
+    # What one upload may cost to decode - not what the file may weigh.
+    #
+    # `shrink_to_fit` decodes the whole bitmap, and what that costs is a property
+    # of the format: measured on Pillow 12.3, 6.5 bytes per pixel for a phone's
+    # JPEG against 15.8 for a WebP. A single pixel limit would therefore be
+    # either unsafe for a WebP or useless for a photo, so the limit is memory and
+    # storage.py turns it into a pixel limit per decode path (DECODE_COST).
+    #
+    # The ceiling for the process is WEB_CONCURRENCY x this, because the decode
+    # runs synchronously on the event loop and a worker therefore decodes one
+    # image at a time. The default is sized for a 512 MB container: 2 x 100 MiB
+    # on top of two workers holding ~100 MB each at rest. It admits a 13.3
+    # megapixel JPEG, which covers every phone's default photo.
+    # docs/deployment.md has the value for a larger instance.
+    max_image_decode_bytes: int = 100 * 1024 * 1024
 
     @field_validator("database_url")
     @classmethod

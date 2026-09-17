@@ -150,7 +150,10 @@ export default function ImageManager({ productId, images, onChange, onError }) {
         <ImagePlus className="h-4 w-4" aria-hidden="true" />
         სურათის ატვირთვა
       </Button>
-      <p className="mt-2 text-xs text-ink-500">JPEG, PNG ან WebP, მაქსიმუმ 5 MB.</p>
+      <p className="mt-2 text-xs text-ink-500">
+        JPEG, PNG ან WebP, მაქსიმუმ 5 MB და 12 MP (ტელეფონის ჩვეულებრივი ფოტო). საიტზე სურათი
+        1600px-მდე მცირდება, ასე რომ უფრო დიდი ფოტო ზუსტად იმავე შედეგს იძლევა.
+      </p>
     </div>
   );
 }
