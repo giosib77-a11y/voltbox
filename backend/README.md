@@ -49,6 +49,74 @@ docker build -t voltbox-api:check .
 docker run --rm -e DATABASE_URL=postgresql://u:p@h:5432/d   -e JWT_SECRET=0123456789012345678901234567890123456789   voltbox-api:check python -c "import app.main as m; print(len(m.app.openapi()['paths']), 'paths')"
 ```
 
+## დამოკიდებულებების lock
+
+`pyproject.toml`-ში range-ებია (`>=`). რეალურად ეყენებულ ვერსიებს lock-ები
+წყვეტენ — ყველა ვერსია ფიქსირებულია, ყველა ფაილი sha256-ით მოწმდება:
+
+| ფაილი | შონაარსი | ვინ იყენებს |
+|---|---|---|
+| `requirements.txt` | `[project.dependencies]` | Dockerfile → production-ის venv |
+| `requirements-dev.txt` | იგივე + `dev` extra + editable build-ის hatchling | CI |
+| `requirements-build.txt` | hatchling-ი და მის დამოკიდებულებები | Dockerfile → ცალკე build venv, image-ში არ ხვდება |
+
+`requirements-dev.txt` `requirements.txt`-ის constraint-ით generate-დება: ყველა
+საერთო პაკეტი იმავე ვერსიაზეა, ასე რომ CI ზუსტად prod-ის ვერსიებს ტესტავს.
+
+Install-ი ყველგან `--require-hashes --only-binary=:all:`-ია. hash-ი wheel-ზე რომ
+არ ემთხვეოდეს, `--only-binary`-ის გარეშე pip-ი refuse-ის ნაცვლად sdist-ზე
+გადავიდოდა, და sdist-ის build backend-ი ვერსიისა და hash-ის გარეშე ჩამოიწერდა.
+შედეგი: ახალ დამოკიდებულება, რომელსაც Linux/Python 3.14-ისთვის wheel-ი არ აქვს,
+build-ს ხმამაღლა ჩერს — ეს განზრახაა.
+
+### ⚠️ მხოლოდ Linux container-ში, Python 3.14-ზე — არასდროს laptop-ზე
+
+pip-compile environment marker-ებს **იმ მანქანაზე** ამოწმებს, სადაც ეშვება, და
+false-ად ამოწმებულ requirement-ს lock-იდან ჩუმად ამოაგდებს. `pyproject.toml`-ში
+`gunicorn>=23.0; sys_platform != 'win32'` წერია, ასე რომ Windows-ზე generate-ებულ
+lock-ში **gunicorn-ი არ იქნება**. იმიჯი აეწყობა, CI-ის `image` job-ი მწვანე იქნება —
+`import app.main` gunicorn-ს არ იმპორტებს, ის მხოლოდ `CMD`-შია — container-ი კი
+არ აიწევს. გაზომილი: Windows-ზე generate-ებულ lock-ში gunicorn-ი და uvloop-ი არ არის.
+
+ეს ASSUMPTIONS §8.11-ის (`email-validator`) კლასია, ოღონდ უფრო ცუდი: import-ის
+შემოწმება gunicorn-ს საერთოდ ვერ ხედავს. container-ი Dockerfile-ის base image-ია:
+
+```bash
+cd backend
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd)":/src -w /src python:3.14-slim sh -c '
+  pip install --quiet --root-user-action=ignore pip-tools==7.6.1 &&
+  pip-compile --generate-hashes --allow-unsafe --strip-extras \
+    --output-file requirements.txt pyproject.toml &&
+  pip-compile --generate-hashes --allow-unsafe --strip-extras \
+    --extra dev --build-deps-for editable --constraint requirements.txt \
+    --output-file requirements-dev.txt pyproject.toml &&
+  pip-compile --generate-hashes --allow-unsafe --strip-extras \
+    --only-build-deps --build-deps-for wheel \
+    --output-file requirements-build.txt pyproject.toml'
+```
+
+`MSYS_NO_PATHCONV` და `pwd -W` Git Bash-ისთვისაა; Linux/macOS-ზე ბრძანება ისეთი
+ეშვება. რიგი მნიშვნელოვანია: `requirements-dev.txt` `requirements.txt`-ზე
+დამოკიდებულია.
+
+### დამოკიდებულების დამატება ან განახლება
+
+1. `pyproject.toml`-ში შეცვალე.
+2. ზემოთ მოცემული ბრძანება. pip-compile არსებულ pin-ებს ინახავს და მხოლოდ ახალს
+   ამატებს; ერთ პაკეტის განახლებისთვის `--upgrade-package <name>` დაამატე
+   შესაბამის `pip-compile`-ს.
+3. **pyproject-ი და სამივე lock-ი — ერთ commit-ში.**
+
+თუ 2-ი დამავიწყდება, `pip check`-ი image-ის build-ს და CI-ს აჩერებს
+(`voltbox-backend … requires X, which is not installed`): `--no-deps` install-ი
+lock-ის მიღმა არაფერს ჩამოწერს.
+
+### ლოკალური venv
+
+Quick start-ის `pip install -e ".[dev]"` lock-ის გარეშე რჩება: lock-ი Linux-ისთვის
+resolve-ებულია, uvloop-ი კი Windows-ზე არ install-დება. lock-ი CI-ისა და
+production-ის კონტრაქტია — ორივე Linux-ია.
+
 ## ადმინისტრატორები
 
 ადმინი **მხოლოდ** ბრძანების ხაზიდან იქმნება. საჯარო რეგისტრაცია `role`-ს არ

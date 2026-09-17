@@ -60,11 +60,21 @@ jobs:
         with:
           python-version: "3.14"
           cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
 
+      # იმიჯისავე კონტრაქტი: ვერსიები და hash-ები lock-იდან, პროექტი ხელახლა
+      # resolve-ის გარეშე, და `pip check` — lock, რომელიც pyproject.toml-ს ჩამორჩა,
+      # აქ ჩავარდება. pip-ი განზრახ არ ახლდება: ეს ერთადერთ download-ი იქნებოდა,
+      # რომელსაც არაფერი ამოწმებს. requirements-dev.txt requirements.txt-ის
+      # constraint-ით generate-ებულია: ყველა საერთო პაკეტი იმავე ვერსიაზეა, ასე რომ
+      # CI ზუსტად prod-ის ვერსიებს ტესტავს. --only-binary: მის გარეშე wheel-ის
+      # hash-ის შეუმთხვევლობაზე pip-ი sdist-ზე გადავიდოდა და build backend-ს hash-ის
+      # გარეშე ჩამოწერდა (იხ. Dockerfile).
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install --require-hashes --only-binary=:all: -r requirements-dev.txt
+          pip install --no-deps --no-build-isolation --check-build-dependencies -e .
+          pip check
 
       - name: Lint (ruff)
         run: ruff check . && ruff format --check .
