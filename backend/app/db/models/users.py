@@ -148,4 +148,6 @@ class RefreshToken(UUIDPrimaryKey, Base):
     __table_args__ = (
         Index("ix_refresh_tokens_user_id", "user_id"),
         Index("ix_refresh_tokens_family_id", "family_id"),
+        # For scripts/prune_refresh_tokens.py, which deletes by expiry alone.
+        Index("ix_refresh_tokens_expires_at", "expires_at"),
     )

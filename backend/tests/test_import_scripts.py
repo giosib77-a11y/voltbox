@@ -14,10 +14,6 @@ functions that write products, so a future edit that goes back to
 
 from __future__ import annotations
 
-import importlib.util
-import sys
-from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import pytest
@@ -25,19 +21,7 @@ from app.db.models import InventoryMovement, Product
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tests.factories import make_brand, make_category
-
-SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-
-
-def load_script(name: str) -> ModuleType:
-    """Import a file from scripts/, which is not a package."""
-    spec = importlib.util.spec_from_file_location(f"voltbox_script_{name}", SCRIPTS / f"{name}.py")
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+from tests.factories import load_script, make_brand, make_category
 
 
 async def ledger_mismatches(db: AsyncSession) -> list[tuple[str, int, int]]:

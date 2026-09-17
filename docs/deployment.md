@@ -149,6 +149,59 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 **ახალი უნდა იყოს.** დეველოპმენტის დროინდელი გასაღები ლოკალურ `.env`-შია და
 იმავე გასაღებით ხელმოწერილი ტოკენი production-ზეც იმუშავებდა.
 
+### Cron job — ვადაგასული refresh-ტოკენების წაშლა
+
+ყოველი refresh `refresh_tokens`-ში ახალ მწკრივს წერს.
+`scripts/prune_refresh_tokens.py` შლის მწკრივებს, რომლების ვადაც 7 დღეზე მეტი
+ხნის წინ გავიდა. რატომ ზუსტად ასე — `ASSUMPTIONS.md` 8.13.
+
+**Render → New → Cron Job**, იმავე repo-თი და Dockerfile-ით (`backend/`), რაც
+backend-ის web service-ი:
+
+| ველი | მნიშვნელობა |
+|---|---|
+| Schedule | `0 23 * * *` — Render-ის cron-ი UTC-ზეა, ეს 03:00 თბილისით |
+| Docker Command (Advanced) | `python scripts/prune_refresh_tokens.py` |
+| Environment | `DATABASE_URL` და `JWT_SECRET` — Environment Group-იდან, რომელიც web service-ზეც linked-ია |
+
+Environment Group-ი იმისთვისაა, რომ შეცვლილი პაროლი job-ს უკან არ დატოვებს:
+job-ზე ცალკე ჩაწერილი `DATABASE_URL` პაროლის შემდეგ rotation-ზე ძველი
+დარჩებოდა, და job-ი ყოველ ღამე ჩავარდნდა. `JWT_SECRET` job-ს არ სჭირდება,
+მაგრამ Settings-ი მის გარეშე არ აიწევს. კავშირი ერთია, წამებით, ↑ ბიუჯეტს არ
+ცვლის.
+
+**რა მოხდება, თუ დამავიწყდება:** არაფერი ტყდება. `refresh_tokens` ყოველ
+refresh-ზე ერთ მწკრივით იზრდება — ზღვრის გარეშე, 500 MB-ისკენ.
+
+**რა მოხდება, თუ job-ი ჩავარდა:** Render-ის docs failure-notification-ს არ
+აღწერს — ჩავარდნა მხოლოდ job-ის **Runs** გვერდზე ჩანს. გამორჩენილი run-ი წაშლას
+მხოლოდ აგვიანებს: ნაადრევ წაშლა შეუძლებელია, და შემდეგი run-ი ეწევა.
+
+**შემოწმება:**
+
+1. **Runs → Trigger Run** — log-ში:
+
+   ```
+   refresh_tokens: deleted N rows expired more than 7 days ago
+   ```
+
+2. job-ის ერთ დღის მუშაობის შემდეგ, SQL Editor-ში:
+
+   ```sql
+   select count(*) from public.refresh_tokens
+   where expires_at < now() - interval '9 days';   -- 0
+   ```
+
+   7 — retention, +1 — დღიური ინტერვალი, +1 — run-ის დაგვიანების ზღვარი.
+   0-ზე მეტი ნიშნავს, რომ job-ი არ ეშვება. `public.` სავალდებულოა (§5).
+
+ცოცხალ ბაზაზე პირველი ხელით გაშვება — `--dry-run`-ით: ითვლის, არაფერს შლის.
+
+```bash
+cd backend
+python scripts/prune_refresh_tokens.py --dry-run   # DATABASE_URL — .env-იდან
+```
+
 ---
 
 ## 3. Frontend-ის build
@@ -207,7 +260,9 @@ alembic upgrade <ძველი>:<ახალი> --sql > migration.sql
 # ხელით დაამატეთ public. ყველა ცხრილის სახელს, მერე SQL Editor-ში
 ```
 
-ამჟამად ბაზა `0010`-ზეა და `alembic check` სუფთაა.
+ამჟამად ბაზა `0010`-ზეა, კოდი — `0011`-ზე. `0011` მხოლოდ ინდექსს ამატებს
+`refresh_tokens.expires_at`-ზე (§2, cron job): მის გარეშე prune-ი მუშაობს,
+ოღონდ ცხრილს მთლიანად scan-ავს, და `alembic check` Supabase-ზე drift-ს აჩვენებს.
 
 ---
 

@@ -50,6 +50,10 @@
       კავშირების ბიუჯეტი: `worker × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
       Supabase-ს 60 აქვს, საიდანაც ~23 უკვე დაკავებულია.
 
+      Cron job — `python scripts/prune_refresh_tokens.py`, დღეში ერთხელ
+      (deployment.md §2). დაუყენებლად არაფერი ტყდება — `refresh_tokens`
+      უბრალოდ ზღვრის გარეშე იზრდება.
+
 ---
 
 ## 🟡 გაშვებამდე გადასაწყვეტი

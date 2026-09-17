@@ -2,10 +2,17 @@
 
 ტესტები seed-ზე განზრახ არ ეყრდნობა: mock მონაცემები frontend-ში შეიძლება
 შეიცვალოს და ტესტები უმიზეზოდ გატყდეს. აქ პატარა, დეტერმინისტული ნაკრებია.
+
+რამდენიმე ტესტ-ფაილის საერთო helper-ებიც აქ ცხოვრობს: ტესტ-ფაილი ერთმანეთისგან
+არაფერს აიმპორტებს.
 """
 
+import importlib.util
+import sys
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 from app.core.security import create_access_token, hash_password
@@ -138,3 +145,16 @@ def auth_header(user: User) -> dict[str, str]:
     """Bearer header for a user, skipping the login round trip."""
     token, _ = create_access_token(user.id, user.token_version)
     return {"Authorization": f"Bearer {token}"}
+
+
+SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+
+
+def load_script(name: str) -> ModuleType:
+    """Import a file from scripts/, which is not a package."""
+    spec = importlib.util.spec_from_file_location(f"voltbox_script_{name}", SCRIPTS / f"{name}.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
