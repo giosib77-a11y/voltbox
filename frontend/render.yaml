@@ -1,0 +1,115 @@
+# The storefront as a Render Static Site: how it is built, which URLs are
+# answered by something other than a file, and the headers every response
+# carries.
+#
+# Why in the repo: none of these fails with a sound. A missing SPA rewrite
+# leaves the home page working and every shared link a 404; a missing sitemap
+# rewrite hands a crawler index.html; a missing header changes nothing anyone
+# can see. A setting that exists only in a dashboard is one nobody reviews.
+#
+# Render does not find this file on its own - it is not at the repo root.
+# Create the site as a Blueprint with "Blueprint Path" set to
+# frontend/render.yaml (docs/deployment.md §1). On each sync, rules named here
+# overwrite their dashboard versions and dashboard-only rules are kept: change
+# them here, not there.
+
+services:
+  - type: web
+    runtime: static
+    name: voltbox-storefront
+    # No rootDir. Render's schema reads staticPublishPath from the repo root and
+    # its monorepo guide reads it from rootDir; without a rootDir both readings
+    # name the same directory.
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: frontend/dist
+    # What rootDir would otherwise do: a backend commit is no reason to rebuild
+    # the shop. Build filter paths are always from the repo root.
+    buildFilter:
+      paths:
+        - frontend/**
+
+    # Read by Vite when it builds, not when a page is served - a change needs a
+    # new deploy.
+    envVars:
+      # Unset reads as mock: the shop builds, shows 61 sample products from
+      # memory and sends orders nowhere, with no error. Nothing here is secret.
+      - key: VITE_API_MODE
+        value: http
+      # Render asks for these when the Blueprint is created, and only then.
+      # VITE_API_BASE_URL's origin has to match connect-src below.
+      - key: VITE_API_BASE_URL
+        sync: false
+      - key: VITE_SITE_URL
+        sync: false
+
+    # Render tries these top to bottom and applies the first that matches, and
+    # only to a path where no file exists.
+    routes:
+      # Only the API knows what is in the catalogue, so it writes the sitemap;
+      # a crawler trusts one on the site's own domain. A rewrite to a full URL
+      # serves the API's response at this path. Above /*, which would otherwise
+      # claim this path and answer with index.html - a 200 that is not a sitemap.
+      - type: rewrite
+        source: /sitemap.xml
+        destination: https://api.voltbox.ge/sitemap.xml
+      # React Router resolves the path in the browser, but only after
+      # index.html has loaded. A rewrite, not a redirect: a redirect would swap
+      # the address someone shared for /index.html.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+    # The API sets its own (backend/app/core/headers.py) and leaves the
+    # document policy to whatever serves the HTML; this is that. Every rule is
+    # /*: an asset carrying a policy it has no use for costs nothing, a pattern
+    # that misses the HTML costs all of it.
+    headers:
+      # A script or stylesheet served with the wrong type stays unexecuted
+      # instead of being guessed at.
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      # frame-ancestors below says the same to current browsers; this is for
+      # the ones that predate it. A checkout inside someone else's frame is how
+      # a click on one button becomes a click on another.
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      # A product path or a search query should not travel to whatever site a
+      # page links out to.
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      # Derived from what `npm run build` emits, not from habit:
+      #   script-src 'self'   one external module script; no inline script, no
+      #                       eval. The JSON-LD usePageMeta adds is a data
+      #                       block, which CSP does not govern.
+      #   style-src 'self'    one linked stylesheet. React's style props are set
+      #                       through the CSSOM, which style-src does not
+      #                       govern - hence no 'unsafe-inline'.
+      #   img-src             product images live in Supabase Storage; the API
+      #                       hands out their URLs (backend/app/services/storage.py).
+      #   connect-src         'self' for Vite's modulepreload polyfill, which
+      #                       fetches chunks from this origin in browsers without
+      #                       modulepreload; the API for everything else.
+      #   form-action 'none'  every form is submitted by script. A native
+      #                       submission would only mean a handler failed before
+      #                       preventDefault, and a reload is the wrong outcome.
+      #
+      # FILL IN BEFORE THE FIRST DEPLOY: the storage origin is not decided.
+      # SUPABASE_STORAGE_ORIGIN, in angle brackets below, is the scheme and host
+      # of the image URLs the API returns, no path. The placeholder cannot pass
+      # for a host - left in, a browser drops it as an invalid source, names it
+      # in the console, and blocks every product image.
+      - path: /*
+        name: Content-Security-Policy
+        value: >-
+          default-src 'none';
+          script-src 'self';
+          style-src 'self';
+          img-src 'self' <SUPABASE_STORAGE_ORIGIN>;
+          font-src 'self';
+          connect-src 'self' https://api.voltbox.ge;
+          form-action 'none';
+          base-uri 'none';
+          frame-ancestors 'none'

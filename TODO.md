@@ -10,27 +10,37 @@
 
 - [ ] **1. დომენის არჩევა** — ყველა დანარჩენი მასზეა დამოკიდებული
 
-- [ ] **2. SPA rewrite ჰოსტის პანელში**
+- [ ] **2. Static site-ი Blueprint-ად**
 
-      Source: /*        Destination: /index.html        Action: Rewrite
+      Render → New → Blueprint → Blueprint Path: frontend/render.yaml
 
-      ⚠️ `Rewrite`, არა `Redirect`. ამის გარეშე მთავარი გვერდი იმუშავებს და
-      **ყველა გაზიარებული ბმული 404-ს დააბრუნებს** — გაზომილია:
+      SPA-ს და sitemap-ის rewrite-ები და უსაფრთხოების header-ები ფაილშია —
+      პანელში ხელით არაფერი ემატება. rewrite-ის გარეშე მთავარი გვერდი
+      იმუშავებს და **ყველა გაზიარებული ბმული 404-ს დააბრუნებს** — გაზომილია:
       `/product/<slug>` → 404, `/category/<slug>` → 404, `/admin` → 404.
+
+      ⚠️ deploy-ამდე CSP-ში ერთ placeholder-ი: `<SUPABASE_STORAGE_ORIGIN>`
+      (სურათების URL-ის origin). დაუწერლად ყველა სურათი ბლოკდება.
+
+      grep -v '^\s*#' frontend/render.yaml | grep -oE '<[A-Z_]+>'   ← ცარიელი უნდა იყოს
 
 - [ ] **3. Frontend-ის ბილდის ცვლადები** (ბილდის დროს იკითხება!)
 
-      VITE_API_MODE=http                      ← ამის გარეშე მაღაზია 61 სატესტო
-                                                 პროდუქტს აჩვენებს მეხსიერებიდან
-                                                 და შეკვეთა არსად წავა
-      VITE_API_BASE_URL=https://<api>/api/v1
-      VITE_SITE_URL=https://<დომენი>
+      VITE_API_MODE=http                      ← frontend/render.yaml-შია. ამის
+                                                 გარეშე მაღაზია 61 სატესტო პროდუქტს
+                                                 აჩვენებს მეხსიერებიდან და შეკვეთა
+                                                 არსად წავა
+      VITE_API_BASE_URL=https://<api>/api/v1  ← ეს ორი Blueprint-ის შექმნისას
+      VITE_SITE_URL=https://<დომენი>             ერთხელ იკითხება
 
 - [ ] **4. Backend-ის ცვლადები**
 
       APP_ENV=production            ← დაუყენებლად სერვერი არ აიწევს
       JWT_SECRET=<ახალი>            ← python -c "import secrets; print(secrets.token_urlsafe(48))"
-      TRUSTED_HOSTS=<დომენი>,www.<დომენი>
+      TRUSTED_HOSTS=<api>,<service>.onrender.com
+                                    ← API-ს host-ი, არა storefront-ის. onrender-ისა
+                                      შექმნის შემდეგ; Health Check Path — მხოლოდ
+                                      მერე (deployment.md §2)
       CORS_ORIGINS=https://<დომენი>
       SITE_URL=https://<დომენი>
       FORWARDED_ALLOW_IPS=<proxy-ს მისამართი>
@@ -60,8 +70,9 @@
 
       Sitemap: https://<api>/sitemap.xml
 
-- [ ] **8. `/sitemap.xml` → API-ზე rewrite** ჰოსტის პანელში (crawler-ს ერთი
-      დომენი ურჩევნია)
+- [ ] **8. `/sitemap.xml` → API-ზე rewrite** — `frontend/render.yaml`-შია, `/*`-ის
+      ზემოთ (crawler-ს ერთი დომენი ურჩევნია). deploy-ის შემდეგ:
+      `curl -s https://<დომენი>/sitemap.xml` XML-ს უნდა აბრუნებდეს, არა index.html-ს
 
 - [ ] **9. Google Search Console** — დომენის დადასტურება და sitemap-ის გაგზავნა
 
