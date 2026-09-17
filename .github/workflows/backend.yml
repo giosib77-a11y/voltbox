@@ -10,8 +10,29 @@ on:
       # frontend-only change that removed one would not have run this job, and
       # the guard would have been silent about exactly the change it exists for.
       - "frontend/src/services/httpClient.js"
+      # The audit step below installs pip-audit from this lock. Without this
+      # line, a Dependabot pull request that bumps it would run no CI at all,
+      # and the first run to use the new lock would be on main.
+      - ".github/pip-audit/**"
   pull_request:
     paths: *backend-paths
+
+# The only thing any job does with GITHUB_TOKEN is checkout reading the
+# repository. setup-python's cache goes through the runner's own
+# ACTIONS_RUNTIME_TOKEN. pip, pip-audit, docker build and the service
+# containers reach public registries with no credentials. Nothing here writes
+# to the repository, a pull request, a check, the security tab, or a package
+# registry, or asks for an OIDC token.
+permissions:
+  contents: read
+
+# On a pull request or a branch, a newer push makes the older run moot, so it
+# is cancelled. On main every run gets a group of its own (run_id), so every
+# commit keeps its own verdict. `cancel-in-progress: false` would not do that:
+# a run still pending in a group is cancelled when the next one joins it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
+  cancel-in-progress: true
 
 defaults:
   run:
@@ -54,9 +75,9 @@ jobs:
       APP_ENV: test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.14"
           cache: pip
@@ -95,6 +116,29 @@ jobs:
       - name: Models and migrations agree (alembic check)
         run: alembic check
 
+      # The scanner comes in under the same rule as everything above: from a
+      # lock with hashes, wheels only. `pip install pip-audit`, or
+      # pypa/gh-action-pip-audit (which installs pip-audit from a version range,
+      # with no hashes), would be the one download in this job that nothing
+      # verifies. Its own venv, so it cannot change the environment the tests
+      # ran in.
+      # All three locks: requirements.txt is the image, requirements-build.txt
+      # builds its wheel, requirements-dev.txt is this job. --disable-pip audits
+      # the pins as written instead of resolving them again. --strict fails the
+      # step if any pin could not be audited, instead of skipping it quietly.
+      # PyPI's advisories carry no severity, so any finding fails. To accept one
+      # knowingly, add `--ignore-vuln <ID>` with a comment on why and until when.
+      # Last, and even after a failure: it reads only the lock files, and an
+      # advisory published upstream should not hide the test results.
+      - name: Audit locked dependencies (pip-audit)
+        if: ${{ !cancelled() }}
+        run: |
+          python -m venv "$RUNNER_TEMP/pip-audit"
+          "$RUNNER_TEMP/pip-audit/bin/pip" install --require-hashes --only-binary=:all: \
+            -r ../.github/pip-audit/requirements.txt
+          "$RUNNER_TEMP/pip-audit/bin/pip-audit" --strict --disable-pip --progress-spinner off \
+            -r requirements.txt -r requirements-dev.txt -r requirements-build.txt
+
   # ცალკე job, განზრახ. ზემოთა `quality` დამოკიდებულებებს `.[dev]`-ით აყენებს —
   # ანუ dev-extra-ებთანაც ერთად. პროდაქშენის იმიჯი კი მხოლოდ
   # `[project.dependencies]`-ს იღებს. სწორედ ამ სხვაობაში დაიმალა
@@ -105,7 +149,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Build the production image
         run: docker build -t voltbox-api:ci .

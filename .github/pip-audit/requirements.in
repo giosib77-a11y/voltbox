@@ -1,0 +1,12 @@
+# The pip-audit that backend.yml's audit step runs. CI installs it from the
+# hashed requirements.txt next to this file, into a venv of its own. It never
+# uses a bare `pip install pip-audit`: that would be the one unverified download
+# in a job where everything else is checked against a hash.
+#
+# Compile in Linux, never on a laptop (see backend/README.md for why). From the
+# repository root in Git Bash:
+#
+#   MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/.github/pip-audit":/src -w /src python:3.14-slim sh -c '
+#     pip install --quiet --root-user-action=ignore pip-tools==7.6.1 &&
+#     pip-compile --generate-hashes --allow-unsafe --strip-extras --output-file requirements.txt requirements.in'
+pip-audit==2.10.1

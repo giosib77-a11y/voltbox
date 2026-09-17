@@ -6,6 +6,22 @@ on:
   pull_request:
     paths: ["frontend/**", "backend/scripts/export_mock_data.mjs", ".github/workflows/frontend.yml"]
 
+# The only thing any job does with GITHUB_TOKEN is checkout reading the
+# repository. setup-node's cache goes through the runner's own
+# ACTIONS_RUNTIME_TOKEN, and npm ci / npm audit reach the public registry with
+# no credentials. Nothing here writes to the repository, a pull request, a
+# check, the security tab, or asks for an OIDC token.
+permissions:
+  contents: read
+
+# On a pull request or a branch, a newer push makes the older run moot, so it
+# is cancelled. On main every run gets a group of its own (run_id), so every
+# commit keeps its own verdict. `cancel-in-progress: false` would not do that:
+# a run still pending in a group is cancelled when the next one joins it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
+  cancel-in-progress: true
+
 defaults:
   run:
     working-directory: frontend
@@ -17,9 +33,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: npm
@@ -34,6 +50,21 @@ jobs:
       - name: Tests (vitest)
         run: npm test
 
+      # Runtime dependencies only, at high and above. Runtime dependencies are
+      # what ships to the browser. The dev tree (vite, vitest, eslint) runs on a
+      # developer's machine and in this job. Its advisories concern the dev
+      # server, the vitest UI, and how vitest resolves mock paths. CI starts
+      # neither server, and the mocks are this repository's own test code.
+      # Moderate is below the line because react-router's open advisories are
+      # fixed only in a major upgrade: a step that is red from its first run
+      # gets switched off.
+      # npm still prints every finding; the level only decides the exit code.
+      # Last, and even after a failure: it reads only package-lock.json, and an
+      # advisory published upstream should not hide the lint and test results.
+      - name: Audit runtime dependencies (npm audit)
+        if: ${{ !cancelled() }}
+        run: npm audit --omit=dev --audit-level=high
+
   build:
     runs-on: ubuntu-latest
 
@@ -45,9 +76,9 @@ jobs:
         api-mode: [mock, http]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: npm
@@ -74,9 +105,9 @@ jobs:
         working-directory: .
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
 

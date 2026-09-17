@@ -1,0 +1,62 @@
+version: 2
+
+updates:
+  # A new release is not proposed until it is 7 days old, which gives a
+  # compromised publish time to be caught and pulled before it is offered here.
+  # Security updates are not delayed: cooldown applies only to version updates.
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      npm-minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  # How Dependabot handles backend/'s locks, read from dependabot-core's source:
+  #
+  # It runs pip-compile only for a lock compiled from a .in file. backend/'s
+  # three locks are compiled from pyproject.toml, so it edits them as plain
+  # pinned requirements files. Both halves of what that means:
+  #
+  # - What holds: a single pull request writes the same version, and the same
+  #   set of hashes from PyPI, into every file where a package is pinned.
+  #   requirements.txt and requirements-dev.txt still agree on every shared
+  #   package within that pull request, which is the invariant
+  #   requirements-dev.txt is compiled for.
+  # - What it cannot do: resolve again. If a release needs a dependency version
+  #   the locks do not hold, the change is not silent drift. The hashed install
+  #   or `pip check` fails, in CI and in the image build. Close that pull
+  #   request and regenerate with the container command in backend/README.md,
+  #   adding --upgrade-package. A dependency that a new release no longer needs
+  #   stays pinned until then. That is harmless, but pip-compile would not have
+  #   written it.
+  #
+  # increase-if-necessary: bump the == pins, and leave pyproject.toml's >=
+  # ranges alone for as long as they already allow the new version. Minor and
+  # patch go in one group, because packages released in step must move
+  # together: pydantic pins pydantic-core exactly.
+  #
+  # .github/pip-audit has a .in file, so there Dependabot runs pip-compile.
+  - package-ecosystem: pip
+    directories: [/backend, /.github/pip-audit]
+    schedule:
+      interval: weekly
+    versioning-strategy: increase-if-necessary
+    cooldown:
+      default-days: 7
+    groups:
+      pip-minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  # Actions are pinned by commit SHA with the version as a trailing comment.
+  # Dependabot updates both.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
