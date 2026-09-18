@@ -120,6 +120,12 @@ def _check_the_hosts_are_named() -> None:
     middleware entirely" - so a deployed server answers a request claiming any
     hostname at all.
 
+    Set but naming nothing - empty, blank, only commas - is the opposite
+    failure, and the refusal has to say which one it is. app/main.py then
+    installs the check with no names, so every request is a 400, the health
+    check included. A message saying the Host goes unchecked would send the
+    operator looking for the wrong thing.
+
     Read per entry, because a `*` beside real names is the same thing: Starlette
     treats a `*` anywhere in the list as "accept any Host", so `voltbox.ge,*`
     checks nothing while reading as if it checked voltbox.ge. Only an entry that
@@ -131,14 +137,20 @@ def _check_the_hosts_are_named() -> None:
     it a hole later is one line somewhere that does, and nobody writing that
     line will think to come back here.
     """
-    configured = os.environ.get("TRUSTED_HOSTS", "")
-    hosts = [entry.strip() for entry in configured.split(",") if entry.strip()]
+    configured = os.environ.get("TRUSTED_HOSTS")
+    if configured is None:
+        raise SystemExit(
+            "TRUSTED_HOSTS is not set, so it defaults to '*': the Host header is "
+            "not checked at all and the server answers to any name it is given. "
+            "List the domains this API is served on, comma separated."
+        )
 
+    hosts = [entry.strip() for entry in configured.split(",") if entry.strip()]
     if not hosts:
         raise SystemExit(
-            "TRUSTED_HOSTS is not set to real hostnames, so the Host header is not "
-            "checked at all and the server answers to any name it is given. List "
-            "the domains this API is served on, comma separated."
+            "TRUSTED_HOSTS is set but names no host, so every request would be "
+            "refused with 400 Invalid host header, the health check included. "
+            "List the domains this API is served on, comma separated."
         )
 
     if "*" in hosts:
@@ -204,6 +216,12 @@ def _check_the_origins_are_named() -> None:
     The other failure is quiet the opposite way. `CORS_ORIGINS` defaults to the
     two localhost origins, so a deployment that forgets it starts, serves the
     storefront, and has every API call from it refused by the browser.
+
+    An entry urlsplit cannot read is refused for the same reason. An Origin
+    header is always a readable URL, so such an entry matches no browser, and
+    refusing it can never turn away a configuration that worked. What still
+    starts: an entry that reads but is not an origin - no scheme, or a path -
+    matches nothing just as quietly (ASSUMPTIONS.md 8.12).
     """
     configured = os.environ.get("CORS_ORIGINS", "")
     # Numbered as written, blanks included, so "entry 3" is the third item
@@ -235,7 +253,14 @@ def _check_the_origins_are_named() -> None:
 
     for position, origin in origins:
         parts = _split_origin(origin)
-        if parts is not None and parts.hostname in LOCAL_ORIGIN_HOSTS:
+        if parts is None:
+            named = _name_the_origin(origin, position)
+            raise SystemExit(
+                f"CORS_ORIGINS has an entry that cannot be read as a URL ({named}), "
+                "so no browser's Origin will ever match it - usually a '[' left "
+                "open. Write it as scheme://host, for example https://voltbox.ge."
+            )
+        if parts.hostname in LOCAL_ORIGIN_HOSTS:
             named = _name_the_origin(origin, position)
             raise SystemExit(
                 f"CORS_ORIGINS still lists {named}, a local development origin. "

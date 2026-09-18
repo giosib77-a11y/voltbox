@@ -392,6 +392,28 @@ def test_a_deployment_that_answers_to_any_host_is_refused(
         conf.on_starting(None)
 
 
+def test_an_unset_list_is_named_as_checking_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    conf = _conf_with(monkeypatch)
+    monkeypatch.delenv("TRUSTED_HOSTS", raising=False)
+
+    with pytest.raises(SystemExit, match="not checked at all"):
+        conf.on_starting(None)
+
+
+@pytest.mark.parametrize("value", ["", "   ", " , "])
+def test_a_list_naming_nothing_is_named_as_refusing_every_request(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """The opposite of unset: app/main.py installs the check with no names.
+    test_hosts_and_origins.py holds the app to what this message claims."""
+    conf = _conf_with(monkeypatch, TRUSTED_HOSTS=value)
+
+    with pytest.raises(SystemExit, match="every request would be refused") as refused:
+        conf.on_starting(None)
+
+    assert "not checked" not in str(refused.value)
+
+
 @pytest.mark.parametrize(
     "value", ["voltbox.ge,*", "*,voltbox.ge", "voltbox.ge , * ,www.voltbox.ge"]
 )
@@ -482,6 +504,18 @@ def test_a_development_origin_left_in_production_is_refused(
         conf.on_starting(None)
 
 
+@pytest.mark.parametrize("value", ["https://[::1", "https://voltbox.ge,https://[voltbox.ge"])
+def test_an_entry_that_cannot_be_read_is_refused(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """Started, it would match no browser's Origin while the server ran as if it
+    were listed. The first case is the one ASSUMPTIONS.md 8.12 used to accept."""
+    conf = _conf_with(monkeypatch, CORS_ORIGINS=value)
+
+    with pytest.raises(SystemExit, match="cannot be read as a URL"):
+        conf.on_starting(None)
+
+
 def test_a_refusal_names_the_entry_and_not_its_userinfo(monkeypatch: pytest.MonkeyPatch) -> None:
     """The rule app/core/logging.py keeps: the identifier stays, the value goes.
 
@@ -495,6 +529,8 @@ def test_a_refusal_names_the_entry_and_not_its_userinfo(monkeypatch: pytest.Monk
         ("https://voltbox.ge,http://probe:s3cret@localhost:5173", "lists http://localhost:5173,"),
         # urlsplit cannot read it at all; the blank item still counts as one.
         ("https://voltbox.ge,,https://probe:s3cret@[*", "(entry 3)"),
+        # The same, with no `*` for the wildcard check to catch first.
+        ("https://voltbox.ge,https://probe:s3cret@[voltbox.ge", "(entry 2)"),
         # The only `*` is in the password, so the origin alone would look valid.
         ("https://probe:s3cret*@voltbox.ge", "(entry 1)"),
     ]

@@ -66,16 +66,23 @@ def calc_shipping(subtotal: Decimal) -> Decimal:
 
 
 async def _next_order_number(db: AsyncSession) -> str:
-    """`VB-YYYYMMDD-NNNN` თანმიმდევრობიდან.
+    """`VB-YYYYMMDD-NNNNN` თანმიმდევრობიდან.
 
     random() + უნიკალურობის შემოწმების ციკლი რბოლის პირობებში ან დუბლიკატს
     იძლევა, ან უსასრულო ცდას — sequence ორივეს გამორიცხავს.
+
+    Five digits, not four. The sequence is global and never reset, so the
+    suffix is its value modulo the width, and a day's orders are consecutive
+    values of it. With four digits the 10,001st order of a day came back to a
+    number already issued that day; `uq_orders_order_number` refused it, and
+    since `_is_idempotency_clash` rightly lets that violation through, checkout
+    answered 500. What still holds: the same happens at the 100,001st.
     """
     row = await db.execute(
         text("SELECT to_char(now(), 'YYYYMMDD') AS day, nextval('order_number_seq') AS seq")
     )
     day, seq = row.one()
-    return f"VB-{day}-{int(seq) % 10000:04d}"
+    return f"VB-{day}-{int(seq) % 100000:05d}"
 
 
 async def _lock_products(db: AsyncSession, product_ids: list[UUID]) -> dict[UUID, Product]:

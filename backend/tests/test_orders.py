@@ -80,6 +80,27 @@ async def test_guest_checkout_creates_an_order(
     assert body["customer"]["firstName"] == "გიორგი"
 
 
+async def test_the_ten_thousand_and_first_order_of_a_day_gets_a_number_of_its_own(
+    client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+) -> None:
+    """The suffix is a global sequence modulo its width. At four digits this
+    second order was given the first one's number and checkout answered 500.
+
+    Both orders run in the fixture's one transaction, so `now()` - and the day
+    it names - is the same for both. The sequence is not rolled back with the
+    test, which only moves it further on.
+    """
+    item = [{"productId": str(shop["cheap"].id), "qty": 1}]
+
+    first = await _place(client, item)
+    # Ten thousand orders later, the same day.
+    await db.execute(text("SELECT setval('order_number_seq', currval('order_number_seq') + 9999)"))
+    second = await _place(client, item)
+
+    assert second.status_code == 201, second.text
+    assert second.json()["orderNumber"] != first.json()["orderNumber"]
+
+
 async def test_totals_are_computed_from_database_prices(
     client: httpx.AsyncClient, shop: dict[str, Product]
 ) -> None:

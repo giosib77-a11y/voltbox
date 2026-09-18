@@ -87,6 +87,21 @@ async def test_the_wildcard_alone_still_means_any_host(monkeypatch: pytest.Monke
     assert response.status_code == 404
 
 
+@pytest.mark.parametrize("value", ["", "   ", " , "])
+async def test_a_list_naming_nothing_refuses_every_host(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """What gunicorn.conf.py tells the operator an empty TRUSTED_HOSTS does.
+    Unset means `*` and no check; set to nothing means a check nothing passes."""
+    monkeypatch.setattr(settings, "trusted_hosts", value)
+
+    async with _client(create_app()) as client:
+        response = await client.get("/api/v1/health", headers={"Host": "api.voltbox.ge"})
+
+    assert response.status_code == 400
+    assert response.text == "Invalid host header"
+
+
 # ── naming the setting when a Host is refused ────────────────────────────────
 
 

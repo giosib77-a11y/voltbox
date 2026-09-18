@@ -42,10 +42,11 @@ logger = logging.getLogger(__name__)
 # ბრუტფორსის ზღვარი — შესვლასა და რეგისტრაციაზე მკაცრი
 AUTH_RATE_LIMIT = "5/minute"
 
-#: Guest order lookup. Order numbers are VB-YYYYMMDD-NNNN, so the number is
-#: guessable and the contact is the only secret - and a phone number is not much
-#: of one. At the global 60/minute, one day's ten thousand numbers fall in about
-#: three hours, and what they open is a name, an address and a purchase history.
+#: Guest order lookup. Order numbers are VB-YYYYMMDD-NNNNN from one sequence, so
+#: the number is guessable and the contact is the only secret - and a phone
+#: number is not much of one. At the global 60/minute, ten thousand consecutive
+#: numbers fall in about three hours, and what they open is a name, an address
+#: and a purchase history.
 #: Ten a minute leaves a real shopper untouched and makes that a day's work per
 #: address. It is not a complete answer: a distributed attempt still gets
 #: through, and only per-order-number attempt counting would close that.
