@@ -516,6 +516,28 @@ def test_an_entry_that_cannot_be_read_is_refused(
         conf.on_starting(None)
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "voltbox.ge",
+        "https://voltbox.ge/shop",
+        "https://voltbox.ge,https://voltbox.ge/?ref=ad",
+        "https://voltbox.ge#top",
+        "https://probe:s3cret@voltbox.ge",
+        "https://",
+    ],
+)
+def test_an_entry_that_is_not_an_origin_is_refused(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """It reads as a URL, and still matches no browser: an Origin is scheme://host[:port]
+    and nothing more. The first two are the cases ASSUMPTIONS.md 8.12 used to accept."""
+    conf = _conf_with(monkeypatch, CORS_ORIGINS=value)
+
+    with pytest.raises(SystemExit, match="is not an origin"):
+        conf.on_starting(None)
+
+
 def test_a_refusal_names_the_entry_and_not_its_userinfo(monkeypatch: pytest.MonkeyPatch) -> None:
     """The rule app/core/logging.py keeps: the identifier stays, the value goes.
 
@@ -533,6 +555,9 @@ def test_a_refusal_names_the_entry_and_not_its_userinfo(monkeypatch: pytest.Monk
         ("https://voltbox.ge,https://probe:s3cret@[voltbox.ge", "(entry 2)"),
         # The only `*` is in the password, so the origin alone would look valid.
         ("https://probe:s3cret*@voltbox.ge", "(entry 1)"),
+        # Named without its path it would read https://voltbox.ge - the fix,
+        # printed as the fault.
+        ("https://voltbox.ge,https://probe:s3cret@voltbox.ge/shop", "(entry 2)"),
     ]
     for value, kept in cases:
         conf = _conf_with(monkeypatch, CORS_ORIGINS=value)
@@ -547,8 +572,17 @@ def test_a_refusal_names_the_entry_and_not_its_userinfo(monkeypatch: pytest.Monk
         assert kept in message, message
 
 
-def test_named_origins_start_normally(monkeypatch: pytest.MonkeyPatch) -> None:
-    conf = _conf_with(monkeypatch, CORS_ORIGINS="https://voltbox.ge,https://www.voltbox.ge")
+@pytest.mark.parametrize(
+    "value",
+    [
+        "https://voltbox.ge,https://www.voltbox.ge",
+        # config.py drops a lone trailing slash, so this one does match.
+        "https://voltbox.ge/",
+        "https://voltbox.ge:8443",
+    ],
+)
+def test_named_origins_start_normally(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    conf = _conf_with(monkeypatch, CORS_ORIGINS=value)
 
     conf.on_starting(None)
 

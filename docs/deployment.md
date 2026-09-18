@@ -85,7 +85,7 @@ grep -v '^\s*#' frontend/render.yaml | grep -oE '<[A-Z_]+>'
 | `JWT_SECRET` | **ახალი**, ≥32 სიმბოლო | ძველი ტოკენები ძალაში დარჩება |
 | `FORWARDED_ALLOW_IPS` | proxy-ის მისამართი | **სერვერი არ აიწევს.** `*`-იც უარყოფილია — მაშინ ნებისმიერს შეუძლია თავისი IP აირჩიოს |
 | `TRUSTED_HOSTS` | `api.voltbox.ge,<service>.onrender.com` | **სერვერი არ აიწევს** `*`-ზე ან ცარიელზე. API-ს host-ი — storefront-ის დომენი **არა**. მის გარეშე ყველა მოთხოვნა, health-იც, `400 Invalid host header`-ს აბრუნებს, და შეცდომა `TRUSTED_HOSTS`-ს არ ახსენებს. ↓ იხ. TRUSTED_HOSTS |
-| `CORS_ORIGINS` | `https://voltbox.ge` | **სერვერი არ აიწევს** ცარიელზე, `*`-ზე ან local origin-ზე (`localhost`, `127.0.0.1`, `::1`). საჯარო, მაგრამ არასწორ origin-ზე აიწევს — და ბრაუზერი მოთხოვნებს დაბლოკავს |
+| `CORS_ORIGINS` | `https://voltbox.ge` | **სერვერი არ აიწევს** ცარიელზე, `*`-ზე, local origin-ზე (`localhost`, `127.0.0.1`, `::1`) ან ელემენტზე, რომელიც origin არ არის (`voltbox.ge` სქემის გარეშე, `https://voltbox.ge/shop` path-ით). სწორი ფორმის, მაგრამ სხვა დომენის origin-ზე აიწევს — და ბრაუზერი მოთხოვნებს დაბლოკავს |
 | `SITE_URL` | `https://voltbox.ge` | sitemap-ის ბმულები არასწორ დომენზე მიუთითებს |
 | `REDIS_URL` | Redis-ის URL | **სერვერი არ აიწევს**, თუ worker-ი >1. counter-ები worker-ებად გაიყოფა და ლიმიტი გამრავლდება |
 | `SUPABASE_PROJECT_REF` | პროექტის ref | სურათების ატვირთვა ჩავარდება (production-ში `RuntimeError`) |

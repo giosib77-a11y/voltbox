@@ -2,7 +2,7 @@
 # პროდაქშენში ბაზა Supabase-ია — ეს compose მხოლოდ dev/CI-სთვისაა.
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: voltbox-pg
     environment:
       POSTGRES_USER: voltbox

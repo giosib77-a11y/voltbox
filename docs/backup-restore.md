@@ -153,29 +153,47 @@ dump-ის შემდეგ:  ANY (ARRAY[('pending'::character varying)::text
 
 ## 3. ლოკალური Postgres 17-ზე გადაყვანა
 
-`backend/docker-compose.yml` **postgres:16-alpine**-ს უშვებს, production კი
-17.6-ია. ორი შედეგი:
+`backend/docker-compose.yml` **postgres:17-alpine**-ს უშვებს — იმავე major
+ვერსიას, რაზეც CI და production (17.6) დგას. 16-ზე ყოფნისას production-ის backup
+ლოკალურად ვერ აღდგებოდა (ხაფანგი „ბ"), და dev-ისა და production-ის ქცევის
+სხვაობა ლოკალურ ტესტებში არ ჩანდა.
 
-1. production-ის backup ლოკალურად **ვერ აღდგება** (იხ. ხაფანგი „ბ")
-2. dev და production სხვადასხვა major ვერსიაა — ქცევის სხვაობა ტესტებში არ ჩანს
+⚠️ **16-ის დროს შექმნილი volume ხელახლა უნდა შეიქმნას.** PG17 მას ვერ კითხულობს
+და კონტეინერი არ აიწევს:
 
-⚠️ PG16-ის data volume-ს PG17 **ვერ წაიკითხავს**. `voltbox_dev`-ში 61 პროდუქტი
-და 6 შეკვეთაა, ამიტომ ჯერ დამპი, მერე გადართვა:
+```
+FATAL:  database files are incompatible with server
+DETAIL:  The data directory was initialized by PostgreSQL version 16, which is not compatible with this version 17.11.
+```
+
+მონაცემი ამით ჯერ არ იკარგება — იკარგება `down -v`-ით. `voltbox_dev`-ში 61
+პროდუქტი და 6 შეკვეთაა, ამიტომ ჯერ დამპი, სანამ ძველი კონტეინერი ისევ 16-ზე
+დგას — ანუ ამ ცვლილების `pull`-ის შემდეგ, `docker compose up`-მდე. თუ `up` უკვე
+გაეშვა და ზემოთა შეცდომა გამოჩნდა, `image` დროებით `postgres:16-alpine`-ზე
+დააბრუნეთ, `docker compose up -d db`, და მხოლოდ მერე ნაბიჯი 1.
 
 ```bash
 cd backend
 
-# 1. ლოკალურის დამპი (16-ის pg_dump 16-ის სერვერიდან — ეს მუშაობს)
-docker exec voltbox-pg pg_dump -U voltbox --no-owner voltbox_dev > local-dev-backup.sql
+# 1. დამპი ძველი, 16-ის კონტეინერიდან. backups/ git-ში არ მიდის
+docker exec voltbox-pg pg_dump -U voltbox --no-owner voltbox_dev > backups/local-dev-backup.sql
 
-# 2. docker-compose.yml: postgres:16-alpine → postgres:17-alpine
-
-# 3. ძველი volume ქრება — ეს ხელახლა შეიქმნება
+# 2. volume ქრება და 17-ით თავიდან იქმნება. down Redis-საც აჩერებს
 docker compose down -v
-docker compose up -d db
+docker compose up -d --wait db redis
 
-# 4. სქემა და მონაცემები უკან
-psql 'postgresql://voltbox:voltbox@localhost:55432/voltbox_dev' -f local-dev-backup.sql
+# 3. ახალ volume-ში მხოლოდ `voltbox` ბაზაა. voltbox_test ტესტებს სჭირდებათ —
+#    სქემას თავად აწყობენ მიგრაციებით, ბაზას კი არა
+docker exec voltbox-pg createdb -U voltbox voltbox_dev
+docker exec voltbox-pg createdb -U voltbox voltbox_test
+
+# 4. სქემა და მონაცემები უკან. ON_ERROR_STOP — რომ შეცდომა არ ჩაიკარგოს
+docker exec -i voltbox-pg psql -U voltbox -d voltbox_dev -q -v ON_ERROR_STOP=1 < backups/local-dev-backup.sql
 ```
+
+2026-09-19-ს ასე გადავიდა: `voltbox_dev` (61 პროდუქტი, 6 შეკვეთა, მიგრაცია
+`0011`) შეცდომის გარეშე აღდგა, pytest-ის შედეგი 16-ზე და 17.11-ზე იდენტურია, და
+მიგრაციებით აწყობილი სქემის `pg_dump --schema-only` ორივეზე ერთნაირია — სერვერის
+ვერსიის ხაზის გარდა.
 
 ძველი dump ახალ სერვერზე მუშაობს — შებრუნებული მიმართულება (ახლიდან ძველში) არა.

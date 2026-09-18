@@ -217,11 +217,13 @@ def _check_the_origins_are_named() -> None:
     two localhost origins, so a deployment that forgets it starts, serves the
     storefront, and has every API call from it refused by the browser.
 
-    An entry urlsplit cannot read is refused for the same reason. An Origin
-    header is always a readable URL, so such an entry matches no browser, and
+    An entry urlsplit cannot read is refused for the same reason, and so is one
+    that reads but is not an origin - no scheme, or a path. An Origin header is
+    always scheme://host[:port], so such an entry matches no browser, and
     refusing it can never turn away a configuration that worked. What still
-    starts: an entry that reads but is not an origin - no scheme, or a path -
-    matches nothing just as quietly (ASSUMPTIONS.md 8.12).
+    starts: an origin spelled otherwise than a browser sends it - capitals in
+    the host, or the default port written out - matches nothing just as
+    quietly, since the middleware compares exactly (ASSUMPTIONS.md 8.12).
     """
     configured = os.environ.get("CORS_ORIGINS", "")
     # Numbered as written, blanks included, so "entry 3" is the third item
@@ -267,6 +269,26 @@ def _check_the_origins_are_named() -> None:
                 "No customer's browser sends it, and it usually means the real "
                 "storefront origin was never added. Replace it with the "
                 "storefront's origin."
+            )
+        # A lone trailing `/` is allowed: config.py drops it before the
+        # middleware sees the list.
+        if (
+            not parts.scheme
+            or not parts.hostname
+            or "@" in parts.netloc
+            or parts.path not in ("", "/")
+            or parts.query
+            or parts.fragment
+        ):
+            # By position: _name_the_origin would print https://voltbox.ge for
+            # https://voltbox.ge/shop - the very origin the operator should write,
+            # shown as the thing that is wrong.
+            raise SystemExit(
+                f"CORS_ORIGINS has an entry that is not an origin (entry {position}). "
+                "A browser's Origin is scheme://host[:port] and nothing else, so "
+                "an entry without a scheme, or with a path, query or login in it, "
+                "matches no browser. Write it as scheme://host, for example "
+                "https://voltbox.ge."
             )
 
 

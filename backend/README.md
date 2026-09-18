@@ -296,4 +296,4 @@ header-ით თავისი IP აირჩიოს.
 | `scripts/seed.py` | სტრუქტურა (+ სურვილისამებრ 61 mock პროდუქტი) |
 | `scripts/import_products.py` | რეალური პროდუქტების იმპორტი JSON-იდან |
 | `scripts/export_mock_data.mjs` | კითხულობს `../frontend/src/data/*.js`-ს seed-ისთვის |
-| `tests/` | 110 ტესტი (pytest + ცოცხალი Postgres) |
+| `tests/` | ტესტები (pytest + ცოცხალი Postgres) |
