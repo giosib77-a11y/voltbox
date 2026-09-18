@@ -318,9 +318,12 @@ async def test_upload_rejects_a_decompression_bomb_by_its_decode_cost(
 
     # A small file can decode to an enormous bitmap, and the decode is what
     # allocates - so the budget is memory, checked before anything is decoded.
+    # The image has to be over MAX_STORED_EDGE, because that is the only path
+    # that decodes at all: a flat 2000x2000 PNG is a few kilobytes on disk and a
+    # 16 MB bitmap once opened, which is the whole shape of the attack.
     monkeypatch.setattr(settings, "max_image_decode_bytes", 100)
 
-    response = await _upload(client, headers, product_id, data=image_bytes(size=(64, 64)))
+    response = await _upload(client, headers, product_id, data=image_bytes("PNG", (2000, 2000)))
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "IMAGE_TOO_MANY_PIXELS"
@@ -508,11 +511,30 @@ class TestAnUploadIsStoredAtASaneSize:
 
 
 def largest_that_fits(path: str) -> tuple[int, int]:
-    """The biggest 4:3 image of `path` the decode budget still accepts."""
+    """The most expensive image of `path` the decode budget still accepts.
+
+    Not simply the biggest: at a fixed pixel count the shape decides the cost.
+    `shrink_to_fit` scales the longest side down to MAX_STORED_EDGE, so a source
+    whose longest side only just exceeds it is barely reduced, and the full
+    bitmap and an almost equally large result are alive at once - where a long
+    thin image of the same pixel count is reduced to a fraction of itself.
+    Minimising the longest side maximises both, so the squarest shape is the
+    worst. Measured, 1619x1619 peaks at 120.0 MiB against 105.0 for the 4:3
+    image of the same 2.62 megapixels, and the 4:3 shape this used to build let
+    the test pass while a permitted image went 20 MiB over the budget.
+
+    Derived from MAX_STORED_EDGE rather than written down, so it stays the worst
+    shape if that constant moves. Below the edge nothing is resized and nothing
+    is allocated, so when the budget allows fewer pixels than a square of that
+    side, the worst case is the flattest image that still exceeds it by one.
+    """
     fixed, per_pixel = DECODE_COST[path]
     pixels = (settings.max_image_decode_bytes - fixed) // per_pixel
-    height = int((pixels * 3 / 4) ** 0.5)
-    return (height * 4 // 3, height)
+    side = int(pixels**0.5)
+    if side > MAX_STORED_EDGE:
+        return (side, side)
+    edge = MAX_STORED_EDGE + 1
+    return (edge, pixels // edge)
 
 
 class TestTheLimitIsMemoryRatherThanPixels:
@@ -545,8 +567,12 @@ class TestTheLimitIsMemoryRatherThanPixels:
     def test_an_image_stored_untouched_is_never_refused(self, fmt: str) -> None:
         """MAX_STORED_EDGE is 1600, so this one is kept exactly as it arrived.
 
-        The tightest of the limits is still above 1600x1600 - if it were not, an
-        upload could be refused for the memory of a resize that never happens.
+        It is accepted because it is never decoded, not because it fits a limit:
+        WebP's is 1.9 megapixels, below this image's 2.56, and `validate_image`
+        applies the budget only above MAX_STORED_EDGE. Before that condition
+        existed this property had to be bought by keeping every limit above
+        1600x1600, which is what made WebP impossible to price - the floor it
+        imposed already cost 120.6 MiB on the worst shape.
         """
         assert validate_image(image_bytes(fmt, (1600, 1600)), None)[0] == fmt
 
@@ -603,9 +629,30 @@ class TestPillowsOwnBombGuard:
 #: Measures one decode in a process of its own. Pillow allocates its bitmaps in C
 #: and libwebp allocates its canvases outside Pillow, so tracemalloc sees neither
 #: and only the operating system's own counter is the truth here.
+#:
+#: On Linux that counter is `VmHWM`, never `ru_maxrss`. `execve` folds the
+#: high-water of the address space it replaces into the new process's
+#: `signal->maxrss`, and what it replaces is `fork`'s copy-on-write clone of the
+#: parent - so a child of pytest is pinned at pytest's own footprint from its
+#: first instruction. Measured: a parent holding 411 MiB, a child that allocates
+#: nothing, ru_maxrss 411 MiB against VmHWM 9 MiB. `VmHWM` is the high-water of
+#: the mm `execve` itself created and carries nothing from before the exec.
+#: Windows has no pre-exec address space to fold in, which is why this was only
+#: ever visible on Linux.
+#:
+#: Windows keeps committed private bytes rather than the symmetrical peak working
+#: set: a working set can be trimmed and need not hold every allocated page, and
+#: a measurement that under-reports is the one kind this test cannot survive - it
+#: would pass a real regression. Committed bytes never under-report. So Linux
+#: counts resident pages and Windows counts committed private bytes; decode
+#: buffers are written rather than merely reserved, so the two agree closely.
+#:
+#: The peak is reported from before the decode as well as after, because the
+#: subtraction below only means anything if the decode is what moved it.
 PEAK_DECODE = """
 import os, sys
 
+# (current, peak) private memory of this process, in bytes.
 def memory():
     if os.name == "nt":
         import ctypes, ctypes.wintypes as types
@@ -629,19 +676,22 @@ def memory():
         ):
             raise OSError("GetProcessMemoryInfo failed")
         return counters.private, counters.peak_private
-    import resource
-    with open("/proc/self/statm") as handle:
-        current = int(handle.read().split()[1]) * os.sysconf("SC_PAGE_SIZE")
-    return current, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
+    status = {}
+    with open("/proc/self/status") as handle:
+        for line in handle:
+            key, _, value = line.partition(":")
+            if key in ("VmRSS", "VmHWM"):
+                status[key] = int(value.split()[0]) * 1024
+    return status["VmRSS"], status["VmHWM"]
 
 data = sys.stdin.buffer.read()
 from app.services.storage import shrink_to_fit, validate_image
 
-before, _ = memory()
+before, peak_before = memory()
 image_format, _ = validate_image(data, None)
 shrink_to_fit(data, image_format)
-_, peak = memory()
-print(peak - before)
+_, peak_after = memory()
+print(before, peak_before, peak_after)
 """
 
 
@@ -654,7 +704,23 @@ def peak_decode_bytes(data: bytes) -> int:
         cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     )
     assert result.returncode == 0, result.stderr.decode()
-    return int(result.stdout)
+    before, peak_before, peak_after = (int(field) for field in result.stdout.split())
+
+    # The decode has to be what set the high-water mark, and this guard is here
+    # because the alternative is silent. Reading `ru_maxrss` pinned the peak at
+    # pytest's own footprint: all four cases returned the same 208 MiB and
+    # nothing in the output looked wrong - four unrelated decoders agreeing to
+    # within 0.1% was the only clue, and it took a comparison between the cases
+    # to see it at all. A peak the decode never moved is a floor left by
+    # something else, so it is refused here rather than reported as a cost.
+    assert peak_after > peak_before, (
+        f"the peak was already {peak_before / 1024 / 1024:.0f} MiB before decoding "
+        f"and the decode did not move it, so this measures something else"
+    )
+
+    # Sound because of the guard: the peak was reached during the decode, and at
+    # that moment the process held the settled baseline plus the decode itself.
+    return peak_after - before
 
 
 @pytest.mark.skipif(

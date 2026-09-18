@@ -31,12 +31,17 @@ _MIB = 1024 * 1024
 #: What one upload costs to verify, decode and shrink, as `(fixed, per pixel)`.
 #:
 #: Measured, not derived: `validate_image` + `shrink_to_fit` on one image per
-#: case in a fresh process, Pillow 12.3, peak commit on Windows and peak RSS in
-#: the production image, fitted over two sizes and rounded up. The audit that
-#: asked for this limit assumed one number for every format - 50M pixels x 4
-#: bytes, around 200 MB - where a WebP at that resolution actually peaks at
-#: 812 MB. That spread is why the limit cannot be a single pixel count: it would
-#: be either unsafe for a WebP or useless for a photo.
+#: case in a fresh process, Pillow 12.3, peak RSS in the production image. The
+#: audit that asked for this limit assumed one number for every format - 50M
+#: pixels x 4 bytes, around 200 MB - where a WebP at that resolution actually
+#: peaks at 812 MB. That spread is why the limit cannot be a single pixel count:
+#: it would be either unsafe for a WebP or useless for a photo.
+#:
+#: Linux is what these are sized on, because production is Linux and the two
+#: platforms do not agree: at the same pixel count libwebp costs about 8 MiB more
+#: here than on Windows. The earlier numbers were Windows ones - the Linux
+#: measurement was reading a broken counter at the time and could not contradict
+#: them - which is how WebP came to be under-priced.
 #:
 #: Each pair is the most expensive variant of its path, because the ceiling is
 #: set by the worst file the validation accepts, not by the average upload. The
@@ -47,30 +52,38 @@ _MIB = 1024 * 1024
 #: is the allocator handing out whole blocks. The margin lives in the fixed part
 #: because that is where such a jump is largest relative to the total.
 #:
-#: The smallest limit any of these produces at the default budget is 2.62M
-#: pixels, which is more than 1600x1600: an image already small enough to be
-#: stored untouched is never refused, whatever its format. Measured at each of
-#: these limits, the peak lands within 10% of the budget and under it.
+#: The shape matters as much as the count, and the worst one is the squarest:
+#: a source only just above MAX_STORED_EDGE is barely reduced, so the bitmap and
+#: an almost equally large result are alive together. Every number here is
+#: measured on that shape. An image at or below the edge is never costed at all
+#: - `validate_image` only applies the budget above it - so these limits are free
+#: to sit below 1600x1600, and WebP's now does.
 DECODE_COST = {
-    # Measured 6.47 B/px + 9.8 MB. The bitmap (4 bytes per pixel even for RGB),
-    # reduce()'s half-size copy on the way to MAX_STORED_EDGE, and a coefficient
-    # buffer. Admits 13.3 megapixels, which covers every phone's default photo.
+    # The bitmap (4 bytes per pixel even for RGB), reduce()'s half-size copy on
+    # the way to MAX_STORED_EDGE, and a coefficient buffer. Admits 13.3
+    # megapixels, which covers every phone's default photo; 3651x3651 peaks at
+    # 90.4 MiB. Both JPEG paths are nearly shape-blind - the coefficient buffer
+    # and the bitmap follow the source, not the reduction - so re-measuring them
+    # on the worst shape moved neither by more than 0.5 MiB.
     "JPEG": (11 * _MIB, 7),
-    # Measured 12.03 B/px + 1.3 MB. Full-resolution chroma (4:4:4, 4:2:2) or
-    # four components (CMYK) make that coefficient buffer two to four times
-    # bigger. Cameras do not write these; image editors exporting at high
-    # quality do.
+    # Full-resolution chroma (4:4:4, 4:2:2) or four components (CMYK) make that
+    # coefficient buffer two to four times bigger. Cameras do not write these;
+    # image editors exporting at high quality do. 2797x2797 peaks at 90.4 MiB.
     "JPEG_FULL_CHROMA": (3 * _MIB, 13),
-    # Measured 8.98 B/px + 15.6 MB, the fixed part rounded up for the same
-    # reason as WebP's. RGBA is the worst case: resize() premultiplies into a
-    # second full-size copy (RGBa) and skips reduce() while both are alive.
-    "PNG": (24 * _MIB, 9),
-    # Measured 15.77 B/px + 38.6 MB, the fixed part carrying the margin above.
+    # RGBA is the worst case: resize() premultiplies into a second full-size copy
+    # (RGBa) and skips reduce() while both are alive, which is also why the shape
+    # moves this path so much - on the squarest shape the old limit peaked at
+    # 95.9 MiB where the 4:3 image of the same size peaked at 91.2. The fixed
+    # part absorbs that: 8.27 megapixels, and 2876x2876 peaks at 90.9 MiB.
+    "PNG": (29 * _MIB, 9),
     # libwebp's animation decoder - the only WebP path Pillow has - holds a
     # current and a previous canvas, Pillow copies the frame out as `bytes`, and
-    # only then fills its own bitmap. Three times a JPEG's pixel for the same
-    # picture, which is why a WebP is held to 2.6 megapixels and a photo to 13.3.
-    "WEBP": (60 * _MIB, 16),
+    # only then fills its own bitmap. Several times a JPEG's pixel for the same
+    # picture, which is why a WebP is held to 1.9 megapixels and a photo to 13.3.
+    # The fixed part carries the whole correction: on Linux, on the squarest
+    # shape, the old 2.62 megapixel limit peaked at 120.0 MiB. 1601x1187 peaks
+    # at 91.4.
+    "WEBP": (71 * _MIB, 16),
 }
 
 
@@ -176,7 +189,18 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
     # decode is what allocates - so the limit is memory, converted into a pixel
     # count at this file's own cost. A WebP buys roughly a third of the pixels a
     # phone's JPEG does for the same memory.
-    if width * height > pixel_budget:
+    #
+    # Only an image that will actually be resized pays it. `shrink_to_fit`
+    # returns the original bytes when the longest side already fits, without
+    # materialising a pixel, so there is no allocation to bound - measured, a
+    # 1600x1600 WebP peaks at 4.9 MiB where a 1601x1599 one, one pixel wider and
+    # the same megapixels, peaks at 120.6 MiB. A cost in pixels alone cannot
+    # tell those two apart, and charging the cheap one as though it decoded is
+    # what used to pin the WebP limit at 2,560,000 pixels.
+    #
+    # The unchecked path is bounded by the condition itself: max(w, h) <= 1600
+    # admits at most 1600x1600, and that is the 4.9 MiB case.
+    if max(width, height) > MAX_STORED_EDGE and width * height > pixel_budget:
         # The largest version of *this* image that would fit, so the panel can
         # name a size to export instead of only refusing one.
         scale = (pixel_budget / (width * height)) ** 0.5
@@ -201,6 +225,14 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
 #: 2277 KB became 527 KB at this size - the same picture, four times cheaper on
 #: a mobile connection, and the largest product image on screen is around 800px
 #: wide even on a desktop.
+#:
+#: Load-bearing a second way, which is not obvious from the name: `validate_image`
+#: applies the decode budget only above this edge, because at or below it nothing
+#: is decoded. So this constant is also the size of the upload that is admitted
+#: without being costed, and raising it widens that path - at 1600 the most an
+#: unchecked image can cost is a measured 4.9 MiB, but the cost of a decode grows
+#: with the square of the edge. Anything that raises this for a larger gallery
+#: image has to re-measure that number, not just this one.
 MAX_STORED_EDGE = 1600
 
 #: JPEG quality for a re-encode. 82 is the point where the file stops shrinking
