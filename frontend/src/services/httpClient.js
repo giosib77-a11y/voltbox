@@ -91,6 +91,7 @@ const CODE_MESSAGES = {
   // The server text names an idempotency key, which means nothing to a shopper.
   IDEMPOTENCY_KEY_CONFLICT: 'კალათა შეიცვალა. განაახლეთ გვერდი და სცადეთ ხელახლა.',
   INVALID_IDEMPOTENCY_KEY: 'მოთხოვნა ვერ დამუშავდა. განაახლეთ გვერდი და სცადეთ ხელახლა.',
+  IDEMPOTENCY_KEY_REQUIRED: 'მოთხოვნა ვერ დამუშავდა. განაახლეთ გვერდი და სცადეთ ხელახლა.',
   INVALID_REFRESH_TOKEN: 'სესიის ვადა ამოიწურა. გთხოვთ, ხელახლა შეხვიდეთ.',
   ADDRESS_NOT_FOUND: 'ეს მისამართი ვეღარ მოიძებნა.',
   CART_TOO_LARGE: 'კალათაში ძალიან ბევრი პროდუქტია. წაშალეთ რამდენიმე და სცადეთ ხელახლა.',

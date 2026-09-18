@@ -5,6 +5,7 @@
 მარაგი ბრუნდება · ჯამები ცენტამდე ემთხვევა.
 """
 
+import uuid
 from decimal import Decimal
 
 import httpx
@@ -49,9 +50,20 @@ async def shop(db: AsyncSession) -> dict[str, Product]:
 async def _place(
     client: httpx.AsyncClient, items: list[dict[str, object]], **kwargs: object
 ) -> httpx.Response:
+    # The API refuses a checkout with no Idempotency-Key, so every call needs
+    # one. It is fresh per call rather than a shared constant: a constant would
+    # turn the second _place in a test into a replay of the first, and every
+    # assertion after it would pass while testing nothing. A caller that brings
+    # its own headers keeps them - its own key, or just an Authorization header,
+    # in which case it still gets a key.
+    caller_headers = kwargs.pop("headers", None)
+    headers = {"Idempotency-Key": str(uuid.uuid4())}
+    if isinstance(caller_headers, dict):
+        headers.update(caller_headers)
     return await client.post(
         "/api/v1/orders",
         json={"items": items, "customer": CUSTOMER, "paymentMethod": "cash"},
+        headers=headers,
         **kwargs,  # type: ignore[arg-type]
     )
 
@@ -293,6 +305,34 @@ async def test_the_same_email_written_differently_still_replays(
     assert response.json()["orderNumber"] == first.json()["orderNumber"]
 
 
+async def test_a_checkout_without_a_key_is_refused(
+    client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+) -> None:
+    """არარსებული გასაღები „replay არ მჭირდება“ არ არის — ეს დუბლიკატია.
+
+    NULL NULL-ს არ ეჯახება, ამიტომ UNIQUE ინდექსი გამეორებულ მოთხოვნას
+    გაატარებდა: მეორე შეკვეთა შეიქმნებოდა და მარაგი კიდევ ერთხელ ჩამოიწერებოდა.
+    """
+    response = await client.post(
+        "/api/v1/orders",
+        json={
+            "items": [{"productId": str(shop["cheap"].id), "qty": 1}],
+            "customer": CUSTOMER,
+            "paymentMethod": "cash",
+        },
+    )
+
+    assert response.status_code == 400
+    body = response.json()["error"]
+    assert body["code"] == "IDEMPOTENCY_KEY_REQUIRED"
+    # შეტყობინებამ უნდა თქვას რა გამოგზავნოს, და არა მხოლოდ ის, რომ რაღაც აკლია.
+    assert "Idempotency-Key" in body["message"]
+    assert "UUID" in body["message"]
+
+    stock = await db.scalar(select(Product.stock).where(Product.id == shop["cheap"].id))
+    assert stock == 5  # არაფერი ჩამოწერილა
+
+
 @pytest.mark.parametrize("key", ["checkout-123", "not a uuid", "12345"])
 async def test_a_key_that_is_not_a_uuid_is_refused(
     client: httpx.AsyncClient, shop: dict[str, Product], key: str
@@ -478,7 +518,7 @@ async def test_the_limit_does_not_reach_the_signed_in_path(
             "customer": CUSTOMER,
             "paymentMethod": "cash",
         },
-        headers=headers,
+        headers={**headers, "Idempotency-Key": str(uuid.uuid4())},
     )
     number = placed.json()["orderNumber"]
 
@@ -597,6 +637,7 @@ class TestPaymentMethod:
                 "customer": CUSTOMER,
                 "paymentMethod": method,
             },
+            headers={"Idempotency-Key": str(uuid.uuid4())},
         )
 
         assert response.status_code == 201

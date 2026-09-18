@@ -8,6 +8,7 @@ order at 01:00 Tbilisi counting as today or as yesterday.
 """
 
 import itertools
+import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -435,6 +436,9 @@ class TestTheSnapshotShapeIsTheOneTheRouteWrites:
                 },
                 "paymentMethod": "cash",
             },
+            # Fresh per call: these tests place several orders, and a shared key
+            # would make every one after the first a replay of it.
+            headers={"Idempotency-Key": str(uuid.uuid4())},
         )
         assert response.status_code == 201, response.text
         return str(response.json()["orderNumber"])

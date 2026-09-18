@@ -23,18 +23,27 @@ from app.services import order as order_service
 router = APIRouter(prefix="/orders", tags=["orders"])
 
 
-def _validated_key(raw: str | None) -> str | None:
-    """An Idempotency-Key must be a UUID, or it is refused.
+def _required_key(raw: str | None) -> str:
+    """An Idempotency-Key is required, and must be a UUID.
+
+    Without a key the column is NULL, and Postgres counts every NULL as
+    distinct, so the UNIQUE index lets a retry straight through: _lock_products
+    and adjust_stock run a second time, the stock is decremented twice, and the
+    customer owes for two orders that the admin sees as two. The header is the
+    only thing between a double-tapped "confirm" and that duplicate, so an
+    absent one is refused rather than quietly treated as "no replay wanted".
 
     The key is a permanent claim on a row - once taken, that value can never
     produce a different order. Accepting free text would let a client take
     "checkout" and then wonder why every later order replays the first one.
     """
-    if raw is None:
-        return None
-    candidate = raw.strip()
+    candidate = (raw or "").strip()
     if not candidate:
-        return None
+        raise ValidationError(
+            "Idempotency-Key header is required, and must be a UUID",
+            code="IDEMPOTENCY_KEY_REQUIRED",
+            details=[{"field": "Idempotency-Key"}],
+        )
     try:
         uuid.UUID(candidate)
     except ValueError:
@@ -76,8 +85,9 @@ def _to_out(order: Order) -> OrderOut:
     summary="Create an order",
     description=(
         "Guest checkout is allowed. Prices are always taken from the database; "
-        "any price sent by the client is rejected. Send an Idempotency-Key header "
-        "to make a double-submitted checkout return the original order."
+        "any price sent by the client is rejected. An Idempotency-Key header "
+        "holding a UUID is **required**: it is what makes a double-submitted "
+        "checkout return the original order instead of placing a second one."
     ),
     status_code=status.HTTP_201_CREATED,
     response_model=OrderOut,
@@ -86,7 +96,15 @@ async def create_order(
     db: Db,
     user: OptionalUser,
     payload: CreateOrderRequest,
-    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+    # The header is required, but it is declared optional here on purpose: a
+    # parameter FastAPI itself marks required fails in its own validator, and
+    # that answer is the generic VALIDATION_ERROR / "Field required", which
+    # names neither the header nor the UUID it has to hold. _required_key
+    # raises instead, so a caller that forgot it is told what to send.
+    idempotency_key: Annotated[
+        str | None,
+        Header(alias="Idempotency-Key", description="Required. A UUID identifying this checkout."),
+    ] = None,
 ) -> OrderOut:
     # ქართული ახსნა: მთელი ლოგიკა სერვისშია ერთ ტრანზაქციაში — router მხოლოდ
     # (productId, qty) წყვილებს გადასცემს. ფასი კლიენტისგან არსად არ მოდის.
@@ -96,7 +114,7 @@ async def create_order(
         customer=payload.customer.model_dump(exclude_none=True),
         payment_method=payload.payment_method,
         user=user,
-        idempotency_key=_validated_key(idempotency_key),
+        idempotency_key=_required_key(idempotency_key),
     )
     await db.commit()
     await db.refresh(order)
