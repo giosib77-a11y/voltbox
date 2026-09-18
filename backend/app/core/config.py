@@ -175,7 +175,16 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        """The origins in the form a browser sends them.
+
+        An Origin header never ends in `/`, and CORSMiddleware compares exactly,
+        so `https://voltbox.ge/` - the shape a copied URL has - allowed no one.
+        That slash is dropped. Only after a scheme, so that `*/` is not turned
+        into the wildcard; anything longer than a bare slash is left as written
+        and still matches nothing.
+        """
+        origins = (o.strip() for o in self.cors_origins.split(","))
+        return [o.removesuffix("/") if "://" in o else o for o in origins if o]
 
     @property
     def trusted_host_list(self) -> list[str]:

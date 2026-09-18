@@ -392,6 +392,28 @@ def test_a_deployment_that_answers_to_any_host_is_refused(
         conf.on_starting(None)
 
 
+@pytest.mark.parametrize(
+    "value", ["voltbox.ge,*", "*,voltbox.ge", "voltbox.ge , * ,www.voltbox.ge"]
+)
+def test_a_wildcard_among_names_is_refused(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    """Starlette reads a `*` anywhere in the list as "accept any Host", so the
+    names beside it are checked no more than the wildcard alone is."""
+    conf = _conf_with(monkeypatch, TRUSTED_HOSTS=value)
+
+    with pytest.raises(SystemExit, match=r"TRUSTED_HOSTS contains '\*'"):
+        conf.on_starting(None)
+
+
+def test_a_subdomain_pattern_is_not_taken_for_the_wildcard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`*.voltbox.ge` matches subdomains, not every Host - refused by a check
+    that looked for `*` inside an entry rather than an entry that is `*`."""
+    conf = _conf_with(monkeypatch, TRUSTED_HOSTS="api.voltbox.ge,*.voltbox.ge")
+
+    conf.on_starting(None)
+
+
 def test_named_hosts_start_normally(monkeypatch: pytest.MonkeyPatch) -> None:
     conf = _conf_with(monkeypatch, TRUSTED_HOSTS="voltbox.ge,www.voltbox.ge")
 

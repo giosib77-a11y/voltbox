@@ -120,21 +120,33 @@ def _check_the_hosts_are_named() -> None:
     middleware entirely" - so a deployed server answers a request claiming any
     hostname at all.
 
+    Read per entry, because a `*` beside real names is the same thing: Starlette
+    treats a `*` anywhere in the list as "accept any Host", so `voltbox.ge,*`
+    checks nothing while reading as if it checked voltbox.ge. Only an entry that
+    is `*` on its own is refused - `*.voltbox.ge` is a pattern Starlette matches
+    against subdomains, not a wildcard for every name.
+
     Nothing in the application builds a URL from `Host` today, so this is a
     door rather than a hole. It is worth closing anyway: the thing that makes
     it a hole later is one line somewhere that does, and nobody writing that
     line will think to come back here.
     """
-    configured = os.environ.get("TRUSTED_HOSTS", "").strip()
+    configured = os.environ.get("TRUSTED_HOSTS", "")
+    hosts = [entry.strip() for entry in configured.split(",") if entry.strip()]
 
-    if configured and configured != "*":
-        return
+    if not hosts:
+        raise SystemExit(
+            "TRUSTED_HOSTS is not set to real hostnames, so the Host header is not "
+            "checked at all and the server answers to any name it is given. List "
+            "the domains this API is served on, comma separated."
+        )
 
-    raise SystemExit(
-        "TRUSTED_HOSTS is not set to real hostnames, so the Host header is not "
-        "checked at all and the server answers to any name it is given. List "
-        "the domains this API is served on, comma separated."
-    )
+    if "*" in hosts:
+        raise SystemExit(
+            "TRUSTED_HOSTS contains '*', which accepts any Host - Starlette reads "
+            "a '*' anywhere in the list that way, whatever names are beside it. "
+            "Remove it and list the domains this API is served on, comma separated."
+        )
 
 
 def _split_origin(origin: str) -> SplitResult | None:

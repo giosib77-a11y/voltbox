@@ -8,7 +8,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.gzip import GZipMiddleware
-from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -18,6 +17,7 @@ from app.api.v1.routes import sitemap
 from app.core.config import settings
 from app.core.errors import error_body, register_exception_handlers
 from app.core.headers import SecurityHeadersMiddleware
+from app.core.hosts import LoggedTrustedHostMiddleware
 from app.core.logging import RequestContextMiddleware, configure_logging
 from app.core.rate_limit import limiter
 from app.db.session import engine
@@ -74,8 +74,18 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-Request-ID", "Idempotency-Key"],
         expose_headers=["X-Request-ID"],
     )
-    if settings.trusted_host_list != ["*"]:
-        app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_host_list)
+    # Per entry: Starlette reads a `*` anywhere in the list as "accept any Host",
+    # so `voltbox.ge,*` would install the check and check nothing. `*` alone is
+    # the local default and means what it says.
+    hosts = settings.trusted_host_list
+    if "*" not in hosts:
+        app.add_middleware(LoggedTrustedHostMiddleware, allowed_hosts=hosts)
+    elif any(host != "*" for host in hosts):
+        raise RuntimeError(
+            "TRUSTED_HOSTS lists names beside '*', and a '*' anywhere in the list "
+            "accepts any Host, so those names would look checked and not be. Use "
+            "'*' alone for a local run, or the names alone."
+        )
 
     # Added last, so it sits outermost and the headers reach error responses and
     # CORS preflights too. A 500 is exactly when a browser should not improvise.
