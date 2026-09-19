@@ -269,6 +269,46 @@ describe('error messages the shopper sees', () => {
     });
   });
 
+  it('names HEIC as the problem when an iPhone photo is uploaded', async () => {
+    global.fetch = vi.fn(async () =>
+      reply(
+        {
+          error: {
+            code: 'UNSUPPORTED_IMAGE_FORMAT',
+            message: 'Only JPEG, PNG and WebP images are accepted',
+            details: { detected: 'HEIC', declared: 'image/heic' },
+          },
+        },
+        400,
+      ),
+    );
+
+    await expect(request('/admin/products/p1/images', { method: 'POST' })).rejects.toMatchObject({
+      message:
+        'ეს HEIC ფოტოა — iPhone სურათებს ამ ფორმატით ინახავს — და ის არ მიიღება. ' +
+        'შეინახეთ JPEG-ად და ატვირთეთ ხელახლა.',
+    });
+  });
+
+  it('keeps the general format message for any other format', async () => {
+    global.fetch = vi.fn(async () =>
+      reply(
+        {
+          error: {
+            code: 'UNSUPPORTED_IMAGE_FORMAT',
+            message: 'Only JPEG, PNG and WebP images are accepted',
+            details: { detected: 'GIF', declared: 'image/gif' },
+          },
+        },
+        400,
+      ),
+    );
+
+    await expect(request('/admin/products/p1/images', { method: 'POST' })).rejects.toMatchObject({
+      message: 'ასეთი ფორმატი არ მიიღება — გამოიყენეთ JPEG, PNG ან WebP.',
+    });
+  });
+
   it('says how many are left when stock runs out mid-checkout', async () => {
     // Racing another shopper for the last units is the ordinary way to meet
     // this, and "Not enough stock" does not say what to do about it.

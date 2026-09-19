@@ -26,6 +26,34 @@ from app.core.errors import ValidationError
 #: can carry scripts, and it would be served from the same origin as the site.
 ALLOWED_FORMATS = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
 
+#: The `ftyp` brands of an HEVC-coded HEIF: the HEIC an iPhone saves a photo as.
+#: Pillow has no decoder for it and cannot even name it, so without this check
+#: the admin was told the file is not an image, with nothing about the format.
+_HEIC_BRANDS = frozenset({b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"hevm", b"hevs"})
+
+
+def _is_heic(data: bytes) -> bool:
+    """Whether the leading `ftyp` box names an HEIC brand, major or compatible.
+
+    Compatible brands too, because a file whose major brand is the generic
+    `mif1` can still be HEVC inside. The box is read no further than 64 bytes:
+    its declared size comes from the file and is not evidence of anything.
+    """
+    if data[4:8] != b"ftyp":
+        return False
+    end = min(int.from_bytes(data[:4], "big"), len(data), 64)
+    brands = [data[8:12], *(data[i : i + 4] for i in range(16, end - 3, 4))]
+    return any(brand in _HEIC_BRANDS for brand in brands)
+
+
+def _unsupported_format(detected: str, declared_type: str | None) -> ValidationError:
+    return ValidationError(
+        "Only JPEG, PNG and WebP images are accepted",
+        code="UNSUPPORTED_IMAGE_FORMAT",
+        details={"detected": detected, "declared": declared_type},
+    )
+
+
 _MIB = 1024 * 1024
 
 #: What one upload costs to verify, decode and shrink, as `(fixed, per pixel)`.
@@ -176,14 +204,12 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
             "The image resolution is too large", code="IMAGE_TOO_MANY_PIXELS"
         ) from exc
     except (UnidentifiedImageError, OSError, ValueError) as exc:
+        if _is_heic(data):
+            raise _unsupported_format("HEIC", declared_type) from exc
         raise ValidationError("This file is not a readable image", code="INVALID_IMAGE") from exc
 
     if not allowed:
-        raise ValidationError(
-            "Only JPEG, PNG and WebP images are accepted",
-            code="UNSUPPORTED_IMAGE_FORMAT",
-            details={"detected": image_format or "unknown", "declared": declared_type},
-        )
+        raise _unsupported_format(image_format or "unknown", declared_type)
 
     # A decompression bomb is small on disk and enormous once decoded, and the
     # decode is what allocates - so the limit is memory, converted into a pixel

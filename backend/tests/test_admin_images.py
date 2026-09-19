@@ -179,6 +179,34 @@ async def test_a_gif_is_rejected_even_though_it_decodes(
     assert response.json()["error"]["code"] == "UNSUPPORTED_IMAGE_FORMAT"
 
 
+#: The first box of an iPhone photo, and of an HEIC whose major brand is the
+#: generic HEIF one. Pillow cannot read past either.
+HEIC_HEADERS = {
+    "iphone": b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic",
+    "generic-major-brand": b"\x00\x00\x00\x18ftypmif1\x00\x00\x00\x00mif1heic",
+}
+
+
+@pytest.mark.parametrize("header", HEIC_HEADERS.values(), ids=HEIC_HEADERS.keys())
+async def test_a_heic_is_refused_as_a_format_not_as_a_non_image(
+    client: httpx.AsyncClient, headers: dict[str, str], product_id: str, header: bytes
+) -> None:
+    """The panel can only tell the admin what to change if it is told the format."""
+    response = await _upload(
+        client,
+        headers,
+        product_id,
+        data=header + b"\x00\x00\x00\x08free",
+        filename="IMG_0001.HEIC",
+        content_type="image/heic",
+    )
+
+    assert response.status_code == 400
+    error = response.json()["error"]
+    assert error["code"] == "UNSUPPORTED_IMAGE_FORMAT"
+    assert error["details"] == {"detected": "HEIC", "declared": "image/heic"}
+
+
 @pytest.mark.parametrize("fmt", ["PNG", "JPEG", "WEBP"])
 async def test_the_three_allowed_formats_are_accepted(
     client: httpx.AsyncClient, headers: dict[str, str], product_id: str, fmt: str

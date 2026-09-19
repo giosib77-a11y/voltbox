@@ -146,7 +146,14 @@ const CODE_MESSAGES = {
   NO_IMAGES: 'სურათი არ აირჩა.',
   EMPTY_FILE: 'ფაილი ცარიელია.',
   INVALID_IMAGE: 'ფაილი სურათი არ არის.',
-  UNSUPPORTED_IMAGE_FORMAT: 'ასეთი ფორმატი არ მიიღება — გამოიყენეთ JPEG, PNG ან WebP.',
+  // An iPhone saves photos as HEIC, and copied to a computer that is how they
+  // arrive. It used to be "not an image", which gave no hint that the format is
+  // what to change.
+  UNSUPPORTED_IMAGE_FORMAT: (details) =>
+    details?.detected === 'HEIC'
+      ? 'ეს HEIC ფოტოა — iPhone სურათებს ამ ფორმატით ინახავს — და ის არ მიიღება. ' +
+        'შეინახეთ JPEG-ად და ატვირთეთ ხელახლა.'
+      : 'ასეთი ფორმატი არ მიიღება — გამოიყენეთ JPEG, PNG ან WebP.',
   // The two an admin meets with a photo their phone has just taken. Both used
   // to say only that something was wrong with it, which reads like the upload
   // is broken rather than like something to fix in three seconds.
