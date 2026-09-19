@@ -28,9 +28,15 @@ services:
       paths:
         - frontend/**
 
-    # Read by Vite when it builds, not when a page is served - a change needs a
+    # Read when the site builds, not when a page is served - a change needs a
     # new deploy.
     envVars:
+      # Unset, the build runs on Render's own default (24.21.0 as of 2026-09),
+      # not the 22 that CI builds and tests with (.github/workflows/). Render
+      # reads this before .node-version, .nvmrc or package.json's engines, so
+      # it is the one that decides. "22" resolves to the newest 22.x release.
+      - key: NODE_VERSION
+        value: "22"
       # Unset reads as mock: the shop builds, shows 61 sample products from
       # memory and sends orders nowhere, with no error. Nothing here is secret.
       - key: VITE_API_MODE

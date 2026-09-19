@@ -45,7 +45,7 @@ npm run preview      # ბილდის ლოკალური გადა�
 npm run gen:images   # პროდუქტების placeholder-სურათების ხელახლა გენერაცია
 ```
 
-მოთხოვნა: Node.js 18+.
+მოთხოვნა: Node.js 22 — იგივე, რასაც CI და Render-ის ბილდი (`render.yaml`-ში `NODE_VERSION`) იყენებს.
 
 ---
 
