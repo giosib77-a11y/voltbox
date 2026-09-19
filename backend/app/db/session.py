@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.db.ssl import build_connect_args
 
 engine = create_async_engine(
-    settings.database_url,
+    settings.database_url.get_secret_value(),
     echo=settings.db_echo,
     pool_size=settings.db_pool_size,
     max_overflow=settings.db_max_overflow,

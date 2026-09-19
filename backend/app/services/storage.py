@@ -362,10 +362,10 @@ def get_storage() -> StorageBackend:
     if settings.app_env == "test":
         return InMemoryStorage()
 
-    if settings.supabase_project_ref and settings.supabase_service_role_key:
+    if settings.supabase_project_ref and settings.supabase_service_role_key.get_secret_value():
         return SupabaseStorage(
             settings.supabase_project_ref,
-            settings.supabase_service_role_key,
+            settings.supabase_service_role_key.get_secret_value(),
             settings.supabase_storage_bucket,
         )
 

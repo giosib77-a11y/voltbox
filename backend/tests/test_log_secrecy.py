@@ -10,6 +10,10 @@ A SQLAlchemy exception carries the statement *and its bound parameters*, and on
 the registration path those parameters are the customer's email and their
 Argon2 password hash. Postgres then adds a DETAIL line naming the value that
 collided. Both were being written out verbatim.
+
+The application's own credentials are not here. They are kept out of every
+repr by their type, which no formatter takes part in, and a repr reaches a
+traceback or a debugger without being a log line - test_settings_secrecy.py.
 """
 
 import json

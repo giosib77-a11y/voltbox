@@ -94,5 +94,5 @@ def build_limiter(*, enabled: bool, storage_uri: str) -> Limiter:
 
 limiter = build_limiter(
     enabled=settings.app_env != "test",
-    storage_uri=storage_uri_for(settings.redis_url),
+    storage_uri=storage_uri_for(settings.redis_url.get_secret_value()),
 )

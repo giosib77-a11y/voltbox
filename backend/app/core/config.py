@@ -8,13 +8,30 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # A field is a SecretStr for what its value grants, not for what it is
+    # called: DATABASE_URL and REDIS_URL carry passwords, JWT_SECRET mints any
+    # session including an admin's, and the service role key bypasses row
+    # security on the whole Supabase project. Any repr of settings - a
+    # traceback, a log line, a debugger - then shows `**********` for them.
+    # The project ref and the bucket name are in every public image URL and
+    # stay plain.
+    #
+    # A value that fails validation never becomes a SecretStr, and pydantic
+    # quotes the raw input in its error - a JWT_SECRET one character short
+    # would be printed whole in the deploy log. hide_input_in_errors drops the
+    # input from every field's error; the field name and what is wrong with it
+    # remain.
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore", case_sensitive=False
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+        hide_input_in_errors=True,
     )
 
     # --- environment ----------------------------------------------------------
@@ -23,7 +40,7 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
 
     # --- database -------------------------------------------------------------
-    database_url: str
+    database_url: SecretStr
     db_echo: bool = False
     db_pool_size: int = 5
     db_max_overflow: int = 10
@@ -32,7 +49,7 @@ class Settings(BaseSettings):
     db_ssl_root_cert: str = ""
 
     # --- auth -----------------------------------------------------------------
-    jwt_secret: str = Field(min_length=32)
+    jwt_secret: SecretStr = Field(min_length=32)
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = 30
     refresh_token_ttl_days: int = 30
@@ -86,7 +103,7 @@ class Settings(BaseSettings):
     # gunicorn workers the Dockerfile starts, "5 logins per minute" silently
     # becomes ten. Set REDIS_URL for any deployment that runs more than one
     # process; see app/core/rate_limit.py for what happens when Redis is down.
-    redis_url: str = ""
+    redis_url: SecretStr = SecretStr("")
 
     # --- business rules (frontend-თან სინქრონში) ------------------------------
     shipping_free_threshold: int = 150
@@ -98,7 +115,7 @@ class Settings(BaseSettings):
 
     # --- Supabase Storage (არასავალდებულო — სურათებისთვის) --------------------
     supabase_project_ref: str = ""
-    supabase_service_role_key: str = ""
+    supabase_service_role_key: SecretStr = SecretStr("")
     # Public on purpose: signed URLs expire, which would break storefront pages
     # and the image URLs snapshotted into past orders.
     supabase_storage_bucket: str = "product-images"
@@ -128,7 +145,7 @@ class Settings(BaseSettings):
 
     @field_validator("database_url")
     @classmethod
-    def normalize_database_url(cls, value: str) -> str:
+    def normalize_database_url(cls, value: SecretStr) -> SecretStr:
         """URI-ს ისე ვიღებთ, როგორც Supabase-ის dashboard-ი გვაძლევს.
 
         ორი რამ უნდა შესწორდეს, თორემ კავშირი ჩავარდება და შეცდომა ბუნდოვანია:
@@ -136,14 +153,14 @@ class Settings(BaseSettings):
         2. `?sslmode=` libpq-ს პარამეტრია — asyncpg მას ვერ იგებს და TypeError-ს აგდებს.
            TLS-ს `session.py` connect_args-ით რთავს.
         """
-        url = value.strip()
+        url = value.get_secret_value().strip()
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
         for junk in ("?sslmode=require", "&sslmode=require", "?sslmode=prefer", "&sslmode=prefer"):
             url = url.replace(junk, "")
-        return url
+        return SecretStr(url)
 
     @property
     def cookie_path(self) -> str:
@@ -218,7 +235,8 @@ class Settings(BaseSettings):
     @property
     def requires_ssl(self) -> bool:
         """managed Postgres (Supabase) TLS-ს ითხოვს, ლოკალური კონტეინერი — არა."""
-        return not any(host in self.database_url for host in ("localhost", "127.0.0.1"))
+        url = self.database_url.get_secret_value()
+        return not any(host in url for host in ("localhost", "127.0.0.1"))
 
 
 @lru_cache

@@ -426,7 +426,7 @@ async def test_an_expired_access_token_is_refused(client: httpx.AsyncClient) -> 
             "jti": "0" * 32,
             "type": "access",
         },
-        settings.jwt_secret,
+        settings.jwt_secret.get_secret_value(),
         algorithm=settings.jwt_algorithm,
     )
 
@@ -586,7 +586,7 @@ async def test_a_token_without_a_version_is_refused(client: httpx.AsyncClient) -
             "exp": int((datetime.now(UTC) + timedelta(hours=1)).timestamp()),
             "type": "access",
         },
-        settings.jwt_secret,
+        settings.jwt_secret.get_secret_value(),
         algorithm=settings.jwt_algorithm,
     )
 

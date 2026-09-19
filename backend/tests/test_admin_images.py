@@ -33,6 +33,7 @@ from app.services.storage import (
     validate_image,
 )
 from PIL import Image
+from pydantic import SecretStr
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -368,7 +369,9 @@ class TestStorageSelection:
 
     def test_uses_supabase_when_it_is_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(settings, "supabase_project_ref", "somewhere", raising=False)
-        monkeypatch.setattr(settings, "supabase_service_role_key", "a-key", raising=False)
+        monkeypatch.setattr(
+            settings, "supabase_service_role_key", SecretStr("a-key"), raising=False
+        )
         monkeypatch.setattr(settings, "app_env", "production", raising=False)
 
         assert isinstance(get_storage(), SupabaseStorage)
@@ -376,7 +379,7 @@ class TestStorageSelection:
     @pytest.mark.parametrize("env", ["development", "test"])
     def test_falls_back_locally(self, monkeypatch: pytest.MonkeyPatch, env: str) -> None:
         monkeypatch.setattr(settings, "supabase_project_ref", "", raising=False)
-        monkeypatch.setattr(settings, "supabase_service_role_key", "", raising=False)
+        monkeypatch.setattr(settings, "supabase_service_role_key", SecretStr(""), raising=False)
         monkeypatch.setattr(settings, "app_env", env, raising=False)
 
         assert isinstance(get_storage(), InMemoryStorage)
@@ -386,7 +389,7 @@ class TestStorageSelection:
         self, monkeypatch: pytest.MonkeyPatch, env: str
     ) -> None:
         monkeypatch.setattr(settings, "supabase_project_ref", "", raising=False)
-        monkeypatch.setattr(settings, "supabase_service_role_key", "", raising=False)
+        monkeypatch.setattr(settings, "supabase_service_role_key", SecretStr(""), raising=False)
         monkeypatch.setattr(settings, "app_env", env, raising=False)
 
         with pytest.raises(RuntimeError, match="Object storage is not configured"):
@@ -395,7 +398,7 @@ class TestStorageSelection:
     def test_refuses_when_only_half_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A ref without a key is the shape a half-filled .env actually has."""
         monkeypatch.setattr(settings, "supabase_project_ref", "somewhere", raising=False)
-        monkeypatch.setattr(settings, "supabase_service_role_key", "", raising=False)
+        monkeypatch.setattr(settings, "supabase_service_role_key", SecretStr(""), raising=False)
         monkeypatch.setattr(settings, "app_env", "production", raising=False)
 
         with pytest.raises(RuntimeError, match="Object storage is not configured"):
@@ -413,7 +416,9 @@ class TestStorageSelection:
         real ones.
         """
         monkeypatch.setattr(settings, "supabase_project_ref", "a-real-project", raising=False)
-        monkeypatch.setattr(settings, "supabase_service_role_key", "a-real-key", raising=False)
+        monkeypatch.setattr(
+            settings, "supabase_service_role_key", SecretStr("a-real-key"), raising=False
+        )
         monkeypatch.setattr(settings, "app_env", "test", raising=False)
 
         assert isinstance(get_storage(), InMemoryStorage)
@@ -423,7 +428,9 @@ class TestStorageSelection:
     ) -> None:
         """Uploading real product images locally is the point of configuring it."""
         monkeypatch.setattr(settings, "supabase_project_ref", "a-real-project", raising=False)
-        monkeypatch.setattr(settings, "supabase_service_role_key", "a-real-key", raising=False)
+        monkeypatch.setattr(
+            settings, "supabase_service_role_key", SecretStr("a-real-key"), raising=False
+        )
         monkeypatch.setattr(settings, "app_env", "development", raising=False)
 
         assert isinstance(get_storage(), SupabaseStorage)

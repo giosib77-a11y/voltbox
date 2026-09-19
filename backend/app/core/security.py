@@ -82,7 +82,9 @@ def create_access_token(user_id: uuid.UUID, token_version: int = 0) -> tuple[str
         VERSION_CLAIM: token_version,
         "type": "access",
     }
-    token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    token = jwt.encode(
+        payload, settings.jwt_secret.get_secret_value(), algorithm=settings.jwt_algorithm
+    )
     return token, expires_at
 
 
@@ -90,7 +92,7 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
     """`None` ნიშნავს „არასწორი, ვადაგასული ან სხვა ტიპის ტოკენი“."""
     try:
         payload: dict[str, Any] = jwt.decode(
-            token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret.get_secret_value(), algorithms=[settings.jwt_algorithm]
         )
     except jwt.PyJWTError:
         return None
