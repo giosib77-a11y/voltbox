@@ -13,7 +13,7 @@ narrow the surface a little further.
 import httpx
 import pytest
 from app.core.config import Settings
-from app.core.headers import API_CSP, HSTS_VALUE
+from app.core.headers import API_CSP, HSTS_VALUE, SecurityHeadersMiddleware
 from app.main import create_app
 
 EXPECTED = {
@@ -107,5 +107,7 @@ async def test_the_app_builds_with_the_middleware_present() -> None:
     """A guard against the middleware being dropped from create_app."""
     app = create_app()
 
-    names = [m.cls.__name__ for m in app.user_middleware]
-    assert "SecurityHeadersMiddleware" in names
+    # object: Starlette types `cls` as a factory protocol, which mypy will not
+    # compare with a class.
+    classes: list[object] = [m.cls for m in app.user_middleware]
+    assert SecurityHeadersMiddleware in classes

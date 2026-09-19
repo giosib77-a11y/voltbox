@@ -25,6 +25,7 @@ from pathlib import Path
 import pytest
 from app.db.models import Order
 from app.schemas.order import PAYMENT_METHODS
+from sqlalchemy import CheckConstraint
 
 BACKEND = Path(__file__).resolve().parents[1]
 FRONTEND = BACKEND.parent / "frontend" / "src"
@@ -53,10 +54,14 @@ def test_the_schema_and_the_database_agree() -> None:
     """A method the API accepts and the column refuses is a 500 on checkout."""
     # The metadata naming convention prefixes the name given in the model, so
     # `payment_method_allowed` is stored as `ck_orders_payment_method_allowed`.
+    # A mapped class's table is typed as the wider FromClause, which has no
+    # constraints; the metadata hands back the Table itself.
     check = next(
         c
-        for c in Order.__table__.constraints
-        if "payment_method_allowed" in (getattr(c, "name", "") or "")
+        for c in Order.metadata.tables[Order.__tablename__].constraints
+        if isinstance(c, CheckConstraint)
+        and isinstance(c.name, str)
+        and "payment_method_allowed" in c.name
     )
 
     for method in PAYMENT_METHODS:

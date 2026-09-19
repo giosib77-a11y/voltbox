@@ -16,6 +16,7 @@ import subprocess
 import sys
 import uuid
 import zlib
+from collections.abc import Generator
 
 import httpx
 import pytest
@@ -44,7 +45,12 @@ ADMIN = "/api/v1/admin"
 
 #: One flat colour per mode. Decode memory follows the dimensions and the
 #: format, never the picture, so a solid image measures the same as a photograph.
-COLOURS = {"RGB": (200, 40, 10), "RGBA": (200, 40, 10, 128), "CMYK": (10, 40, 200, 5), "L": 120}
+COLOURS: dict[str, float | tuple[float, ...]] = {
+    "RGB": (200, 40, 10),
+    "RGBA": (200, 40, 10, 128),
+    "CMYK": (10, 40, 200, 5),
+    "L": 120,
+}
 
 
 def image_bytes(
@@ -80,7 +86,7 @@ def header_only_png(width: int, height: int) -> bytes:
 
 
 @pytest.fixture
-def storage() -> InMemoryStorage:
+def storage() -> Generator[InMemoryStorage]:
     backend = InMemoryStorage()
     app.dependency_overrides[get_storage] = lambda: backend
     yield backend
@@ -107,15 +113,18 @@ async def product_id(db: AsyncSession) -> str:
 
 
 async def _upload(
-    client: httpx.AsyncClient, headers: dict[str, str], product_id: str, **kwargs: object
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    product_id: str,
+    *,
+    data: bytes | None = None,
+    filename: str = "photo.png",
+    content_type: str = "image/png",
 ) -> httpx.Response:
-    data = kwargs.pop("data", None) or image_bytes()
-    name = kwargs.pop("filename", "photo.png")
-    content_type = kwargs.pop("content_type", "image/png")
     return await client.post(
         f"{ADMIN}/products/{product_id}/images",
         headers=headers,
-        files={"file": (name, data, content_type)},
+        files={"file": (filename, data or image_bytes(), content_type)},
     )
 
 
@@ -297,7 +306,10 @@ async def test_an_image_referenced_by_an_order_is_kept_in_storage(
 
 
 async def test_upload_rejects_a_file_that_is_too_large(
-    client: httpx.AsyncClient, headers: dict[str, str], product_id: str, monkeypatch
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    product_id: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.core.config import settings
 
@@ -313,7 +325,10 @@ async def test_upload_rejects_a_file_that_is_too_large(
 
 
 async def test_upload_rejects_a_decompression_bomb_by_its_decode_cost(
-    client: httpx.AsyncClient, headers: dict[str, str], product_id: str, monkeypatch
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    product_id: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.core.config import settings
 
@@ -630,6 +645,9 @@ class TestPillowsOwnBombGuard:
         fixed, per_pixel = min(DECODE_COST.values(), key=lambda cost: cost[1])
         largest = (settings.max_image_decode_bytes - fixed) // per_pixel
 
+        # None would mean Pillow's own guard is switched off, and then there is
+        # nothing to agree with.
+        assert Image.MAX_IMAGE_PIXELS is not None
         assert largest <= Image.MAX_IMAGE_PIXELS
 
 

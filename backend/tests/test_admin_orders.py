@@ -479,5 +479,6 @@ class TestTheSnapshotShapeIsTheOneTheRouteWrites:
 
         stored = await db.scalar(select(Order.customer).where(Order.order_number == number))
 
+        assert stored is not None
         assert set(stored) >= {"first_name", "last_name", "phone", "city", "address"}
         assert "firstName" not in stored

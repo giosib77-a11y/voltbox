@@ -21,17 +21,19 @@ outside SecurityHeadersMiddleware and never passed through it.
 
 import json
 import logging
+from collections.abc import AsyncGenerator, Generator
 
 import httpx
 import pytest
 from app.core.headers import BASE_HEADERS
 from app.main import create_app
+from fastapi import FastAPI
 
 SECRET_IN_THE_MESSAGE = "connection to host db.internal failed for user postgres"
 
 
 @pytest.fixture
-def crashing_app():
+def crashing_app() -> FastAPI:
     """A real application with one route that raises."""
     app = create_app()
 
@@ -43,7 +45,7 @@ def crashing_app():
 
 
 @pytest.fixture
-def captured_logs():
+def captured_logs() -> Generator[list[logging.LogRecord]]:
     """Every record written during the test, collected from the root logger.
 
     Not `caplog`: under pytest 9 it captures nothing in this suite, and a test
@@ -69,7 +71,7 @@ def captured_logs():
 
 
 @pytest.fixture
-async def crash_client(crashing_app):
+async def crash_client(crashing_app: FastAPI) -> AsyncGenerator[httpx.AsyncClient]:
     # raise_app_exceptions=False: without it httpx re-raises the exception into
     # the test instead of letting the handler answer, and there is no response
     # to look at.

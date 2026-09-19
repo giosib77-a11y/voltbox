@@ -12,7 +12,7 @@ from decimal import Decimal
 
 import httpx
 import pytest
-from app.db.models import ROLE_ADMIN, RefreshToken, User
+from app.db.models import ROLE_ADMIN, Order, RefreshToken, User
 from app.services import auth as auth_service
 from app.services import order as order_service
 from app.services.order_status import transition
@@ -34,7 +34,7 @@ def headers(admin: User) -> dict[str, str]:
     return auth_header(admin)
 
 
-async def _customer_with_orders(db: AsyncSession) -> tuple[User, object, object]:
+async def _customer_with_orders(db: AsyncSession) -> tuple[User, Order, Order]:
     customer = await make_user(db, email="shopper@example.ge")
     category = await make_category(db, slug="cust")
     brand = await make_brand(db, "CustBrand")

@@ -7,6 +7,7 @@
 
 import asyncio
 import uuid
+from collections.abc import AsyncGenerator
 from decimal import Decimal
 
 import pytest
@@ -41,7 +42,7 @@ CUSTOMER = {
 
 
 @pytest.fixture
-async def last_unit() -> Product:
+async def last_unit() -> AsyncGenerator[Product]:
     """ერთი პროდუქტი, მარაგში ზუსტად 1 ცალით — ცალკე კავშირზე დაწერილი."""
     async with SessionLocal() as setup:
         category = Category(slug="race", name="race", filters=[])
@@ -262,7 +263,7 @@ async def test_two_parallel_cancellations_restock_exactly_once(last_unit: Produc
     async with SessionLocal() as session:
         order = await order_service.create_order(
             session,
-            items=[(last_unit.id, 1)],  # type: ignore[list-item]
+            items=[(last_unit.id, 1)],
             customer=dict(CUSTOMER),
             payment_method="cash",
             user=None,

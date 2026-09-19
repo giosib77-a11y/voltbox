@@ -9,6 +9,7 @@ what is tested here is what it refuses.
 
 import json
 import logging
+from collections.abc import Generator
 
 import httpx
 import pytest
@@ -19,7 +20,7 @@ PATH = "/api/v1/client-errors"
 
 
 @pytest.fixture
-def captured() -> list[logging.LogRecord]:
+def captured() -> Generator[list[logging.LogRecord]]:
     records: list[logging.LogRecord] = []
 
     class Collector(logging.Handler):

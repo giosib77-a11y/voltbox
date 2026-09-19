@@ -160,7 +160,10 @@ async def test_patching_only_the_price_is_still_checked_against_the_stored_old_p
     ],
 )
 async def test_specs_must_be_a_flat_object(
-    client: httpx.AsyncClient, headers: dict[str, str], context: dict[str, str], specs: dict
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    context: dict[str, str],
+    specs: dict[str, object],
 ) -> None:
     response = await client.post(
         f"{ADMIN}/products", headers=headers, json=payload(context, specs=specs)
