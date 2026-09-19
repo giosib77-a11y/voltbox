@@ -60,3 +60,15 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+
+  # backend/Dockerfile pins its base image by tag and digest, and a new digest
+  # under the same tag is how Debian's security fixes reach the image.
+  # The exemption at the top of this file does not help here. GitHub's
+  # advisory database has no Docker ecosystem, so an image update is never a
+  # security update, and the cooldown treats it like any other.
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

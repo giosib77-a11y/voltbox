@@ -1,13 +1,19 @@
-# syntax=docker/dockerfile:1
 # მრავალსაფეხურიანი build — საბოლოო იმიჯში კომპილატორი და dev-პაკეტები არ რჩება.
+#
+# `# syntax=` ხაზი განზრახ არ არის. ის BuildKit-ს build-ის დროს Docker Hub-იდან
+# parser-ის image-ს ჩამოატვირთინებს და გაუშვებინებს: tag-ით გადაწერადს, digest-ით
+# გაყინულს. აქ დაწერილს builder-ში ჩაშენებული parser-ი სრულად კითხულობს —
+# `RUN --mount`, heredoc და სხვა ახალი სინტაქსი არ გამოიყენება. ამიტომ ჩამოტვირთვა
+# არაფერს გვაძლევს. თუ ასეთი სინტაქსი დაგჭირდათ, ხაზი digest-ით დაამატეთ, FROM-ის
+# მსგავსად, და მაშინ მისი განახლებაც ხელით მოგიწევთ.
 #
 # base image digest-ით, ორივე stage-ში ერთი: tag-ი გადაწერადია, digest-ი — არა.
 # ვერსია tag-შია, იმავე ხაზზე: როცა ორივე წერია, Docker digest-ს იღებს და tag-ი
 # მხოლოდ წასაკითხია. ხაზის ბოლოს comment-ი შეუძლებელია — Dockerfile-ში `#`
 # მხოლოდ ხაზის თავშია comment-ი; გაზომილი: FROM-ი parse-ზე ჩავარდა.
 # ფასი: Debian-ის security fix-ები image-ში მხოლოდ digest-ის განახლებით შემოდის.
-# Dependabot მას მხოლოდ მაშინ აახლებს, თუ .github/dependabot.yml-ში /backend-ის
-# `docker` entry-ა. მის გარეშე ხელით — Digest და PYTHON_VERSION აქედან:
+# ამას Dependabot-ი აკეთებს (.github/dependabot.yml-ის `docker` entry, 7-დღიანი
+# cooldown-ით). ლოდინი თუ არ შეიძლება, ხელით — Digest და PYTHON_VERSION აქედან:
 #   docker buildx imagetools inspect python:3.14-slim
 #   docker buildx imagetools inspect python:3.14-slim --format '{{json (index .Image "linux/amd64").Config.Env}}'
 FROM python:3.14.7-slim-trixie@sha256:ef30e8ee3a7f227b0b5b39669b2e656f35b56b918c6631820357c2a55ff5a428 AS builder

@@ -284,7 +284,7 @@ def test_development_is_left_alone(monkeypatch: pytest.MonkeyPatch) -> None:
 #
 # APP_ENV defaults to `development`, which is the least safe value it can take:
 # the API docs go public, the refresh cookie loses Secure, object storage falls
-# back to process memory, and both checks above return early without running.
+# back to process memory, and on_starting skips every check after this one.
 # gunicorn only runs in a deployment, so it is the right place to insist.
 
 
@@ -576,8 +576,10 @@ def test_a_refusal_names_the_entry_and_not_its_userinfo(monkeypatch: pytest.Monk
     "value",
     [
         "https://voltbox.ge,https://www.voltbox.ge",
-        # config.py drops a lone trailing slash, so this one does match.
+        # config.py writes these three the way a browser does, so they match.
         "https://voltbox.ge/",
+        "https://VoltBox.ge",
+        "https://voltbox.ge:443",
         "https://voltbox.ge:8443",
     ],
 )

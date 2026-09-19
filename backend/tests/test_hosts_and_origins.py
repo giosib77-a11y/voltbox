@@ -5,8 +5,10 @@ said nothing:
 
   · `voltbox.ge,*` installed the Host check and checked nothing - Starlette
     reads a `*` anywhere in the list as "accept any Host".
-  · `https://voltbox.ge/` allowed no browser at all - CORSMiddleware compares
-    origins exactly, and an Origin header never ends in a slash.
+  · `https://voltbox.ge/`, `https://VoltBox.ge` and `https://voltbox.ge:443`
+    allowed no browser at all - CORSMiddleware compares origins exactly, and
+    an Origin header never ends in a slash, never has capitals and never names
+    the default port.
   · A refused Host left no line in the log. The check sits outside the access
     log, so listing the storefront's domain instead of the API's turned every
     request into a 400 with nothing anywhere naming the setting.
@@ -272,3 +274,48 @@ async def test_dropping_the_slash_does_not_make_a_wildcard(
     response = await _preflight("https://elsewhere.example")
 
     assert "access-control-allow-origin" not in response.headers
+
+
+# ── an origin spelled otherwise than a browser spells it ─────────────────────
+
+
+@pytest.mark.parametrize(
+    "listed",
+    [
+        "https://VoltBox.ge",
+        "HTTPS://voltbox.ge",
+        "https://voltbox.ge:443",
+        "https://VOLTBOX.GE:443/",
+    ],
+)
+async def test_the_same_origin_written_otherwise_still_lets_the_storefront_in(
+    monkeypatch: pytest.MonkeyPatch, listed: str
+) -> None:
+    """Each passed every startup guard and then allowed no one."""
+    monkeypatch.setattr(settings, "cors_origins", listed)
+
+    response = await _preflight("https://voltbox.ge")
+
+    assert response.headers.get("access-control-allow-origin") == "https://voltbox.ge"
+
+
+@pytest.mark.parametrize(
+    ("listed", "read"),
+    [
+        ("http://VoltBox.ge:80", "http://voltbox.ge"),
+        # 443 is https's port, not http's, so here it is part of the origin.
+        ("http://voltbox.ge:443", "http://voltbox.ge:443"),
+        ("https://voltbox.ge:8443", "https://voltbox.ge:8443"),
+        ("http://[::1]:5173", "http://[::1]:5173"),
+        # Not origins: left as written, since no spelling of them matches.
+        ("https://VoltBox.ge/shop", "https://VoltBox.ge/shop"),
+        ("https://VoltBox.ge:99999", "https://VoltBox.ge:99999"),
+        ("VoltBox.ge", "VoltBox.ge"),
+    ],
+)
+def test_only_the_spelling_changes_never_the_origin(
+    monkeypatch: pytest.MonkeyPatch, listed: str, read: str
+) -> None:
+    monkeypatch.setattr(settings, "cors_origins", listed)
+
+    assert settings.cors_origin_list == [read]

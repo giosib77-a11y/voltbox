@@ -64,9 +64,10 @@ def _check_the_environment_is_named() -> None:
     `APP_ENV` defaults to `development`, and that default is the least safe
     value it can take: `/docs` and `/openapi.json` serve the whole admin API
     surface, the refresh cookie loses `Secure`, object storage falls back to a
-    dict in one worker's memory, and both checks in this file return early
-    without running. Five protections, all off, and the site still works - so
-    nothing reports it.
+    dict in one worker's memory, and on_starting skips every check after this
+    one - the proxy, the hosts, the origins, the rate-limit counters and the
+    connection budget. All of it off, and the site still works - so nothing
+    reports it.
 
     Forgetting an environment variable on a new host is the most ordinary
     deployment mistake there is, and gunicorn only ever runs in a deployment,
@@ -84,8 +85,8 @@ def _check_the_environment_is_named() -> None:
     raise SystemExit(
         f"APP_ENV is {named}, but gunicorn only runs in a deployment. Left this "
         "way the API docs are public, the refresh cookie is not Secure, uploads "
-        "go to process memory and the proxy and connection-pool checks are both "
-        f"skipped. Set APP_ENV to one of {sorted(PRODUCTION_ENVS)}, or set "
+        "go to process memory and the rest of gunicorn.conf.py's startup checks "
+        f"are skipped. Set APP_ENV to one of {sorted(PRODUCTION_ENVS)}, or set "
         f"{LOCAL_RUN_OPT_OUT}=1 if this really is a local run."
     )
 
@@ -220,10 +221,10 @@ def _check_the_origins_are_named() -> None:
     An entry urlsplit cannot read is refused for the same reason, and so is one
     that reads but is not an origin - no scheme, or a path. An Origin header is
     always scheme://host[:port], so such an entry matches no browser, and
-    refusing it can never turn away a configuration that worked. What still
-    starts: an origin spelled otherwise than a browser sends it - capitals in
-    the host, or the default port written out - matches nothing just as
-    quietly, since the middleware compares exactly (ASSUMPTIONS.md 8.12).
+    refusing it can never turn away a configuration that worked. An origin
+    spelled otherwise than a browser sends it - capitals in the host, or the
+    default port written out - is not refused: config.py rewrites it the way a
+    browser spells it, so it matches (ASSUMPTIONS.md 8.12).
     """
     configured = os.environ.get("CORS_ORIGINS", "")
     # Numbered as written, blanks included, so "entry 3" is the third item

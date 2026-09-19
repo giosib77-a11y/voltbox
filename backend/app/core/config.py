@@ -7,9 +7,49 @@
 
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: The port a browser leaves out of an Origin header, because it is the scheme's.
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def _as_a_browser_sends_it(origin: str) -> str:
+    """One CORS_ORIGINS entry, spelled the way a browser's Origin header spells it.
+
+    CORSMiddleware compares exactly, and an Origin header never ends in `/`,
+    never has capitals in its scheme or host, and never names the scheme's
+    default port. So `https://voltbox.ge/` - the shape a copied URL has -
+    `https://VoltBox.ge` and `https://voltbox.ge:443` each allowed no one, though
+    all three name the storefront. Rewriting cannot widen the list: each entry
+    still names the origin it named before.
+
+    The slash is dropped only after a scheme, so that `*/` is not turned into
+    the wildcard. Anything that is not an origin once the slash is gone - a
+    path, a query, a login, a port urlsplit cannot read - is left as written:
+    it matches nothing either way.
+    """
+    if "://" not in origin:
+        return origin
+    origin = origin.removesuffix("/")
+
+    try:
+        parts = urlsplit(origin)
+        port = parts.port
+    except ValueError:
+        return origin
+
+    host = parts.hostname
+    if not host or "@" in parts.netloc or parts.path or parts.query or parts.fragment:
+        return origin
+
+    if ":" in host:  # IPv6, which .hostname hands back without its brackets
+        host = f"[{host}]"
+    if port is None or port == _DEFAULT_PORTS.get(parts.scheme):
+        return f"{parts.scheme}://{host}"
+    return f"{parts.scheme}://{host}:{port}"
 
 
 class Settings(BaseSettings):
@@ -195,16 +235,9 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        """The origins in the form a browser sends them.
-
-        An Origin header never ends in `/`, and CORSMiddleware compares exactly,
-        so `https://voltbox.ge/` - the shape a copied URL has - allowed no one.
-        That slash is dropped. Only after a scheme, so that `*/` is not turned
-        into the wildcard; anything longer than a bare slash is left as written
-        and still matches nothing.
-        """
+        """The origins in the form a browser sends them - see _as_a_browser_sends_it."""
         origins = (o.strip() for o in self.cors_origins.split(","))
-        return [o.removesuffix("/") if "://" in o else o for o in origins if o]
+        return [_as_a_browser_sends_it(o) for o in origins if o]
 
     @property
     def trusted_host_list(self) -> list[str]:
