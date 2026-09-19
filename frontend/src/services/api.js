@@ -51,6 +51,11 @@ export const getAddresses = api.getAddresses;
 export const saveAddress = api.saveAddress;
 export const deleteAddress = api.deleteAddress;
 
+/* --- ანგარიშზე შენახული კალათა -------------------------------------------- */
+export const saveCart = api.saveCart;
+export const mergeCart = api.mergeCart;
+export const clearCart = api.clearCart;
+
 /* --- დიაგნოსტიკა და შეცდომები --------------------------------------------- */
 export const apiMode = api.implementation;
 export { ApiError, AuthError, NotFoundError, ValidationError } from './errors.js';
@@ -77,5 +82,8 @@ export default {
   getAddresses,
   saveAddress,
   deleteAddress,
+  saveCart,
+  mergeCart,
+  clearCart,
   apiMode,
 };

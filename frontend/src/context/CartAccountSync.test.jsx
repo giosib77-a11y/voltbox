@@ -9,19 +9,26 @@
  * because the cart is saved on the account first: without that, emptying it
  * would be losing it. With it, leaving the basket on screen would show the next
  * person on a shared computer what the last one was about to buy.
+ *
+ * The mock replaces the implementation behind `services/api.js`, not api.js
+ * itself. api.js re-exports each function by hand, and from the day this sync
+ * was written it did not re-export these three: CartContext called
+ * `undefined`, the error was swallowed, and nothing reached the account. These tests mocked api.js and
+ * so replaced the one layer that was broken. Mocked a layer lower, the calls
+ * go through the real api.js and every test here fails if it drops one again.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 
-vi.mock('../services/api.js', () => ({
+vi.mock('virtual:api-impl', async (importOriginal) => ({
+  ...(await importOriginal()),
   mergeCart: vi.fn(async (items) => items.map((i) => ({ ...i, snapshot: { ...i.snapshot } }))),
   saveCart: vi.fn(async (items) => items),
-  getCart: vi.fn(async () => []),
   clearCart: vi.fn(async () => {}),
 }));
 
-import * as api from '../services/api.js';
+import * as api from 'virtual:api-impl';
 import CartAccountSync from './CartAccountSync.jsx';
 import { CartProvider } from './CartContext.jsx';
 import { useCart } from '../hooks/useCart.js';
@@ -124,6 +131,23 @@ describe('CartAccountSync', () => {
     );
 
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(2));
+  });
+
+  it('saves what is added after signing in to the account', async () => {
+    authValue = { user: { id: 'u1' }, initializing: false };
+    renderSync();
+    await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
+
+    screen.getByText('add').click();
+
+    // After the debounce, so allow for it rather than faking the clock.
+    await waitFor(
+      () =>
+        expect(api.saveCart).toHaveBeenLastCalledWith([
+          expect.objectContaining({ productId: 'p1', qty: 2 }),
+        ]),
+      { timeout: 2000 },
+    );
   });
 
   it('empties the cart on this browser when they sign out', async () => {
