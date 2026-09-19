@@ -251,6 +251,17 @@ async def test_unknown_product_slug_returns_a_stable_error_code(client: httpx.As
     assert response.json()["error"]["code"] == "PRODUCT_NOT_FOUND"
 
 
+async def test_a_product_read_by_id_carries_its_images(
+    client: httpx.AsyncClient, catalog: dict[str, object]
+) -> None:
+    """The model does not load images by itself, so catalog.get_by_id has to ask."""
+    product = catalog["mid"]
+    response = await client.get(f"/api/v1/products/by-id/{product.id}")  # type: ignore[attr-defined]
+
+    assert response.status_code == 200
+    assert response.json()["images"] == [f"/images/iphone-15-{n}.svg" for n in (1, 2, 3)]
+
+
 async def test_related_excludes_the_product_itself(
     client: httpx.AsyncClient, catalog: dict[str, object]
 ) -> None:
