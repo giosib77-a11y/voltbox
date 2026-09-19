@@ -115,11 +115,13 @@ class Product(UUIDPrimaryKey, Timestamps, Base):
 
     category: Mapped[Category] = relationship(back_populates="products", lazy="joined")
     brand: Mapped[Brand] = relationship(back_populates="products", lazy="joined")
+    # Not eager here. A query whose caller reads images says so with
+    # selectinload(Product.images); the rest (dashboard, sitemap, inventory,
+    # archive) never pay for them. Reading them unloaded raises MissingGreenlet.
     images: Mapped[list["ProductImage"]] = relationship(
         back_populates="product",
         cascade="all, delete-orphan",
         order_by="ProductImage.position",
-        lazy="selectin",
     )
 
     __table_args__ = (

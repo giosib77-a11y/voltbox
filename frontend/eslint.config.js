@@ -54,6 +54,25 @@ export default [
   },
 
   {
+    // These six export a component together with what belongs to it: each
+    // context its Provider and its hook (and the cart its reducer), the two
+    // status files their badges with the labels and the rule the badges render.
+    // Splitting a hook from its Provider means exporting the raw Context from a
+    // third module, which is what the hook exists to hide. The price is dev
+    // only: an edit to one of these files reloads the page instead of
+    // hot-swapping it. Listed by name, so a new file still gets the warning.
+    files: [
+      'src/admin/AdminSessionContext.jsx',
+      'src/admin/components/StatusBadge.jsx',
+      'src/admin/statuses.jsx',
+      'src/context/AuthContext.jsx',
+      'src/context/CartContext.jsx',
+      'src/context/ToastContext.jsx',
+    ],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
+
+  {
     // Node-ის სკრიპტები და კონფიგები — ბრაუზერის გლობალები აქ არ არსებობს
     files: ['scripts/**/*.mjs', '*.config.js', 'vitest.setup.js'],
     languageOptions: { globals: { ...globals.node } },

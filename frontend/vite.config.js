@@ -42,6 +42,24 @@ const API_PROXY = {
   },
 };
 
+/**
+ * React and the router in a `vendor` chunk, lucide in an `icons` chunk.
+ *
+ * In one chunk with the app, every deploy renamed all of it, and a returning
+ * visitor downloaded React again with each code change: 92.6 kB gzip on the
+ * entry path. Split, a code change renames only `index` on that path
+ * (22.3 kB); `vendor` (67.9 kB) keeps its name until a dependency changes.
+ *
+ * lucide gets its own chunk because what goes into it depends on the app:
+ * adding an icon changes it. Inside `vendor` that would evict React too; left
+ * to Rollup, the icons land in `index` and change on every deploy. The cost is
+ * the first visit, 3.4 kB gzip more on the entry path, mostly icons that only
+ * lazy pages use and that now load up front.
+ */
+const VENDOR_MODULE =
+  /\/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom|@remix-run\/router)\//;
+const ICONS_MODULE = /\/node_modules\/lucide-react\//;
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // `npm run dev:share` → mode === 'share': ტუნელისთვის მორგებული dev-სერვერი
@@ -124,6 +142,16 @@ export default defineConfig(({ mode }) => {
       port: 4173,
       allowedHosts: TUNNEL_HOSTS,
       proxy: API_PROXY,
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (VENDOR_MODULE.test(id)) return 'vendor';
+            if (ICONS_MODULE.test(id)) return 'icons';
+          },
+        },
+      },
     },
     test: {
       // jsdom — კომპონენტების ტესტებს DOM სჭირდებათ
