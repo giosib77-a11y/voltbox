@@ -84,7 +84,7 @@ grep -v '^\s*#' frontend/render.yaml | grep -oE '<[A-Z_]+>'
 | `DATABASE_URL` | Supabase-ის pooler-ის URL | სერვისი ვერ აიწევს |
 | `JWT_SECRET` | **ახალი**, ≥32 სიმბოლო | ძველი ტოკენები ძალაში დარჩება |
 | `FORWARDED_ALLOW_IPS` | proxy-ის მისამართი | **სერვერი არ აიწევს.** `*`-იც უარყოფილია — მაშინ ნებისმიერს შეუძლია თავისი IP აირჩიოს |
-| `TRUSTED_HOSTS` | `api.voltbox.ge,<service>.onrender.com` | **სერვერი არ აიწევს** `*`-ზე ან ცარიელზე. API-ს host-ი — storefront-ის დომენი **არა**. მის გარეშე ყველა მოთხოვნა, health-იც, `400 Invalid host header`-ს აბრუნებს, და შეცდომა `TRUSTED_HOSTS`-ს არ ახსენებს. ↓ იხ. TRUSTED_HOSTS |
+| `TRUSTED_HOSTS` | `api.voltbox.ge` | **სერვერი არ აიწევს** `*`-ზე ან ცარიელზე. API-ს host-ი — storefront-ის დომენი **არა**. `<service>.onrender.com`-ს აპი თვითონ ამატებს. მის გარეშე ყველა მოთხოვნა, health-იც, `400 Invalid host header`-ს აბრუნებს; პასუხი `TRUSTED_HOSTS`-ს არ ახსენებს, ლოგი — ახსენებს. ↓ იხ. TRUSTED_HOSTS |
 | `CORS_ORIGINS` | `https://voltbox.ge` | **სერვერი არ აიწევს** ცარიელზე, `*`-ზე, local origin-ზე (`localhost`, `127.0.0.1`, `::1`) ან ელემენტზე, რომელიც origin არ არის (`voltbox.ge` სქემის გარეშე, `https://voltbox.ge/shop` path-ით). სწორი ფორმის, მაგრამ სხვა დომენის origin-ზე აიწევს — და ბრაუზერი მოთხოვნებს დაბლოკავს |
 | `SITE_URL` | `https://voltbox.ge` | sitemap-ის ბმულები არასწორ დომენზე მიუთითებს |
 | `REDIS_URL` | Redis-ის URL | **სერვერი არ აიწევს**, თუ worker-ი >1. counter-ები worker-ებად გაიყოფა და ლიმიტი გამრავლდება |
@@ -106,30 +106,41 @@ grep -v '^\s*#' frontend/render.yaml | grep -oE '<[A-Z_]+>'
 
 **Render-ის health check-ი.** HTTP health check-ს Render custom domain-ის
 `Host`-ით აგზავნის, *თუ domain-ი verify-ებულია*; მანამდე — service-ის
-`onrender.com` subdomain-ით. ეს subdomain-ი service-ის სახელს შეიცავს, მაგრამ
-მასთან ტოლობა გარანტირებული არ არის — ის **შექმნის შემდეგ** dashboard-ში ჩანს.
-თუ check-ი 400-ს მიიღებს, Render deploy-ს 15 წუთში გააუქმებს, და შეცდომა
-`TRUSTED_HOSTS`-ს არ ახსენებს. ამიტომ რიგი:
+`onrender.com` hostname-ით. ამ hostname-ს Render service-ს
+`RENDER_EXTERNAL_HOSTNAME`-ში აწვდის, და აპი მას `TRUSTED_HOSTS`-ის სიას
+**თვითონ უმატებს** — ხელით არსად იწერება. ამიტომ service-ის შექმნისას:
 
-1. service-ის შექმნისას `TRUSTED_HOSTS=api.voltbox.ge`, **Health Check Path —
-   ცარიელი**. default-ი TCP probe-ია, `Host`-ს არ ამოწმებს — პირველ deploy-ი
-   გაივლის.
-2. შექმნის შემდეგ onrender.com-ის hostname-ი dashboard-იდან:
-   `TRUSTED_HOSTS=api.voltbox.ge,<service>.onrender.com`
-3. **მხოლოდ მერე** — Settings → Health Checks → `/api/v1/health`. domain-ის
-   verification-ამდეც და შემდეგაც `Host` სიაში იქნება.
-4. შემოწმება:
+1. `TRUSTED_HOSTS=api.voltbox.ge`, Health Check Path — `/api/v1/health`.
+2. პირველი deploy-ის შემდეგ:
 
    ```bash
-   curl -s -o /dev/null -w '%{http_code}\n' https://<service>.onrender.com/api/v1/health   # 200; 400 = ნაბიჯ 2 გამორჩა
+   curl -s -o /dev/null -w '%{http_code}\n' https://<service>.onrender.com/api/v1/health   # 200
    ```
 
 onrender.com-ის hostname-ი Host-ის შემოწმებას **არ ასუსტებს**. ეს Render-ის
 host-ია, რომელზეც Render **ეს** service-ი ისედაც გასცემს — custom domain-ის
 დამატების შემდეგაც — და სხვაგან მიუთითება შეუძლებელია. სია ჩაკეტილი რჩება:
-ნებისმიერი სხვა `Host` ისევ 400-ს აბრუნებს. თუ API onrender.com-ზე საერთოდ არ
-უნდა ჩანდეს, ეს ცალკე გადაწყვეტილებაა — Settings → Custom Domains → Render
-Subdomain → Disabled (custom domain-ს ითხოვს).
+ნებისმიერი სხვა `Host` ისევ 400-ს აბრუნებს. Render-ის გარეთ ცვლადი არ არსებობს
+და სია ზუსტად `TRUSTED_HOSTS`-ია. თუ API onrender.com-ზე საერთოდ არ უნდა ჩანდეს,
+ეს ცალკე გადაწყვეტილებაა და Render-ის მხარეს კეთდება — Settings → Custom
+Domains → Render Subdomain → Disabled (custom domain-ს ითხოვს).
+
+**როცა `Host`-ი უარყოფილია — სად ჩანს.** `400 Invalid host header`-ის პასუხი
+setting-ს არ ასახელებს. აპი ყოველ უარყოფილ მოთხოვნაზე ლოგში ერთ `WARNING`-ს
+წერს (§9 — stdout, JSON):
+
+```json
+{"ts": "2026-09-19T12:00:00+0000", "level": "WARNING", "logger": "voltbox.hosts", "message": "A request's Host is not in TRUSTED_HOSTS, so it was not served. If every request is refused, the health check included, TRUSTED_HOSTS is missing the name this API is served on."}
+```
+
+Render → service → **Logs** → ძებნა `TRUSTED_HOSTS`. თუ health check 400-ს
+იღებს, Render deploy-ს 15 წუთში გააუქმებს და ეს ხაზი ყოველ ცდაზე მეორდება: სიას
+აკლია სახელი, რომლითაც API-ს მიმართავენ — `api.voltbox.ge`, ან, თუ 400-ს
+onrender.com-ის მისამართი აბრუნებს, `RENDER_EXTERNAL_HOSTNAME` არ დაყენდა და
+onrender-ის hostname-ი `TRUSTED_HOSTS`-ს ხელით ემატება. უარყოფილ `Host`-ს ხაზი
+**განზრახ არ შეიცავს** — მას გამგზავნი წერს, ხშირად უცხო. სწორი სახელები
+dashboard-შია: Settings → Custom Domains. ცალკეული ასეთი ხაზი, როცა დანარჩენი
+მოთხოვნები გადის, ჩვეულებრივია — სკანერები უცხო `Host`-ით აკაკუნებენ.
 
 ### ⚠️ კავშირების ბიუჯეტი
 
@@ -345,8 +356,8 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains
 `/api/v1/health` მზადაა. უფასო uptime-სერვისი (UptimeRobot, Better Stack)
 5 წუთში ეყენება და 500-ების ან გათიშვის შემთხვევაში შეგატყობინებთ.
 
-Render-ის საკუთარი Health Check Path-ი — ⚠️ **§2-ის TRUSTED_HOSTS-ის ნაბიჯ 2-ის
-შემდეგ, არა ადრე.**
+Render-ის საკუთარი Health Check Path-ი — `/api/v1/health`, service-ის
+შექმნისთანავე (§2).
 
 ლოგი `stdout`-შია, JSON-ად — Render აგროვებს და ძებნა აქვს.
 

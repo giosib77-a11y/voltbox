@@ -11,7 +11,10 @@ data layer without any component changes — only `VITE_API_MODE=http`.
 
 ```bash
 # 1. ბაზა და Redis (ტესტებსაც სჭირდებათ)
-docker compose up -d db redis
+docker compose up -d --wait db redis
+# ტესტების ბაზა, ერთხელ: compose მხოლოდ `voltbox`-ს ქმნის, conftest.py კი
+# `voltbox_test`-ს უკავშირდება და ყოველ გაშვებაზე მასში სქემას თავიდან აწყობს
+docker compose exec db createdb -U voltbox voltbox_test
 
 # 2. გარემო
 cp .env.example .env        # DATABASE_URL და JWT_SECRET შეავსე
@@ -79,11 +82,12 @@ lock-ში **gunicorn-ი არ იქნება**. იმიჯი აე�
 არ აიწევს. გაზომილი: Windows-ზე generate-ებულ lock-ში gunicorn-ი და uvloop-ი არ არის.
 
 ეს ASSUMPTIONS §8.11-ის (`email-validator`) კლასია, ოღონდ უფრო ცუდი: import-ის
-შემოწმება gunicorn-ს საერთოდ ვერ ხედავს. container-ი Dockerfile-ის base image-ია:
+შემოწმება gunicorn-ს საერთოდ ვერ ხედავს. container-ი Dockerfile-ის base image-ია,
+იმავე digest-ით — Dockerfile-ში მისი განახლებისას აქაც:
 
 ```bash
 cd backend
-MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd)":/src -w /src python:3.14-slim sh -c '
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd)":/src -w /src python:3.14.7-slim-trixie@sha256:ef30e8ee3a7f227b0b5b39669b2e656f35b56b918c6631820357c2a55ff5a428 sh -c '
   pip install --quiet --root-user-action=ignore pip-tools==7.6.1 &&
   pip-compile --generate-hashes --allow-unsafe --strip-extras \
     --output-file requirements.txt pyproject.toml &&

@@ -37,10 +37,9 @@
 
       APP_ENV=production            ← დაუყენებლად სერვერი არ აიწევს
       JWT_SECRET=<ახალი>            ← python -c "import secrets; print(secrets.token_urlsafe(48))"
-      TRUSTED_HOSTS=<api>,<service>.onrender.com
-                                    ← API-ს host-ი, არა storefront-ის. onrender-ისა
-                                      შექმნის შემდეგ; Health Check Path — მხოლოდ
-                                      მერე (deployment.md §2)
+      TRUSTED_HOSTS=<api>           ← API-ს host-ი, არა storefront-ის. onrender-ისას
+                                      აპი თვითონ ამატებს; Health Check Path —
+                                      /api/v1/health შექმნისთანავე (deployment.md §2)
       CORS_ORIGINS=https://<დომენი>
       SITE_URL=https://<დომენი>
       FORWARDED_ALLOW_IPS=<proxy-ს მისამართი>

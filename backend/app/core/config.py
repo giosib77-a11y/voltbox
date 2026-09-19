@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     # --- http -----------------------------------------------------------------
     cors_origins: str = "http://localhost:5173,http://localhost:4173"
     trusted_hosts: str = "*"
+    #: Set by Render on a web service to its own `<name>.onrender.com` hostname;
+    #: unset anywhere else. See `trusted_host_list`.
+    render_external_hostname: str = ""
 
     #: Where the shop lives, as a visitor types it. Every URL in the sitemap is
     #: built from this, so a wrong value publishes a map of pages that do not
@@ -188,7 +191,29 @@ class Settings(BaseSettings):
 
     @property
     def trusted_host_list(self) -> list[str]:
-        return [h.strip() for h in self.trusted_hosts.split(",") if h.strip()]
+        """TRUSTED_HOSTS, plus the onrender.com name Render gives this service.
+
+        Render's health check uses that name until a custom domain is verified,
+        and the name exists only once the service does. Listing it by hand meant
+        a first deploy without a health check. Render puts it in
+        RENDER_EXTERNAL_HOSTNAME, so it is read from there.
+
+        It is trusted on the same footing as TRUSTED_HOSTS: both come from the
+        process environment, which the operator and the platform write and a
+        request does not. Render routes that name to this service and no other,
+        so accepting it does not widen the check. Anywhere else the variable is
+        unset and the list is TRUSTED_HOSTS exactly.
+
+        It joins only a list that names hosts. `*` alone already accepts it, and
+        adding it there would turn the local default into the `*`-among-names
+        list app/main.py refuses. A list naming nothing stays one nothing
+        passes, which is what gunicorn.conf.py tells the operator it is.
+        """
+        hosts = [h.strip() for h in self.trusted_hosts.split(",") if h.strip()]
+        platform = self.render_external_hostname.strip()
+        if hosts and "*" not in hosts and platform and platform not in hosts:
+            hosts.append(platform)
+        return hosts
 
     @property
     def requires_ssl(self) -> bool:

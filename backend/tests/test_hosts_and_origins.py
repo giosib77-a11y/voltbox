@@ -20,7 +20,7 @@ from collections.abc import Iterator
 
 import httpx
 import pytest
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.core.hosts import LoggedTrustedHostMiddleware
 from app.core.logging import JsonFormatter
 from app.main import create_app
@@ -164,6 +164,80 @@ async def test_a_400_from_the_application_is_not_blamed_on_the_host(
 
     assert response.status_code == 400
     assert _host_lines(captured_logs) == []
+
+
+# ── the name Render gives the service ────────────────────────────────────────
+
+ONRENDER = "voltbox-api.onrender.com"
+
+
+def _from_the_environment() -> Settings:
+    """Settings as the deployed process builds them, from the variables. No
+    .env, so a developer's file cannot answer for the environment."""
+    return Settings(
+        _env_file=None,
+        database_url="postgresql://voltbox:voltbox@localhost:55432/voltbox",
+        jwt_secret="x" * 40,
+    )
+
+
+def test_the_name_is_read_from_the_variable_render_sets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Through the environment, because the variable's name is the contract: a
+    field named one letter off passes every test that sets the attribute, and
+    on Render trusts nothing."""
+    monkeypatch.setenv("TRUSTED_HOSTS", "api.voltbox.ge")
+    monkeypatch.setenv("RENDER_EXTERNAL_HOSTNAME", ONRENDER)
+
+    assert _from_the_environment().trusted_host_list == ["api.voltbox.ge", ONRENDER]
+
+
+def test_anywhere_but_render_the_list_is_trusted_hosts_exactly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRUSTED_HOSTS", "api.voltbox.ge")
+    monkeypatch.delenv("RENDER_EXTERNAL_HOSTNAME", raising=False)
+
+    assert _from_the_environment().trusted_host_list == ["api.voltbox.ge"]
+
+
+async def test_render_s_health_check_gets_in_and_a_stranger_does_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Until the custom domain is verified, Render's health check arrives with
+    the onrender.com name as its Host."""
+    monkeypatch.setattr(settings, "trusted_hosts", "api.voltbox.ge")
+    monkeypatch.setattr(settings, "render_external_hostname", ONRENDER)
+
+    statuses = {}
+    async with _client(create_app()) as client:
+        for host in (ONRENDER, "api.voltbox.ge", "elsewhere.example"):
+            response = await client.get("/api/v1/nope", headers={"Host": host})
+            statuses[host] = response.status_code
+
+    assert statuses == {ONRENDER: 404, "api.voltbox.ge": 404, "elsewhere.example": 400}
+
+
+@pytest.mark.parametrize(
+    ("listed", "host", "status"),
+    [
+        # The local default. With the name added it would be `*` among names,
+        # which app/main.py refuses to build.
+        ("*", "anything.example", 404),
+        # Naming nothing: gunicorn.conf.py tells the operator every request is
+        # refused, and Render's own name is not an exception to that.
+        ("", ONRENDER, 400),
+    ],
+)
+async def test_the_name_joins_only_a_list_of_names(
+    monkeypatch: pytest.MonkeyPatch, listed: str, host: str, status: int
+) -> None:
+    monkeypatch.setattr(settings, "trusted_hosts", listed)
+    monkeypatch.setattr(settings, "render_external_hostname", ONRENDER)
+
+    async with _client(create_app()) as client:
+        response = await client.get("/api/v1/nope", headers={"Host": host})
+
+    assert response.status_code == status
 
 
 # ── an origin with a trailing slash ──────────────────────────────────────────
