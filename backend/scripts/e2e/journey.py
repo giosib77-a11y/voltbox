@@ -264,9 +264,11 @@ def main() -> None:
     after = c.get(f"{V1}/products/{products[0]['slug']}")
     check("stock came down by two", after.json()["stock"] == 10, str(after.json()["stock"]))
 
+    # A key of its own: without one the API refuses the checkout before it
+    # looks at stock, and this check would be about the header instead.
     greedy = c.post(
         f"{V1}/orders",
-        headers=shopper_h,
+        headers={**shopper_h, "Idempotency-Key": "9d2e4c1a-5b7f-4e3a-8c6d-1f0a2b3c4d5e"},
         json={
             "items": [{"productId": products[2]["id"], "qty": 1}],
             "customer": CUSTOMER,
@@ -498,6 +500,10 @@ def main() -> None:
     print(f"\n==== {len(results) - len(failed)}/{len(results)} passed ====")
     for label in failed:
         print("  FAILED:", label)
+    # A failed check used to end the run with exit code 0, which only someone
+    # reading the summary would notice. The nightly workflow reads the code.
+    if failed:
+        raise SystemExit(1)
 
 
 main()

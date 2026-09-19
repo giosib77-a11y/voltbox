@@ -1,0 +1,109 @@
+name: e2e
+
+# The whole shop over real sockets: uvicorn on :8100, the built storefront on
+# :4173, Postgres from backend/docker-compose.yml. backend/scripts/e2e/up.sh
+# resets and starts it, journey.py walks it. It is the only check of the system
+# end to end, and it used to run only when someone remembered to run it.
+#
+# Not on push: it needs a live server and a built frontend, which would double
+# the cost of ordinary work. Nightly, so a regression is reported at most one
+# day's commits after it lands. A night with no new commit reruns the same code.
+# That costs nothing on a public repository's hosted runners, and it is the only
+# run that notices when an unpinned input moves: ubuntu-latest,
+# postgres:17-alpine, the Python and Node patch releases.
+#
+# What no cadence fixes: GitHub switches scheduled workflows off in a public
+# repository after 60 days without activity. Dispatch still works then, and the
+# Actions tab offers to switch the schedule back on.
+on:
+  workflow_dispatch:
+  schedule:
+    # 02:37 UTC is 06:37 in Tbilisi, so the result is in before the day starts.
+    # Off the hour, because runs scheduled on the hour are the ones GitHub delays.
+    - cron: "37 2 * * *"
+
+# The only thing the job does with GITHUB_TOKEN is checkout reading the
+# repository.
+permissions:
+  contents: read
+
+jobs:
+  journey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      # On the dev box backend/.env supplies this. Nothing else in it is needed:
+      # up.sh sets the rest, and every other setting has a default.
+      JWT_SECRET: ci-only-secret-value-that-is-long-enough-32
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # The dev box's own definition, not a service container: up.sh and
+      # journey.py reach the database as the container named voltbox-pg on 55432.
+      - name: Start Postgres
+        run: docker compose up -d --wait db
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      # The same install as backend.yml: from the hashed lock, wheels only.
+      - name: Install backend dependencies
+        run: |
+          pip install --require-hashes --only-binary=:all: -r requirements-dev.txt
+          pip install --no-deps --no-build-isolation --check-build-dependencies -e .
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # journey.py asserts that the bundle calls exactly this API and that the
+      # share tags carry exactly this domain.
+      - name: Build the storefront
+        working-directory: frontend
+        env:
+          VITE_API_MODE: http
+          VITE_API_BASE_URL: http://localhost:8100/api/v1
+          VITE_SITE_URL: http://localhost:4173
+        run: |
+          npm ci
+          npm run build
+
+      - name: Serve the storefront
+        working-directory: frontend
+        run: |
+          nohup npm run preview -- --port 4173 --strictPort > "$RUNNER_TEMP/preview.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -sf -o /dev/null http://localhost:4173/ && exit 0
+            sleep 1
+          done
+          echo "the storefront never came up"
+          exit 1
+
+      # -x because up.sh discards every command's output: without the trace a
+      # failure here is a bare exit code with no sign of which command it was.
+      - name: Reset the database and start the API
+        env:
+          PY: python
+        run: bash -x scripts/e2e/up.sh
+
+      - name: Walk the journey
+        run: python scripts/e2e/journey.py
+
+      - name: Server logs
+        if: failure()
+        run: |
+          echo "--- API"
+          cat /tmp/voltbox-e2e-api.log || true
+          echo "--- storefront"
+          cat "$RUNNER_TEMP/preview.log" || true

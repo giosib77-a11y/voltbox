@@ -8,7 +8,8 @@ set -u
 
 # The backend directory, wherever this checkout lives.
 BACKEND=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-PY="$BACKEND/.venv/Scripts/python.exe"
+# The Windows venv by default; CI, on Linux with no venv, passes its own.
+PY="${PY:-$BACKEND/.venv/Scripts/python.exe}"
 DB="postgresql://voltbox:voltbox@localhost:55432/voltbox_e2e"
 
 cd "$BACKEND" || exit 1
