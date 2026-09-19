@@ -13,6 +13,7 @@ The story it walks is the one that has to work on day one, in order:
 with the cross-cutting checks a running server makes possible at the end.
 """
 
+import io
 import shutil
 import struct
 import sys
@@ -30,7 +31,9 @@ SHOP = "http://localhost:4173"
 DOCKER = shutil.which("docker") or "docker"
 
 results: list[tuple[str, bool]] = []
-sys.stdout.reconfigure(encoding="utf-8")
+# Only a real text stream has reconfigure; one replaced by a wrapper is left as is.
+if isinstance(sys.stdout, io.TextIOWrapper):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 
 def check(label: str, condition: object, detail: str = "") -> bool:
@@ -287,10 +290,14 @@ def main() -> None:
     olist = c.get(f"{ADMIN}/orders", headers=admin_h)
     row = next((o for o in olist.json()["items"] if o["orderNumber"] == number), None)
     check("the panel shows the order", row is not None)
+    if row is None:
+        # Everything below needs its id; reading it from None was a TypeError
+        # that ended the run without the summary.
+        raise SystemExit("The order is not in the panel, so the rest of the journey cannot run.")
     check(
         "with the customer's name",
-        row and row["customerName"] == "ნინო კაპანაძე",
-        row and row["customerName"],
+        row["customerName"] == "ნინო კაპანაძე",
+        row["customerName"],
     )
     by_name = c.get(f"{ADMIN}/orders", headers=admin_h, params={"q": "კაპანაძე"})
     check("and finds it by that name", by_name.json()["total"] == 1, str(by_name.json()["total"]))

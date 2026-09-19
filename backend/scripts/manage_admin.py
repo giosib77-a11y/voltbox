@@ -51,7 +51,10 @@ def _read_password() -> str:
 
 
 async def _find(db: AsyncSession, email: str) -> User | None:
-    return await db.scalar(select(User).where(User.email == email.strip().lower()))
+    # Assigned first: returned directly, mypy types this call as Any; assigned,
+    # as User | None. Measured - the value is the same either way.
+    user = await db.scalar(select(User).where(User.email == email.strip().lower()))
+    return user
 
 
 async def create_admin(email: str, first_name: str, last_name: str) -> None:

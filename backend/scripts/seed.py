@@ -56,7 +56,10 @@ def load_mock_data() -> dict[str, list[dict[str, Any]]]:
     except subprocess.CalledProcessError as exc:
         raise SystemExit(f"Mock export failed:\n{exc.stderr.decode('utf-8', 'replace')}") from exc
 
-    return json.loads(result.stdout.decode("utf-8"))
+    # Declared, not checked: the exporter is ours, and a wrong shape fails on
+    # the first lookup.
+    data: dict[str, list[dict[str, Any]]] = json.loads(result.stdout.decode("utf-8"))
+    return data
 
 
 def slugify(value: str) -> str:
