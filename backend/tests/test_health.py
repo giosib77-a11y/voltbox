@@ -1,12 +1,16 @@
 """Phase 0 — ჩონჩხის ტესტები: health, შეცდომის კონვერტი, request-id."""
 
 import inspect
+from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import httpx
 import pytest
 from app.core.config import Settings
-from app.main import create_app
+from app.db.session import engine, get_db
+from app.main import app, create_app
+from httpx import ASGITransport
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 async def test_health_reports_ok_and_database_up(client: httpx.AsyncClient) -> None:
@@ -17,6 +21,56 @@ async def test_health_reports_ok_and_database_up(client: httpx.AsyncClient) -> N
     assert body["status"] == "ok"
     assert body["database"] == "up"
     assert body["version"]
+
+
+@pytest.fixture
+async def client_without_database() -> AsyncGenerator[httpx.AsyncClient]:
+    """The real driver against a port nothing listens on - a connection that fails
+    the way an outage does, not a mock that raises whatever the test chose."""
+    dead_engine = create_async_engine(engine.url.set(port=1), pool_pre_ping=True)
+    sessions = async_sessionmaker(bind=dead_engine, expire_on_commit=False)
+
+    async def unreachable_db() -> AsyncGenerator[AsyncSession]:
+        async with sessions() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = unreachable_db
+    try:
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as http_client:
+            yield http_client
+    finally:
+        app.dependency_overrides.clear()
+        await dead_engine.dispose()
+
+
+async def test_health_is_503_when_the_database_is_down(
+    client_without_database: httpx.AsyncClient,
+) -> None:
+    # uptime-მონიტორი მხოლოდ კოდს კითხულობს — 200 + "degraded" მისთვის "ცოცხალია"
+    response = await client_without_database.get("/api/v1/health")
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert body["database"] == "down"
+
+
+async def test_liveness_stays_200_when_the_database_is_down(
+    client_without_database: httpx.AsyncClient,
+) -> None:
+    # Render ამ path-ზე ჩავარდნისას რესტარტავს; ბაზის გათიშვას რესტარტი ვერ შველის
+    response = await client_without_database.get("/api/v1/health/live")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_dockerfile_healthcheck_probes_liveness() -> None:
+    dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "/api/v1/health/live" in dockerfile
 
 
 async def test_every_response_carries_request_id(client: httpx.AsyncClient) -> None:

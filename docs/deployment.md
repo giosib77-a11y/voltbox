@@ -110,11 +110,13 @@ grep -v '^\s*#' frontend/render.yaml | grep -oE '<[A-Z_]+>'
 `RENDER_EXTERNAL_HOSTNAME`-ში აწვდის, და აპი მას `TRUSTED_HOSTS`-ის სიას
 **თვითონ უმატებს** — ხელით არსად იწერება. ამიტომ service-ის შექმნისას:
 
-1. `TRUSTED_HOSTS=api.voltbox.ge`, Health Check Path — `/api/v1/health`.
+1. `TRUSTED_HOSTS=api.voltbox.ge`, Health Check Path — **`/api/v1/health/live`**
+   (არა `/api/v1/health` — მიზეზი §9-შია).
 2. პირველი deploy-ის შემდეგ:
 
    ```bash
-   curl -s -o /dev/null -w '%{http_code}\n' https://<service>.onrender.com/api/v1/health   # 200
+   curl -s -o /dev/null -w '%{http_code}\n' https://<service>.onrender.com/api/v1/health/live   # 200
+   curl -s -o /dev/null -w '%{http_code}\n' https://<service>.onrender.com/api/v1/health        # 200; 503 = ბაზა მიუწვდომელია
    ```
 
 onrender.com-ის hostname-ი Host-ის შემოწმებას **არ ასუსტებს**. ეს Render-ის
@@ -353,11 +355,28 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains
 
 ## 9. მონიტორინგი
 
-`/api/v1/health` მზადაა. უფასო uptime-სერვისი (UptimeRobot, Better Stack)
-5 წუთში ეყენება და 500-ების ან გათიშვის შემთხვევაში შეგატყობინებთ.
+ორი endpoint, ორი მომხმარებელი:
 
-Render-ის საკუთარი Health Check Path-ი — `/api/v1/health`, service-ის
-შექმნისთანავე (§2).
+| Endpoint | ვინ უყურებს | ბაზა გათიშულია |
+|---|---|---|
+| `/api/v1/health/live` | Render-ის Health Check Path (§2), Dockerfile-ის `HEALTHCHECK` | **200** — ბაზას არ ეხება |
+| `/api/v1/health` | uptime-მონიტორი | **503**, body-ში `"database": "down"` |
+
+**uptime-მონიტორი** (UptimeRobot, Better Stack — უფასო, 5 წუთში ეყენება) —
+`https://api.voltbox.ge/api/v1/health`, პირობა "HTTP status არ არის 2xx".
+შეგატყობინებთ, როცა API მიუწვდომელია **ან** ბაზა გაითიშა — ორივე შემთხვევაში
+მაღაზია ვერ ყიდის.
+
+**რატომ არა იგივე endpoint Render-ისთვისაც.** Render ჩავარდნილ health check-ზე
+instance-ს რესტარტავს, deploy-ის დროს კი deploy-ს აუქმებს. ბაზის გათიშვას
+რესტარტი ვერ შველის: Supabase-ის გათიშვისას instance-ი რესტარტის მარყუჟში
+შევიდოდა, ხოლო იმ დროს დაწყებული deploy — სწორი კოდითაც — გაუქმდებოდა. ამიტომ
+Render მხოლოდ იმას ამოწმებს, რისი გამოსწორებაც რესტარტს შეუძლია: პროცესი
+პასუხობს.
+
+რას ვთმობთ: deploy, რომელიც ბაზას ვერ წვდება (მაგ. არასწორი `DATABASE_URL`),
+Render-ისთვის ჯანმრთელია და ტრაფიკს მიიღებს. ამას uptime-მონიტორი
+`/api/v1/health`-ის 503-ით იჭერს, deploy-ის შემდეგ კი — §2-ის მეორე `curl`-ი.
 
 ლოგი `stdout`-შია, JSON-ად — Render აგროვებს და ძებნა აქვს.
 
