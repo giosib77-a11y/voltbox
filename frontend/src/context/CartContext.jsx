@@ -13,6 +13,24 @@ import * as api from '../services/api.js';
  */
 const SAVE_DEBOUNCE_MS = 800;
 
+/**
+ * A sync failure, said out loud somewhere.
+ *
+ * Deliberately not `reportError`: that has one slot per page load and it
+ * belongs to ErrorBoundary, so a cart save failing must not spend it and leave
+ * a blank screen unreported. In production what reaches the shopper is the
+ * line at sign-out, which is the moment the failure changes anything for them.
+ *
+ * The empty catch this replaces is how `api.mergeCart` being undefined stayed
+ * hidden from 8bb48c7 to 1ebe26b: the TypeError reached nobody at all.
+ */
+function noteSyncFailure(call, error) {
+  if (import.meta.env?.DEV) {
+    // eslint-disable-next-line no-console
+    console.warn(`cart: ${call} failed, so the account does not hold this basket`, error);
+  }
+}
+
 /** API lines -> the shape the reducer stores. */
 function fromApi(lines = []) {
   return lines.map((line) => ({
@@ -152,8 +170,13 @@ export function CartProvider({ children }) {
   // Read inside a callback that must not re-create itself on every change.
   const stateRef = useRef(state);
   stateRef.current = state;
-  // Whether an account is signed in and therefore worth saving to.
+  // Whether a merge has succeeded and this browser may therefore push to the
+  // account. Not the same question as the one below, and they part company
+  // exactly when a request fails.
   const savingRef = useRef(false);
+  // Whether the account's copy is the basket on screen: false from the moment
+  // anything changes until the save that follows it comes back.
+  const accountHoldsCartRef = useRef(false);
 
   // ჰიდრაცია mount-ზე
   useEffect(() => {
@@ -184,30 +207,47 @@ export function CartProvider({ children }) {
    * something added here before signing in, and something added last week on a
    * phone. Whichever direction "won" would throw the other away without asking.
    *
-   * A failure is swallowed on purpose. The cart in this browser is untouched
-   * either way, and an error toast about syncing is not what somebody who just
-   * signed in needs to read.
+   * A failure leaves the basket on screen alone and leaves saving off, which
+   * is the part worth stating: PUT /cart replaces, so pushing this browser's
+   * basket to an account whose contents we just failed to read would overwrite
+   * the one on the phone. Nothing is said to somebody who has only signed in,
+   * because nothing of theirs is lost yet - sign-out is where that changes.
+   * The next page load merges again, so a blip heals itself.
    */
   const mergeWithAccount = useCallback(async () => {
     try {
       const merged = await api.mergeCart(stateRef.current.items);
       dispatch({ type: ACTIONS.HYDRATE, payload: fromApi(merged) });
       savingRef.current = true;
-    } catch {
-      /* the local cart stands, and nothing is pushed to an account */
+    } catch (error) {
+      noteSyncFailure('mergeCart', error);
     }
   }, []);
 
   /**
-   * Sign-out: stop writing to the account, and empty the cart in this browser.
+   * Sign-out: stop writing to the account, and empty the cart in this browser -
+   * but only once the account is known to hold it.
    *
-   * Emptying is the point. The cart is saved on the account now, so nothing is
-   * lost - and leaving it on screen would show the next person to use a shared
-   * computer what the last one was about to buy.
+   * Emptying is the point when the basket is saved: leaving it on screen would
+   * show the next person to use a shared computer what the last one was about
+   * to buy. When a merge or a save failed, the account holds something older or
+   * nothing at all, and emptying is no longer putting the basket away - it is
+   * throwing it away, with nowhere left to get it back from.
+   *
+   * Keeping it is not free, and it is still the cheaper side. On a shared
+   * computer the next person to sign in merges this basket into theirs, where
+   * they can see it and take it out - which is what a guest's basket left here
+   * already does. The other way round the shopper loses theirs for good and
+   * never finds out why.
+   *
+   * → whether the basket was kept, so the caller can say so.
    */
   const detachFromAccount = useCallback(() => {
+    const kept = !accountHoldsCartRef.current;
     savingRef.current = false;
-    dispatch({ type: ACTIONS.CLEAR });
+    accountHoldsCartRef.current = false;
+    if (!kept) dispatch({ type: ACTIONS.CLEAR });
+    return kept;
   }, []);
 
   // Push local changes to the account, once signed in. Skipped before hydration
@@ -215,10 +255,21 @@ export function CartProvider({ children }) {
   // not overwrite a real cart.
   useEffect(() => {
     if (!state.hydrated || !savingRef.current) return undefined;
+    // One change ahead of the account from here until the save comes back, and
+    // a sign-out in that window keeps the basket rather than trusting a save
+    // that has not happened yet.
+    accountHoldsCartRef.current = false;
     const timer = setTimeout(() => {
-      api.saveCart(state.items).catch(() => {
-        /* the local cart is authoritative while shopping */
-      });
+      api.saveCart(state.items).then(
+        () => {
+          accountHoldsCartRef.current = true;
+        },
+        (error) => {
+          // The basket on screen is untouched; what changes is that sign-out
+          // may no longer empty it.
+          noteSyncFailure('saveCart', error);
+        },
+      );
     }, SAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [state.items, state.hydrated]);
