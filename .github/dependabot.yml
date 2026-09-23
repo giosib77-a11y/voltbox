@@ -14,6 +14,21 @@ updates:
       npm-minor-and-patch:
         applies-to: version-updates
         update-types: [minor, patch]
+    # ESLint 10 is blocked by eslint-plugin-react: 7.37.5 is its latest release
+    # and declares eslint only up to ^9.7, so npm ci refuses eslint 10 beside
+    # it. @eslint/js 10 needs eslint ^10, so the two majors wait together.
+    # eslint-plugin-react-hooks 7 does support eslint 10, but going from 5 to 7
+    # changes the recommended config this repo spreads into its rules, so it
+    # moves with the ESLint upgrade and not before it.
+    # Remove these three rules when eslint-plugin-react publishes a release
+    # whose eslint peer range includes ^10.
+    ignore:
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
+      - dependency-name: "@eslint/js"
+        update-types: [version-update:semver-major]
+      - dependency-name: eslint-plugin-react-hooks
+        update-types: [version-update:semver-major]
 
   # How Dependabot handles backend/'s locks, read from dependabot-core's source:
   #
