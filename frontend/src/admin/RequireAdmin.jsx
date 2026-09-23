@@ -9,7 +9,7 @@
  * every request answers 403.
  */
 
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router';
 
 import { useAdminSession } from './AdminSessionContext.jsx';
 import AdminForbidden from './pages/AdminForbidden.jsx';

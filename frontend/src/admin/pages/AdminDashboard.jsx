@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 
 import ErrorState from '../../components/common/ErrorState.jsx';
 import Skeleton from '../../components/common/Skeleton.jsx';

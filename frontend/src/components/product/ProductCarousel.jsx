@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import ProductCard from './ProductCard.jsx';
 import { ProductCardSkeleton } from '../common/Skeleton.jsx';

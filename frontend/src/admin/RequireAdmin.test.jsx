@@ -8,7 +8,7 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 
 import RequireAdmin from './RequireAdmin.jsx';
 import AdminSessionProvider from './AdminSessionContext.jsx';

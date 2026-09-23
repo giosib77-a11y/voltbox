@@ -10,7 +10,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet } from 'react-router';
 
 import { getAdminProfile, isAdminAvailable } from './adminApi.js';
 import { readSession } from '../services/session.js';

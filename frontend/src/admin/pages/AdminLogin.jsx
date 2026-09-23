@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Loader2, Store } from 'lucide-react';
 
 import * as api from '../../services/api.js';

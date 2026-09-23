@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router';
 import { KeyRound, LogOut, MapPin, Package, User } from 'lucide-react';
 import Breadcrumbs from '../../components/common/Breadcrumbs.jsx';
 import { useAuth } from '../../hooks/useAuth.js';

@@ -55,9 +55,9 @@ jobs:
       # developer's machine and in this job. Its advisories concern the dev
       # server, the vitest UI, and how vitest resolves mock paths. CI starts
       # neither server, and the mocks are this repository's own test code.
-      # Moderate is below the line because react-router's open advisories are
-      # fixed only in a major upgrade: a step that is red from its first run
-      # gets switched off.
+      # Moderate is below the line so that an advisory fixed only in a major
+      # upgrade does not turn the step red from its first run: a step like that
+      # gets switched off. react-router's two were that case until 7.18.
       # npm still prints every finding; the level only decides the exit code.
       # Last, and even after a failure: it reads only package-lock.json, and an
       # advisory published upstream should not hide the lint and test results.

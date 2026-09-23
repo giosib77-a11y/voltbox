@@ -80,16 +80,14 @@ describe('the tab case, spelled out', () => {
  * GHSA-wrjc-x8rr-h8h6 - react-router reads some backslash forms as a
  * protocol-relative URL inside `<Link>` and `useNavigate`, turning a value that
  * looks like a path into a navigation off the site. Versions 6.0.0 through
- * 7.17.0 are affected; this project is on 6.30.x and the only published fix is
- * the 7.x major.
+ * 7.17.0 are affected; this project is on 7.18.x, which carries the fix.
  *
- * Nothing reaches `navigate()` from a query string without passing through
- * `getSafeRedirect` first - Login, Register and the admin login all call it -
- * and it returns a resolved `pathname + search + hash`, so none of the shapes
- * the advisory relies on survive it.
- *
- * That is what makes deferring the major upgrade a decision rather than a hope:
- * weaken the function and these fail.
+ * The router's fix is the second line, not the first. Nothing reaches
+ * `navigate()` from a query string without passing through `getSafeRedirect`
+ * first - Login, Register and the admin login all call it - and it returns a
+ * resolved `pathname + search + hash`, so none of the shapes the advisory
+ * relies on survive it, whatever the router does with them. Weaken the
+ * function and these fail.
  */
 const BACKSLASH = String.fromCharCode(92);
 

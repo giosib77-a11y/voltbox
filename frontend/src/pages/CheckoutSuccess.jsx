@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router';
 import { CheckCircle2, Copy, Package, Phone, Truck, XCircle } from 'lucide-react';
 import Badge from '../components/common/Badge.jsx';
 import Button from '../components/common/Button.jsx';

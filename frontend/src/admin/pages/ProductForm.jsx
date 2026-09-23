@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom';
+import { Link, useBlocker, useNavigate, useParams } from 'react-router';
 import { AlertTriangle, ArrowLeft, Archive, ArchiveRestore } from 'lucide-react';
 
 import Button from '../../components/common/Button.jsx';

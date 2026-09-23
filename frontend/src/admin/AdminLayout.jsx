@@ -8,7 +8,7 @@
  * work tool feel broken, so new entries are added as their pages land.
  */
 
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router';
 import {
   Boxes,
   ExternalLink,

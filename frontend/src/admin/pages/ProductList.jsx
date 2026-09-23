@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import { Copy, Plus, Search, Trash2 } from 'lucide-react';
 
 import Button from '../../components/common/Button.jsx';

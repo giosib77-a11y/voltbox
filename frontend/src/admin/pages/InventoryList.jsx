@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { History, Search, SlidersHorizontal } from 'lucide-react';
 
 import Button from '../../components/common/Button.jsx';

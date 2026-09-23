@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { DEFAULT_SORT, PAGE_SIZE, QUERY_KEYS } from '../constants/index.js';
 import { parseFiltersFromParams, serializeFilters } from '../utils/filter.js';
 

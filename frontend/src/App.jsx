@@ -1,5 +1,6 @@
 import { lazy } from 'react';
-import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router';
+import { RouterProvider } from 'react-router/dom';
 
 import Layout from './components/layout/Layout.jsx';
 import RequireAuth from './components/layout/RequireAuth.jsx';
@@ -104,7 +105,6 @@ const adminRoutes = {
 /**
  * მარშრუტების ერთადერთი აღწერა.
  * გვერდები lazy-ია; Layout და RequireAuth — არა (ყოველთვის საჭიროა).
- * `future` ალმები v7-ის ქცევას რთავს — ამით dev-console სუფთა რჩება.
  */
 const router = createBrowserRouter(
   [
@@ -143,17 +143,8 @@ const router = createBrowserRouter(
       ],
     },
   ],
-  {
-    future: {
-      v7_relativeSplatPath: true,
-      v7_fetcherPersist: true,
-      v7_normalizeFormMethod: true,
-      v7_partialHydration: true,
-      v7_skipActionErrorRevalidation: true,
-    },
-  },
 );
 
 export default function App() {
-  return <RouterProvider router={router} future={{ v7_startTransition: true }} />;
+  return <RouterProvider router={router} />;
 }

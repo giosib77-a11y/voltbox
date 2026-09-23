@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import { Check, ShoppingCart } from 'lucide-react';
 import ProductImage from '../common/ProductImage.jsx';
 import Badge from '../common/Badge.jsx';

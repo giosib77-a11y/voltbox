@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Clock, Mail, MapPin, Phone, Zap } from 'lucide-react';
 import { CONTACT, SHIPPING, SITE_DESCRIPTION, SITE_NAME } from '../../constants/index.js';
 import { formatPrice } from '../../utils/format.js';

@@ -10,14 +10,14 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 
 import CheckoutSuccess from './CheckoutSuccess.jsx';
 import * as api from '../services/api.js';
 import { ToastProvider } from '../context/ToastContext.jsx';
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return { ...actual, useParams: () => ({ id: 'VB-20260912-1000' }) };
 });
 

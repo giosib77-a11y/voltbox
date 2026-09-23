@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { ArrowRight, BadgePercent, Headphones, ShieldCheck, Truck } from 'lucide-react';
 import Button from '../components/common/Button.jsx';
 import CategoryIcon from '../components/common/CategoryIcon.jsx';

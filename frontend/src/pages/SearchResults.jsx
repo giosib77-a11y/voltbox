@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { Search, SlidersHorizontal } from 'lucide-react';
 import Breadcrumbs from '../components/common/Breadcrumbs.jsx';
 import Button from '../components/common/Button.jsx';

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Search, X } from 'lucide-react';
 import SearchSuggestions from './SearchSuggestions.jsx';
 import { useDebounce } from '../../hooks/useDebounce.js';

@@ -1,4 +1,4 @@
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../../hooks/useAuth.js';
 import { Skeleton } from '../common/Skeleton.jsx';
 import { QUERY_KEYS } from '../../constants/index.js';

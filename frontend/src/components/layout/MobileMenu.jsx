@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { LayoutDashboard, LogIn, LogOut, MapPin, Package, Phone, User } from 'lucide-react';
 import Modal from '../common/Modal.jsx';
 import CategoryIcon from '../common/CategoryIcon.jsx';

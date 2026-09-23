@@ -5,7 +5,7 @@
  * Where it fits: rendered by RequireAdmin for the `forbidden` state.
  */
 
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { ShieldX } from 'lucide-react';
 
 export default function AdminForbidden() {

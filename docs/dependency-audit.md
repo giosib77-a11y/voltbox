@@ -17,7 +17,7 @@
 | `vite`, `vite-node`, `esbuild` | high / moderate | dev-სერვერი და ბილდი |
 
 **production-ში არცერთი არ ხვდება** — `dependencies`-ში მხოლოდ react,
-react-dom, react-router-dom და lucide-react-ია.
+react-dom, react-router და lucide-react-ია (2026-09-23-მდე `react-router-dom`).
 
 ამათგან ყველაზე რეალური `esbuild`-ისა და `vite`-ის **dev-სერვერის** ხარვეზებია:
 გაშვებულ `npm run dev`-ს მავნე საიტს შეუძლია მოთხოვნა გაუგზავნოს და პასუხი
@@ -30,7 +30,12 @@ major-ებს ნიშნავს — ცალკე სამუშაო�
 გაფრთხილება აღარ არის. `npm audit` ახლა მხოლოდ ქვემოთ აღწერილ
 react-router-ს აჩვენებს (2 moderate: `react-router` და `react-router-dom`).
 
-### 1 ეხება production-ს — `react-router-dom` 6.30.x
+### 1 ეხებოდა production-ს — `react-router-dom` 6.30.x
+
+**2026-09-23 — გასწორებულია.** frontend გადავიდა `react-router` 7.18.4-ზე
+(library mode, იგივე `createBrowserRouter`), `react-router-dom` ამოღებულია.
+`npm audit --omit=dev` — 0 გაფრთხილება. ქვემოთ — შეფასება, რომელიც მანამდე
+მოქმედებდა; `getSafeRedirect`-ზე ნათქვამი დღესაც ძალაშია.
 
 ორი პრობლემა, `6.0.0 – 7.17.0`. გასწორება მხოლოდ **7.x major**-შია.
 

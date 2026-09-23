@@ -12,7 +12,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 
 import Checkout from './Checkout.jsx';
 import * as api from '../services/api.js';
@@ -20,8 +20,8 @@ import { ToastProvider } from '../context/ToastContext.jsx';
 import ToastViewport from '../components/common/Toast.jsx';
 
 let navigate;
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return { ...actual, useNavigate: () => navigate };
 });
 

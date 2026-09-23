@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { Check, RotateCcw, ShieldCheck, ShoppingCart, Truck } from 'lucide-react';
 import Breadcrumbs from '../components/common/Breadcrumbs.jsx';
 import Button from '../components/common/Button.jsx';

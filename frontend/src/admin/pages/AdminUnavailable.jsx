@@ -6,7 +6,7 @@
  * Where it fits: rendered for every /admin route when VITE_API_MODE is not http.
  */
 
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { PlugZap } from 'lucide-react';
 
 export default function AdminUnavailable() {
