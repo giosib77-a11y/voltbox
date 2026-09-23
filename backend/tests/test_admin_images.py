@@ -14,6 +14,7 @@ import os
 import struct
 import subprocess
 import sys
+import types
 import uuid
 import zlib
 from collections.abc import Generator
@@ -21,9 +22,10 @@ from collections.abc import Generator
 import httpx
 import pytest
 from app.core.config import settings
-from app.core.errors import ValidationError
+from app.core.errors import AppError, ValidationError
 from app.db.models import ROLE_ADMIN, OrderItem, ProductImage
 from app.main import app
+from app.services import storage as storage_module
 from app.services.storage import (
     DECODE_COST,
     MAX_STORED_EDGE,
@@ -816,3 +818,155 @@ class TestDecodeMemoryIsBounded:
             f"{path} peaked at {peak / 1024 / 1024:.0f} MiB, over the "
             f"{settings.max_image_decode_bytes / 1024 / 1024:.0f} MiB budget"
         )
+
+
+SERVICE_KEY = "service-role-key-that-must-not-leak"
+
+
+class FakeSupabase:
+    """Answers Supabase Storage's HTTP calls with a chosen response.
+
+    The fake sits under httpx, not in place of SupabaseStorage: the class under
+    test builds the real request and reads the real response. Mocking the class
+    itself is how 1ebe26b stayed green while broken.
+    """
+
+    def __init__(self) -> None:
+        self.status = 200
+        self.body: object = {"message": "Successfully deleted"}
+        self.requests: list[httpx.Request] = []
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        return httpx.Response(self.status, json=self.body)
+
+
+@pytest.fixture
+def supabase(monkeypatch: pytest.MonkeyPatch) -> Generator[tuple[SupabaseStorage, FakeSupabase]]:
+    fake = FakeSupabase()
+    transport = httpx.MockTransport(fake.handle)
+
+    def client(**kwargs: object) -> httpx.AsyncClient:
+        return httpx.AsyncClient(transport=transport, **kwargs)  # type: ignore[arg-type]
+
+    # Only storage.py's view of httpx changes; the test client keeps the real one.
+    monkeypatch.setattr(storage_module, "httpx", types.SimpleNamespace(AsyncClient=client))
+    backend = SupabaseStorage("project", SERVICE_KEY, "products")
+    app.dependency_overrides[get_storage] = lambda: backend
+    yield backend, fake
+    app.dependency_overrides.pop(get_storage, None)
+
+
+class TestSupabaseDelete:
+    """A delete Supabase refused must not be reported as done.
+
+    The file would stay public at its URL while the panel said it was gone.
+    """
+
+    async def test_a_missing_object_counts_as_deleted(
+        self, supabase: tuple[SupabaseStorage, FakeSupabase]
+    ) -> None:
+        backend, fake = supabase
+        fake.status, fake.body = 404, {"message": "Object not found"}
+
+        await backend.delete("products/p/gone.png")
+
+        (request,) = fake.requests
+        assert request.method == "DELETE"
+        assert request.url.path == "/storage/v1/object/products/products/p/gone.png"
+
+    async def test_a_400_whose_body_says_404_counts_as_deleted(
+        self, supabase: tuple[SupabaseStorage, FakeSupabase]
+    ) -> None:
+        backend, fake = supabase
+        fake.status, fake.body = 400, {"statusCode": "404", "error": "not_found"}
+
+        await backend.delete("products/p/gone.png")
+
+    @pytest.mark.parametrize("status", [401, 403, 500, 503])
+    async def test_any_other_failure_is_raised(
+        self, supabase: tuple[SupabaseStorage, FakeSupabase], status: int
+    ) -> None:
+        backend, fake = supabase
+        fake.status, fake.body = status, {"error": "nope"}
+
+        with pytest.raises(AppError) as raised:
+            await backend.delete("products/p/kept.png")
+
+        assert raised.value.code == "STORAGE_DELETE_FAILED"
+        assert raised.value.status_code == 502
+        assert raised.value.details == {"status": status}
+
+    async def test_a_plain_400_is_not_mistaken_for_a_missing_object(
+        self, supabase: tuple[SupabaseStorage, FakeSupabase]
+    ) -> None:
+        backend, fake = supabase
+        fake.status, fake.body = 400, {"statusCode": "400", "error": "InvalidKey"}
+
+        with pytest.raises(AppError):
+            await backend.delete("products/p/kept.png")
+
+
+async def _stored_image(db: AsyncSession, product_id: str) -> ProductImage:
+    image = ProductImage(
+        product_id=uuid.UUID(product_id),
+        url=f"https://project.supabase.co/storage/v1/object/public/products/products/{product_id}/a.png",
+        position=0,
+        is_primary=True,
+    )
+    db.add(image)
+    await db.flush()
+    return image
+
+
+@pytest.mark.parametrize("status", [403, 500])
+async def test_a_refused_storage_delete_reaches_the_admin_and_keeps_the_row(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    product_id: str,
+    db: AsyncSession,
+    supabase: tuple[SupabaseStorage, FakeSupabase],
+    caplog: pytest.LogCaptureFixture,
+    status: int,
+) -> None:
+    """The row stays so the admin can retry; nothing echoes the key."""
+    _, fake = supabase
+    fake.status = status
+    image_id = (await _stored_image(db, product_id)).id
+
+    with caplog.at_level("DEBUG"):
+        response = await client.delete(
+            f"{ADMIN}/products/{product_id}/images/{image_id}", headers=headers
+        )
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "STORAGE_DELETE_FAILED"
+    assert response.json()["error"]["details"] == {"status": status}
+    assert len(fake.requests) == 1
+    db.expire_all()
+    assert await db.scalar(select(ProductImage).where(ProductImage.id == image_id)) is not None
+    for leaked in (SERVICE_KEY, "Bearer", "apikey"):
+        assert leaked not in response.text
+        assert leaked not in caplog.text
+
+
+async def test_an_already_missing_object_still_deletes_the_row(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    product_id: str,
+    db: AsyncSession,
+    supabase: tuple[SupabaseStorage, FakeSupabase],
+) -> None:
+    _, fake = supabase
+    fake.status, fake.body = 404, {"message": "Object not found"}
+    image = await _stored_image(db, product_id)
+    image_id = image.id
+
+    response = await client.delete(
+        f"{ADMIN}/products/{product_id}/images/{image_id}", headers=headers
+    )
+
+    assert response.status_code == 204
+    assert len(fake.requests) == 1
+    db.expire_all()
+    assert await db.scalar(select(ProductImage).where(ProductImage.id == image_id)) is None

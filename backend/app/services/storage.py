@@ -20,7 +20,7 @@ import httpx
 from PIL import Image, JpegImagePlugin, UnidentifiedImageError
 
 from app.core.config import settings
-from app.core.errors import ValidationError
+from app.core.errors import AppError, ValidationError
 
 #: Only these three. SVG is deliberately absent: it is a document format that
 #: can carry scripts, and it would be served from the same origin as the site.
@@ -357,9 +357,35 @@ class SupabaseStorage:
 
     async def delete(self, key: str) -> None:
         async with httpx.AsyncClient(timeout=30) as client:
-            # A missing object is not an error: deletion has to be idempotent so
-            # a retry after a timeout does not fail.
-            await client.delete(f"{self.base}/object/{self.bucket}/{key}", headers=self.headers)
+            response = await client.delete(
+                f"{self.base}/object/{self.bucket}/{key}", headers=self.headers
+            )
+        # A missing object is not an error: deletion has to be idempotent so
+        # a retry after a timeout does not fail.
+        if response.is_success or _is_missing_object(response):
+            return
+        # Anything else - a rejected key, a missing policy, an outage - means the
+        # file is still public at its URL, so the admin must not be told it went.
+        # Only the status travels: the request carried the service role key.
+        raise AppError(
+            "The image could not be removed from storage",
+            code="STORAGE_DELETE_FAILED",
+            status_code=502,
+            details={"status": response.status_code},
+        )
+
+
+def _is_missing_object(response: httpx.Response) -> bool:
+    """A 404, or the 400 whose body says 404 that Supabase Storage has used for it."""
+    if response.status_code == 404:
+        return True
+    if response.status_code != 400:
+        return False
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    return isinstance(body, dict) and str(body.get("statusCode")) == "404"
 
 
 #: Where the in-memory fake is an acceptable stand-in. Anywhere else, an

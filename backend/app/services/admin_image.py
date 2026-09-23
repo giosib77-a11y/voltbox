@@ -154,6 +154,12 @@ async def delete_image(
     url = target.url
     was_primary = target.is_primary
 
+    # The bucket first. If storage refuses, the row is untouched and the admin
+    # can retry; the other order would leave a public file no row points to. A
+    # later failure here leaves a row whose file is gone - a retry clears that,
+    # since a missing object counts as deleted.
+    await discard_objects(db, storage, [url])
+
     await db.delete(target)
     await db.flush()
 
@@ -165,8 +171,6 @@ async def delete_image(
         await db.flush()
         remaining[0].is_primary = True
     await db.flush()
-
-    await discard_objects(db, storage, [url])
 
 
 async def discard_objects(db: AsyncSession, storage: StorageBackend, urls: Sequence[str]) -> None:
