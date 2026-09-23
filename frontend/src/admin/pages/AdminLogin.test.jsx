@@ -9,14 +9,14 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
 import AdminLogin from './AdminLogin.jsx';
 import * as api from '../../services/api.js';
 import * as adminApi from '../adminApi.js';
-import { __resetSessionStateForTests } from '../../services/session.js';
+import { __resetSessionStateForTests, writeSession } from '../../services/session.js';
 
 function renderLogin() {
   return render(
@@ -80,5 +80,31 @@ describe('AdminLogin', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'ამ ანგარიშს ადმინისტრატორის უფლებები არ აქვს.',
     );
+  });
+
+  describe('when a stored session is checked on arrival', () => {
+    beforeEach(() => {
+      writeSession({ user: { id: 'u1' }, token: 't', refreshToken: 'r' });
+    });
+
+    it('says the server failed instead of silently showing the form', async () => {
+      vi.spyOn(adminApi, 'getAdminProfile').mockRejectedValue(
+        refusal(500, 'INTERNAL_ERROR', 'სერვერის შეცდომა'),
+      );
+      renderLogin();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('სერვერის შეცდომა');
+    });
+
+    it('stays quiet for an expired session - the form is the right answer', async () => {
+      const check = vi
+        .spyOn(adminApi, 'getAdminProfile')
+        .mockRejectedValue(refusal(401, 'UNAUTHORIZED', 'Authentication required'));
+      renderLogin();
+
+      await waitFor(() => expect(check).toHaveBeenCalled());
+      await Promise.resolve();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
   });
 });

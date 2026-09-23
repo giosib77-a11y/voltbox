@@ -39,8 +39,12 @@ export default function AdminLogin() {
       .then(() => {
         if (!cancelled) navigate(next, { replace: true });
       })
-      .catch(() => {
-        // არ არის ადმინი ან სესია ვადაგასულია — ფორმა რჩება.
+      .catch((caught) => {
+        // არ არის ადმინი (403) ან სესია ვადაგასულია (401) — ფორმა ჩუმად რჩება.
+        // სხვა დანარჩენი სერვერის ან კავშირის პრობლემაა და ადმინმა ის უნდა
+        // დაინახოს, თორემ ფორმა ისე გამოიყურება, თითქოს სესიიდან გამოვიდა.
+        if (cancelled || caught?.status === 401 || caught?.status === 403) return;
+        setError(caught?.message || 'სესიის შემოწმება ვერ მოხერხდა. სცადეთ ხელახლა.');
       });
     return () => {
       cancelled = true;
