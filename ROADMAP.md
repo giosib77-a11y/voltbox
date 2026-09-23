@@ -341,7 +341,16 @@ facet-ების გაერთიანების მერე  6     1 24
 
 იმავე გადაწყვეტილებას ითხოვს, რასაც §17 — სად უნდა იცხოვროს backend-მა.
 
-### 18. `vite` და `vitest` — major განახლება  ·  ~1.5 სთ
+### ~~18. `vite` და `vitest` — major განახლება~~  ·  ✅ შესრულებულია 2026-09-23
+
+vite 8.3.0, @vitejs/plugin-react 6.1.1, vitest 5.0.1, @vitest/coverage-v8 5.0.1.
+375 vitest, ორივე ბილდი, journey.py 62/62 და cart-sync 7/7 node:22-ში. CSS-ს
+ახლა lightningcss ამცირებს (8.9 → 8.7 kB gzip). dev proxy http-proxy-3-ზეა,
+HMR-ის ქცევა ტესტებში არ ჩანს: ეს სამი deploy-მდე ბრაუზერში სანახავია.
+`npm audit` 8 გაფრთხილებიდან 2-მდე ჩამოვიდა, დარჩა react-router-ისა
+(იხ. [docs/dependency-audit.md](docs/dependency-audit.md)).
+
+<details><summary>თავდაპირველი აღწერა</summary>
 
 ```
 vite     5.4.21  →  8.x    GHSA-4w7w-66w2-5vf9  (high, dev server path traversal)
@@ -361,6 +370,8 @@ vite-ის კონფიგსა და ტესტების API-ს ე
 **შემოწმება განახლების შემდეგ:** ორივე ბილდი (`mock` და `http`), 77 vitest,
 Tailwind-ის CSS-ის ზომა (~42 kB, არა 6 kB — იხ. §0-ის გაკვეთილი), ngrok-ით
 preview.
+
+</details>
 
 ### 19. სტუმრის შეკვეთის ძებნა — ერთჯერადი ბმული  ·  ~2 სთ
 

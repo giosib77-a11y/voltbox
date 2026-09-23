@@ -48,17 +48,24 @@ const API_PROXY = {
  * In one chunk with the app, every deploy renamed all of it, and a returning
  * visitor downloaded React again with each code change: 92.6 kB gzip on the
  * entry path. Split, a code change renames only `index` on that path
- * (22.3 kB); `vendor` (67.9 kB) keeps its name until a dependency changes.
+ * (16.1 kB under Vite 8); `vendor` (66.9 kB) keeps its name until a
+ * dependency changes.
  *
  * lucide gets its own chunk because what goes into it depends on the app:
  * adding an icon changes it. Inside `vendor` that would evict React too; left
- * to Rollup, the icons land in `index` and change on every deploy. The cost is
- * the first visit, 3.4 kB gzip more on the entry path, mostly icons that only
- * lazy pages use and that now load up front.
+ * to the bundler, the icons land in `index` and change on every deploy, 2.2 kB
+ * more re-downloaded on the entry path each time. The cost is the first visit,
+ * 2.7 kB gzip more on that path, icons that only lazy pages use and that now
+ * load up front.
+ *
+ * `codeSplitting` groups, not `manualChunks`: under Rolldown the function is
+ * deprecated and ignored once `codeSplitting` is set.
  */
+// `[\\/]` because Rolldown matches these in native code against the module id
+// as the OS spells it, so a Windows build sees backslashes.
 const VENDOR_MODULE =
-  /\/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom|@remix-run\/router)\//;
-const ICONS_MODULE = /\/node_modules\/lucide-react\//;
+  /[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom|@remix-run[\\/]router)[\\/]/;
+const ICONS_MODULE = /[\\/]node_modules[\\/]lucide-react[\\/]/;
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -144,11 +151,13 @@ export default defineConfig(({ mode }) => {
       proxy: API_PROXY,
     },
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         output: {
-          manualChunks(id) {
-            if (VENDOR_MODULE.test(id)) return 'vendor';
-            if (ICONS_MODULE.test(id)) return 'icons';
+          codeSplitting: {
+            groups: [
+              { name: 'vendor', test: VENDOR_MODULE },
+              { name: 'icons', test: ICONS_MODULE },
+            ],
           },
         },
       },

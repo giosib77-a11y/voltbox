@@ -53,7 +53,7 @@ npm run gen:images   # პროდუქტების placeholder-სურ�
 
 | ფენა | არჩევანი |
 |---|---|
-| Build | Vite 5 |
+| Build | Vite 8 |
 | UI | React 18 (JSX, ფუნქციური კომპონენტები + hooks) |
 | Styling | Tailwind CSS 3 (utility-first) |
 | Routing | React Router v6 (`createBrowserRouter`) |

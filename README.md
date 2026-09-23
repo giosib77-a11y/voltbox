@@ -7,7 +7,7 @@ Monorepo ორი თანაბარმნიშვნელოვანი 
 
 | | ტექნოლოგია | დოკუმენტაცია |
 |---|---|---|
-| [`frontend/`](./frontend/) | React 18 · Vite 5 · Tailwind 3 · React Router 6 | [frontend/README.md](./frontend/README.md) |
+| [`frontend/`](./frontend/) | React 18 · Vite 8 · Tailwind 3 · React Router 6 | [frontend/README.md](./frontend/README.md) |
 | [`backend/`](./backend/) | Python 3.14 · FastAPI · SQLAlchemy 2 · PostgreSQL | [backend/README.md](./backend/README.md) |
 
 ---

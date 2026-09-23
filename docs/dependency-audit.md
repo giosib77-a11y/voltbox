@@ -26,6 +26,10 @@ react-dom, react-router-dom და lucide-react-ია.
 **გადაწყვეტილება:** არ ვასწორებთ ახლა. გასწორება `vite 5→7` და `vitest 2→4`
 major-ებს ნიშნავს — ცალკე სამუშაოა, ცალკე ტესტირებით (იხ. ROADMAP §18).
 
+**2026-09-23 — გასწორებულია.** vite 8.3.0 და vitest 5.0.1-ის შემდეგ ეს შვიდი
+გაფრთხილება აღარ არის. `npm audit` ახლა მხოლოდ ქვემოთ აღწერილ
+react-router-ს აჩვენებს (2 moderate: `react-router` და `react-router-dom`).
+
 ### 1 ეხება production-ს — `react-router-dom` 6.30.x
 
 ორი პრობლემა, `6.0.0 – 7.17.0`. გასწორება მხოლოდ **7.x major**-შია.
