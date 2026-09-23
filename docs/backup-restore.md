@@ -1,20 +1,26 @@
 # Backup და restore
 
-ყველა ბრძანება ამ დოკუმენტში **გაშვებულია და გადამოწმებულია** ცოცხალ
-Supabase-ზე. ბოლო სავარჯიშო: **2026-09-13**, მიგრაცია `0010`.
+Restore-ის ყველა ბრძანება (ნაწილი 2, გადამოწმების ჩათვლით) **გაშვებულია და
+გადამოწმებულია** ზუსტად ისე, როგორც აქ წერია. ბოლო სავარჯიშო: **2026-09-23**,
+მიგრაცია `0011`, ლოკალურ Docker-ზე.
 
 ```
-14 ცხრილი · 136 სვეტი · 47 ინდექსი · 53 შეზღუდვა · 1 sequence
+14 ცხრილი · 136 სვეტი · 48 ინდექსი · 53 შეზღუდვა · 1 sequence
 ყველა ცხრილის მწკრივების რაოდენობა ემთხვევა
 → 0 ნამდვილი შეუსაბამობა
 ```
 
-⚠️ ციფრები სქემასთან ერთად იცვლება. **ხელით ნუ შეადარებთ** —
-`scripts/verify_restore.py` ორივე ბაზას ერთმანეთს ადარებს:
+**რა არ გაეშვა ამ სავარჯიშოზე** — production-ს სავარჯიშო არ ეხება:
 
-```bash
-python scripts/verify_restore.py postgresql://voltbox:voltbox@localhost:55434/voltbox_restore
-```
+- **Backup-ის ბრძანება (ნაწილი 1) Supabase-ზე.** dump აღებულია ლოკალური
+  `voltbox_dev`-იდან, იმავე `pg_dump`-ის ფლაგებით (იხ. „სავარჯიშო" ქვემოთ).
+  Supabase-იდან ბოლოს 2026-09-13-ს, მიგრაცია `0010`-ზე აიღეს.
+- **გადამოწმება ცოცხალ ბაზასთან.** ნაგულისხმევად სკრიპტი `.env`-ის
+  `DATABASE_URL`-ს (ანუ Supabase-ს) ადარებს; სავარჯიშოზე `--against`-ით
+  `voltbox_dev`-ს შეედარა.
+
+⚠️ ციფრები სქემასთან ერთად იცვლება. **ხელით ნუ შეადარებთ** —
+`scripts/verify_restore.py` ორივე ბაზას ერთმანეთს ადარებს (ნაწილი 2, „გადამოწმება").
 
 ---
 
@@ -94,19 +100,33 @@ git-ში ვერ მოხვდება.
 
 ### გადამოწმებული პროცედურა
 
+სამიზნე **ცალკე, ერთჯერადი PG17 სერვერია** :55433-ზე — არა compose-ის
+`voltbox-pg` (:55432), რომ dev-ის ბაზას არაფერი მოუვიდეს. `psql` host-ზე
+საჭირო არაა: ის სამიზნე კონტეინერის შიგნით ეშვება.
+
 ```bash
-TARGET='postgresql://voltbox:voltbox@localhost:55433/voltbox_restore'
+cd backend
+
+# 0. სამიზნე: PG17 სერვერი :55433-ზე, ცარიელი voltbox_restore ბაზით.
+#    -h 127.0.0.1: init-ის დროებითი სერვერი მხოლოდ socket-ს უსმენს,
+#    ამიტომ ეს ციკლი მხოლოდ ნამდვილ სერვერზე ჩერდება
+docker run -d --name voltbox-restore \
+  -e POSTGRES_USER=voltbox -e POSTGRES_PASSWORD=voltbox -e POSTGRES_DB=voltbox_restore \
+  -p 55433:5432 postgres:17-alpine
+until docker exec voltbox-restore pg_isready -q -h 127.0.0.1 -U voltbox -d voltbox_restore; do sleep 1; done
+
+PSQL='docker exec -i voltbox-restore psql -U voltbox -d voltbox_restore'
 
 # 1. სუფთა სქემა + საჭირო გაფართოებები
-psql "$TARGET" \
+$PSQL \
   -c 'drop schema if exists public cascade' \
   -c 'create schema public' \
   -c 'create extension if not exists citext   with schema public' \
   -c 'create extension if not exists pg_trgm  with schema public' \
   -c 'create extension if not exists unaccent with schema public'
 
-# 2. თვითონ restore
-psql "$TARGET" -f backups/voltbox-<თარიღი>.sql
+# 2. თვითონ restore. ON_ERROR_STOP აქ არ გვინდა — იხ. ქვემოთ
+$PSQL -q < backups/voltbox-<თარიღი>.sql
 ```
 
 ⚠️ `create schema public` **აუცილებელია**. `with schema public` არსებულ სქემას
@@ -114,16 +134,19 @@ psql "$TARGET" -f backups/voltbox-<თარიღი>.sql
 `ERROR: schema "public" does not exist`.
 
 dump-ის საკუთარი `CREATE SCHEMA public` უვნებელ `already exists`-ს დააბრუნებს —
-ეს ერთადერთი მოსალოდნელი შეცდომაა. სხვა არა.
+ეს ერთადერთი მოსალოდნელი შეცდომაა. სხვა არა. სწორედ ამიტომ ნაბიჯ 2-ს
+`ON_ERROR_STOP` არ აქვს: ამ შეცდომაზე restore თავიდანვე გაჩერდებოდა.
 
 ### 3. გადამოწმება
 
 **არ დაეყრდნოთ თვალით შემოწმებას.** ერთი დაკარგული ინდექსი ან check
-შეუმჩნეველი რჩება მანამ, სანამ არ დასჭირდება:
+შეუმჩნეველი რჩება მანამ, სანამ არ დასჭირდება. იმავე `backend/`-იდან:
 
 ```bash
-cd backend
-python scripts/verify_restore.py postgresql://voltbox:voltbox@localhost:55434/voltbox_restore
+python scripts/verify_restore.py postgresql://voltbox:voltbox@localhost:55433/voltbox_restore
+
+# ბოლოს სამიზნე ქრება
+docker rm -f voltbox-restore
 ```
 
 სკრიპტი ორივე ბაზიდან კითხულობს ცხრილებს, სვეტებს (ტიპითა და default-ით),
@@ -148,6 +171,27 @@ dump-ის შემდეგ:  ANY (ARRAY[('pending'::character varying)::text
 `cosmetic`-ად ითვლის და ცალკე აჩვენებს. 2026-09-13-ის სავარჯიშოზე 6 ასეთი იყო
 (3 შეზღუდვა × 2 მხარე), და აღდგენილ ბაზაზე ქცევითაც შემოწმდა: უცნობი სტატუსი,
 უცნობი გადახდის მეთოდი და უცნობი მარაგის მიზეზი — სამივე უარყოფილი.
+
+### სავარჯიშო (production-ის გარეშე)
+
+იგივე პროცედურა, მხოლოდ dump ლოკალური `voltbox_dev`-იდან და შედარება მასთან.
+`voltbox-pg` (compose-ის `db`) გაშვებული უნდა იყოს:
+
+```bash
+cd backend
+docker exec voltbox-pg pg_dump -U voltbox --schema=public --no-owner --no-acl --format=plain voltbox_dev \
+  > backups/voltbox-rehearsal.sql
+
+# ნაწილი 2-ის ნაბიჯები 0–2, ფაილით backups/voltbox-rehearsal.sql, შემდეგ:
+python scripts/verify_restore.py postgresql://voltbox:voltbox@localhost:55433/voltbox_restore \
+  --against postgresql://voltbox:voltbox@localhost:55432/voltbox_dev
+docker rm -f voltbox-restore
+```
+
+2026-09-23-ს (მიგრაცია `0011`) შედეგი: ექვსივე კატეგორია `OK`,
+`real mismatches : 0`, exit `0`; restore-ის ერთადერთი შეცდომა — `schema "public"
+already exists`. `cosmetic` აქ 0 იყო და არა 6: `voltbox_dev` თვითონ dump-იდანაა
+აღდგენილი (ნაწილი 3, PG17-ზე გადაყვანა), ამიტომ მისი check-ები უკვე dump-ის ფორმით წერია.
 
 ---
 
