@@ -2,8 +2,10 @@ name: e2e
 
 # The whole shop over real sockets: uvicorn on :8100, the built storefront on
 # :4173, Postgres from backend/docker-compose.yml. backend/scripts/e2e/up.sh
-# resets and starts it, journey.py walks it. It is the only check of the system
-# end to end, and it used to run only when someone remembered to run it.
+# resets and starts it, journey.py walks it, and frontend/scripts/e2e/
+# cart-sync.mjs walks a basket through the built site in Chromium. It is the
+# only check of the system end to end, and it used to run only when someone
+# remembered to run it.
 #
 # Not on push: it needs a live server and a built frontend, which would double
 # the cost of ordinary work. Nightly, so a regression is reported at most one
@@ -79,6 +81,12 @@ jobs:
           npm ci
           npm run build
 
+      # The headless shell only, and the system libraries it needs. The version
+      # is the one package-lock.json pins, since npx resolves it from there.
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps --only-shell chromium
+
       - name: Serve the storefront
         working-directory: frontend
         run: |
@@ -99,6 +107,13 @@ jobs:
 
       - name: Walk the journey
         run: python scripts/e2e/journey.py
+
+      # The only place the storefront's own JavaScript meets the real API:
+      # journey.py reads the bundle as text and checks the cart from Python.
+      # After it, because it buys the products journey.py leaves.
+      - name: Walk a basket through the browser
+        working-directory: frontend
+        run: node scripts/e2e/cart-sync.mjs
 
       - name: Server logs
         if: failure()
