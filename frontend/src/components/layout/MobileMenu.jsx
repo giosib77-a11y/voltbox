@@ -1,9 +1,11 @@
+import { useId, useState } from 'react';
 import { Link } from 'react-router';
-import { LayoutDashboard, LogIn, LogOut, MapPin, Package, Phone, User } from 'lucide-react';
+import { ChevronDown, LayoutDashboard, LogIn, LogOut, MapPin, Package, Phone, User } from 'lucide-react';
 import Modal from '../common/Modal.jsx';
 import CategoryIcon from '../common/CategoryIcon.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { CONTACT } from '../../constants/index.js';
+import { categoryTree } from '../../utils/categoryTree.js';
 
 /**
  * მობილური მენიუ — slide-in drawer კატეგორიებითა და ანგარიშის ბმულებით.
@@ -23,20 +25,8 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
           კატეგორიები
         </p>
         <ul className="space-y-0.5">
-          {categories.map((category) => (
-            <li key={category.id}>
-              <Link
-                to={`/category/${category.slug}`}
-                onClick={onClose}
-                className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-ink-800 transition-colors hover:bg-primary-50 hover:text-primary-700"
-              >
-                <CategoryIcon name={category.icon} className="h-5 w-5 text-ink-500" />
-                <span className="flex-1">{category.name}</span>
-                {typeof category.productsCount === 'number' && (
-                  <span className="text-xs text-ink-500">{category.productsCount}</span>
-                )}
-              </Link>
-            </li>
+          {categoryTree(categories).map((category) => (
+            <MobileCategoryItem key={category.id} category={category} onNavigate={onClose} />
           ))}
         </ul>
 
@@ -125,5 +115,65 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
         </a>
       </nav>
     </Modal>
+  );
+}
+
+/**
+ * ფესვი ქვეკატეგორიებით — ადგილზე იშლება, ცალკე ეკრანზე არ გადადის.
+ * ხე ორ დონეზე მეტი არ არის, ამიტომ ქვემენიუს ეკრანი „უკან“ ღილაკსა და focus-ის
+ * მართვას მოიტანდა ისე, რომ სივრცეს არ დაზოგავდა. სახელი გადადის, ისარი შლის —
+ * ერთი შეხება ორივეს ვერ იზამს.
+ */
+function MobileCategoryItem({ category, onNavigate }) {
+  const [expanded, setExpanded] = useState(false);
+  const listId = useId();
+  const hasChildren = category.children.length > 0;
+
+  return (
+    <li>
+      <div className="flex items-center">
+        <Link
+          to={`/category/${category.slug}`}
+          onClick={onNavigate}
+          className="flex flex-1 items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-ink-800 transition-colors hover:bg-primary-50 hover:text-primary-700"
+        >
+          <CategoryIcon name={category.icon} className="h-5 w-5 text-ink-500" />
+          <span className="flex-1">{category.name}</span>
+          {typeof category.productsCount === 'number' && (
+            <span className="text-xs text-ink-500">{category.productsCount}</span>
+          )}
+        </Link>
+        {hasChildren && (
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            aria-expanded={expanded}
+            aria-controls={listId}
+            aria-label={`${category.name} — ქვეკატეგორიები`}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100"
+          >
+            <ChevronDown
+              className={`h-5 w-5 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              aria-hidden="true"
+            />
+          </button>
+        )}
+      </div>
+      {hasChildren && expanded && (
+        <ul id={listId} className="mb-1 ml-8 space-y-0.5 border-l border-ink-200 pl-2">
+          {category.children.map((child) => (
+            <li key={child.id}>
+              <Link
+                to={`/category/${child.slug}`}
+                onClick={onNavigate}
+                className="flex items-center rounded-control px-3 py-2 text-sm text-ink-700 transition-colors hover:bg-primary-50 hover:text-primary-700"
+              >
+                {child.name}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }

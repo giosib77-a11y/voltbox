@@ -287,6 +287,20 @@ async def test_categories_include_the_filter_configuration(
     assert toggle["match"] == "5G"
 
 
+async def test_categories_name_their_parent(client: httpx.AsyncClient, db: AsyncSession) -> None:
+    """ჰედერის ქვემენიუ ხეს ამ ველიდან აგებს — მის გარეშე ყველა კატეგორია ფესვია."""
+    phones = await make_category(db, "phones")
+    cases = await make_category(db, "cases")
+    cases.parent_id = phones.id
+    await db.flush()
+
+    body = (await client.get("/api/v1/categories")).json()
+
+    by_slug = {c["slug"]: c for c in body}
+    assert by_slug["phones"]["parentId"] is None
+    assert by_slug["cases"]["parentId"] == str(phones.id)
+
+
 async def test_brands_include_country_and_counts(
     client: httpx.AsyncClient, catalog: dict[str, object]
 ) -> None:

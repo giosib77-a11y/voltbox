@@ -72,6 +72,7 @@ def category_to_out(category: Category, products_count: int) -> CategoryOut:
         short_name=category.short_name or category.name,
         description=category.description,
         icon=category.icon,
+        parent_id=category.parent_id,
         filters=category.filters,
         products_count=products_count,
     )

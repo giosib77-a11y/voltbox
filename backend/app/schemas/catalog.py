@@ -109,6 +109,7 @@ class CategoryOut(ApiModel):
     short_name: str
     description: str
     icon: str
+    parent_id: UUID | None
     filters: list[CategoryFilterOut]
     products_count: int
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { NavLink, useLocation } from 'react-router';
+import { useLocation } from 'react-router';
 import { Menu, Phone, Truck } from 'lucide-react';
+import CategoryNav from './CategoryNav.jsx';
 import Logo from './Logo.jsx';
 import MobileMenu from './MobileMenu.jsx';
 import UserMenu from './UserMenu.jsx';
@@ -67,27 +68,7 @@ export default function Header({ categories = [] }) {
           </div>
         </div>
 
-        {/* კატეგორიების ნავიგაცია — desktop */}
-        <nav aria-label="კატეგორიები" className="hidden border-t border-ink-100 md:block">
-          <ul className="flex items-center gap-1 overflow-x-auto py-1.5">
-            {categories.map((category) => (
-              <li key={category.id}>
-                <NavLink
-                  to={`/category/${category.slug}`}
-                  className={({ isActive }) =>
-                    `block whitespace-nowrap rounded-control px-3 py-2 text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-primary-50 text-primary-700'
-                        : 'text-ink-700 hover:bg-ink-100 hover:text-primary-700'
-                    }`
-                  }
-                >
-                  {category.name}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        <CategoryNav categories={categories} />
 
         {/* ძებნა — mobile */}
         <div className="pb-3 md:hidden">
