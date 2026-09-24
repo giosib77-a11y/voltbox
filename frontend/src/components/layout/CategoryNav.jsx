@@ -90,8 +90,7 @@ function CategoryNavItem({ category }) {
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        aria-haspopup="true"
-        aria-controls={open ? panelId : undefined}
+        aria-controls={panelId}
         aria-label={`${category.name} — ქვეკატეგორიები`}
         className="flex h-9 w-7 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100 hover:text-primary-700"
       >
@@ -101,28 +100,34 @@ function CategoryNavItem({ category }) {
         />
       </button>
 
-      {open && (
-        // pt-1 და არა mt-1: ღრიჭოზე გადასვლისას pointer <li>-ში რჩება და მენიუ არ იხურება
-        <div ref={panelRef} id={panelId} className="absolute left-0 top-full z-drawer pt-1">
-          <ul className="w-56 overflow-hidden rounded-card border border-ink-200 bg-white py-1.5 shadow-popover">
-            {category.children.map((child) => (
-              <li key={child.id}>
-                <NavLink
-                  to={`/category/${child.slug}`}
-                  onClick={() => setOpen(false)}
-                  className={({ isActive }) =>
-                    `block px-3 py-2 text-sm transition-colors ${
-                      isActive ? 'bg-primary-50 text-primary-700' : 'text-ink-700 hover:bg-ink-50'
-                    }`
-                  }
-                >
-                  {child.name}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* disclosure და არა ARIA menu: ისრებით ნავიგაცია არ გვაქვს, ამიტომ aria-haspopup
+          არ ადევს. პანელი ყოველთვის DOM-შია, `hidden`-ით — aria-controls-ის სამიზნე
+          დახურულზეც არსებობს, დამალული ბმულები კი Tab-ით მიუწვდომელია.
+          pt-1 და არა mt-1: ღრიჭოზე გადასვლისას pointer <li>-ში რჩება და მენიუ არ იხურება */}
+      <div
+        ref={panelRef}
+        id={panelId}
+        hidden={!open}
+        className="absolute left-0 top-full z-drawer pt-1"
+      >
+        <ul className="w-56 overflow-hidden rounded-card border border-ink-200 bg-white py-1.5 shadow-popover">
+          {category.children.map((child) => (
+            <li key={child.id}>
+              <NavLink
+                to={`/category/${child.slug}`}
+                onClick={() => setOpen(false)}
+                className={({ isActive }) =>
+                  `block px-3 py-2 text-sm transition-colors ${
+                    isActive ? 'bg-primary-50 text-primary-700' : 'text-ink-700 hover:bg-ink-50'
+                  }`
+                }
+              >
+                {child.name}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </div>
     </li>
   );
 }

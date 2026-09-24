@@ -42,7 +42,12 @@ describe('CategoryNav', () => {
 
     expect(screen.queryByRole('link', { name: 'ქეისები' })).toBeNull();
     expect(phonesToggle()).toHaveAttribute('aria-expanded', 'false');
-    expect(phonesToggle()).toHaveAttribute('aria-haspopup', 'true');
+    // A disclosure, not an ARIA menu: no arrow-key handling, so no haspopup
+    expect(phonesToggle()).not.toHaveAttribute('aria-haspopup');
+    const panel = document.getElementById(phonesToggle().getAttribute('aria-controls'));
+    expect(panel).not.toBeNull();
+    expect(panel).not.toBeVisible();
+    expect(panel).toContainElement(screen.getByRole('link', { name: 'ქეისები', hidden: true }));
   });
 
   it('opens on hover and closes when the pointer leaves', async () => {
