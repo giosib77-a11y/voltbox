@@ -442,18 +442,27 @@ def main() -> None:
         )
         # The module script is the app. It is not the first `src=` any more:
         # public/theme-init.js runs ahead of it in <head>.
-        bundle = re.search(r'<script type="module"[^>]*\bsrc="([^"]+)"', page.text).group(1)
-        asset = httpx.get(f"{SHOP}{bundle}", timeout=20)
-        check("the bundle downloads", asset.status_code == 200, str(asset.status_code))
-        # The exact base URL the build was given, not just "/api/v1" - that
-        # string would be there whatever the bundle was pointed at. localhost
-        # rather than 127.0.0.1 because that is what the build was handed.
-        wanted = "http://localhost:8100/api/v1"
-        check(
-            "and talks to this API",
-            wanted in asset.text,
-            f"{wanted} in {len(asset.text) // 1024} KB of bundle",
-        )
+        script = re.search(r'<script type="module"[^>]*\bsrc="([^"]+)"', page.text)
+        # A page without it is a failed step with a reason, not an
+        # AttributeError that ends the journey before its summary.
+        if check(
+            "the page loads the app bundle",
+            script is not None,
+            "" if script else 'no <script type="module" src=...> in the page',
+        ):
+            assert script is not None
+            bundle = script.group(1)
+            asset = httpx.get(f"{SHOP}{bundle}", timeout=20)
+            check("the bundle downloads", asset.status_code == 200, str(asset.status_code))
+            # The exact base URL the build was given, not just "/api/v1" - that
+            # string would be there whatever the bundle was pointed at. localhost
+            # rather than 127.0.0.1 because that is what the build was handed.
+            wanted = "http://localhost:8100/api/v1"
+            check(
+                "and talks to this API",
+                wanted in asset.text,
+                f"{wanted} in {len(asset.text) // 1024} KB of bundle",
+            )
     except httpx.HTTPError as exc:
         check("the shop responds", False, str(exc))
 
