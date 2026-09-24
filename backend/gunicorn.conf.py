@@ -18,6 +18,7 @@ from it - so every request looks like it came from the proxy, and one shared
 rate-limit bucket covers the whole site. That is the bug this guards.
 """
 
+import ipaddress
 import os
 from urllib.parse import SplitResult, urlsplit
 
@@ -65,9 +66,9 @@ def _check_the_environment_is_named() -> None:
     value it can take: `/docs` and `/openapi.json` serve the whole admin API
     surface, the refresh cookie loses `Secure`, object storage falls back to a
     dict in one worker's memory, and on_starting skips every check after this
-    one - the proxy, the hosts, the origins, the rate-limit counters and the
-    connection budget. All of it off, and the site still works - so nothing
-    reports it.
+    one - the proxy, the hosts, the origins, the site's address, the rate-limit
+    counters and the connection budget. All of it off, and the site still
+    works - so nothing reports it.
 
     Forgetting an environment variable on a new host is the most ordinary
     deployment mistake there is, and gunicorn only ever runs in a deployment,
@@ -293,6 +294,81 @@ def _check_the_origins_are_named() -> None:
             )
 
 
+def _is_loopback(host: str) -> bool:
+    """Whether a hostname can only ever mean the machine it is typed on.
+
+    LOCAL_ORIGIN_HOSTS names the three spellings a browser's Origin arrives in.
+    A link is typed by whoever wrote it, so the whole of 127.0.0.0/8 counts, and
+    so does a name under .localhost, which resolves to loopback by definition
+    (RFC 6761).
+    """
+    if host in LOCAL_ORIGIN_HOSTS or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _check_the_site_url_is_named() -> None:
+    """Refuse a deployment whose links point at a development machine.
+
+    `SITE_URL` defaults to http://localhost:5173, and nothing that reads it
+    fails: the sitemap is still valid XML and the Telegram order notice still
+    arrives. Every URL in the sitemap and the admin link in each notice then
+    point at the machine of whoever follows them - a crawler indexes nothing,
+    and the owner's tap on a new order opens nothing.
+
+    Set but empty is a different failure, and the refusal says which: the
+    sitemap's URLs become bare paths with no domain, which a crawler rejects.
+
+    https only. Both readers hand this address out exactly as written, so an
+    http one sends a crawler and the owner - on the way to the admin login -
+    over plain http first, and leaves it to the host whether they are ever
+    redirected.
+    """
+    configured = os.environ.get("SITE_URL")
+    if configured is None:
+        raise SystemExit(
+            "SITE_URL is not set, so it defaults to http://localhost:5173: every "
+            "URL in the sitemap and the admin link in each Telegram order notice "
+            "would point at localhost. Set it to the storefront's address, for "
+            "example https://voltbox.ge."
+        )
+
+    site_url = configured.strip()
+    if not site_url:
+        raise SystemExit(
+            "SITE_URL is set but empty, so every URL in the sitemap would be a "
+            "bare path with no domain, which crawlers reject, and the admin link "
+            "in each Telegram order notice would open nothing. Set it to the "
+            "storefront's address, for example https://voltbox.ge."
+        )
+
+    parts = _split_origin(site_url)
+    if parts is None:
+        raise SystemExit(
+            "SITE_URL cannot be read as a URL - usually a '[' left open - so the "
+            "sitemap and the Telegram order notice would carry a link that goes "
+            "nowhere. Write it as https://host, for example https://voltbox.ge."
+        )
+    # Named by host alone: a pasted URL can carry a login before the `@`.
+    if parts.hostname and _is_loopback(parts.hostname):
+        raise SystemExit(
+            f"SITE_URL points at {parts.hostname}, a local development address. "
+            "Every URL in the sitemap and the admin link in each Telegram order "
+            "notice would open on the machine of whoever follows them. Set it to "
+            "the storefront's address, for example https://voltbox.ge."
+        )
+    if parts.scheme != "https" or not parts.hostname:
+        raise SystemExit(
+            "SITE_URL is not an https address. The sitemap and the Telegram order "
+            "notice hand it out exactly as written, so crawlers and the owner's "
+            "way to the admin login would start over plain http. Write it as "
+            "https://host, for example https://voltbox.ge."
+        )
+
+
 def _check_connection_budget() -> None:
     """Refuse a worker count whose connection pools cannot all fit.
 
@@ -350,5 +426,6 @@ def on_starting(server: object) -> None:
 
     _check_the_hosts_are_named()
     _check_the_origins_are_named()
+    _check_the_site_url_is_named()
     _check_the_rate_limit_counters_are_shared()
     _check_connection_budget()

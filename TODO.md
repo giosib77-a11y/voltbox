@@ -33,25 +33,24 @@
       VITE_API_BASE_URL=https://<api>/api/v1  ← ეს ორი Blueprint-ის შექმნისას
       VITE_SITE_URL=https://<დომენი>             ერთხელ იკითხება
 
-- [ ] **4. Backend-ის ცვლადები**
+- [ ] **4. Backend-ი Blueprint-ად** (deployment.md §2)
 
-      APP_ENV=production            ← დაუყენებლად სერვერი არ აიწევს
+      Render → New → Blueprint → Blueprint Path: backend/render.yaml
+
+      API, refresh-ტოკენების cron job-ი, Health Check Path (/api/v1/health/live),
+      APP_ENV, TRUSTED_HOSTS, CORS_ORIGINS და SITE_URL ფაილშია.
+
+      შექმნისას ერთხელ იკითხება:
       JWT_SECRET=<ახალი>            ← python -c "import secrets; print(secrets.token_urlsafe(48))"
-      TRUSTED_HOSTS=<api>           ← API-ს host-ი, არა storefront-ის. onrender-ისას
-                                      აპი თვითონ ამატებს; Health Check Path —
-                                      /api/v1/health შექმნისთანავე (deployment.md §2)
-      CORS_ORIGINS=https://<დომენი>
-      SITE_URL=https://<დომენი>
       FORWARDED_ALLOW_IPS=<proxy-ს მისამართი>
       REDIS_URL=<redis>             ← საჭიროა, თუ worker-ი 1-ზე მეტია
       SUPABASE_PROJECT_REF, SUPABASE_SERVICE_ROLE_KEY
 
+      შემდეგ: Environment Groups → voltbox-database → DATABASE_URL.
+      მანამდე API-ს პირველი deploy ჩავარდება — ეს მოსალოდნელია.
+
       კავშირების ბიუჯეტი: `worker × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
       Supabase-ს 60 აქვს, საიდანაც ~23 უკვე დაკავებულია.
-
-      Cron job — `python scripts/prune_refresh_tokens.py`, დღეში ერთხელ
-      (deployment.md §2). დაუყენებლად არაფერი ტყდება — `refresh_tokens`
-      უბრალოდ ზღვრის გარეშე იზრდება.
 
 ---
 

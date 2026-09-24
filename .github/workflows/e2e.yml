@@ -29,6 +29,16 @@ on:
 permissions:
   contents: read
 
+# One run per branch at a time, and the newer one wins. Unlike backend.yml and
+# frontend.yml, main gets no group per run: a run here is not one commit's
+# verdict but the branch's state when it started, so a dispatch made while the
+# nightly run is still going tests the same code or newer, and the older run
+# has nothing left to say. Each run has its own runner and its own Postgres,
+# so this is about the twenty minutes, not a collision.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   journey:
     runs-on: ubuntu-latest

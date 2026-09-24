@@ -78,15 +78,47 @@ grep -v '^\s*#' frontend/render.yaml | grep -oE '<[A-Z_]+>'
 
 ## 2. Backend-ის environment
 
+API და refresh-ტოკენების cron job-ი `backend/render.yaml`-შია: region
+(`frankfurt` — Supabase-ის გვერდით; შექმნის შემდეგ აღარ იცვლება), plan,
+Dockerfile, **Health Check Path** და ის ცვლადები, რომლებიც საიდუმლო არ არის.
+
+### Blueprint-ის შექმნა
+
+**Render → New → Blueprint → Blueprint Path: `backend/render.yaml`**
+
+ცალკე Blueprint-ია, `frontend/render.yaml`-თან ერთ ფაილში არ არის: ორ სერვისს
+ერთმანეთისთვის გადასაცემი მნიშვნელობა არ აქვს — ერთმანეთის საჯარო მისამართებს
+Blueprint ვერ გადასცემს და ორივე მხარეს ისედაც ხელით წერია.
+
+1. შექმნისას Render იკითხავს `JWT_SECRET`-ს, `FORWARDED_ALLOW_IPS`-ს,
+   `REDIS_URL`-ს, `SUPABASE_PROJECT_REF`-ს და `SUPABASE_SERVICE_ROLE_KEY`-ს —
+   **მხოლოდ ამ ერთხელ**, შემდეგი sync-ები მათ აღარ ეხება.
+2. `DATABASE_URL`-ს **არ იკითხავს**. ის Environment Group-შია —
+   `voltbox-database`, რომელსაც Blueprint ცარიელს ქმნის და ორივე სერვისს
+   უკავშირებს. group-ში `sync: false`-ს Render ჩუმად უგულებელყოფს, ამიტომ
+   ფაილში ვერ ჩაიწერება. API-ს პირველი deploy `DATABASE_URL`-ის გარეშე
+   **ჩავარდება — ეს მოსალოდნელია**. შემდეგ: Environment Groups →
+   `voltbox-database` → `DATABASE_URL` → შენახვა ახალ deploy-ს იწყებს.
+3. Telegram-ის ორი ცვლადი ფაილში არ არის (არასავალდებულოა) — ↓ იხ. Telegram.
+
+sync-ისას ფაილში დაწერილი მნიშვნელობები პანელისას **გადააწერს** — Health
+Check Path-ს, `TRUSTED_HOSTS`-ს, `CORS_ORIGINS`-ს, `SITE_URL`-ს, plan-ს.
+**ცვლილება — ფაილში, არა პანელში.** ფაილში დაუსახელებელ ცვლადებს sync არ ეხება.
+
+`backend/tests/test_render_blueprint.py` ჩავარდება, თუ health path
+`/api/v1/health/live` აღარ არის, თუ secret-ს ფაილში მნიშვნელობა ეწერება, თუ
+group-ში `sync: false` გაჩნდება, ან თუ ფაილის მნიშვნელობებს `gunicorn.conf.py`
+გაშვებისას უარყოფს.
+
 | ცვლადი | მნიშვნელობა | რა მოხდება, თუ არასწორია |
 |---|---|---|
 | `APP_ENV` | `production` | **სერვერი არ აიწევს.** დაუყენებლად: `/docs` საჯარო, cookie `Secure`-ის გარეშე, storage მეხსიერებაში |
-| `DATABASE_URL` | Supabase-ის pooler-ის URL | სერვისი ვერ აიწევს |
+| `DATABASE_URL` | Supabase-ის pooler-ის URL — group `voltbox-database`-ში | სერვისი ვერ აიწევს |
 | `JWT_SECRET` | **ახალი**, ≥32 სიმბოლო | ძველი ტოკენები ძალაში დარჩება |
 | `FORWARDED_ALLOW_IPS` | proxy-ის მისამართი | **სერვერი არ აიწევს.** `*`-იც უარყოფილია — მაშინ ნებისმიერს შეუძლია თავისი IP აირჩიოს |
 | `TRUSTED_HOSTS` | `api.voltbox.ge` | **სერვერი არ აიწევს** `*`-ზე ან ცარიელზე. API-ს host-ი — storefront-ის დომენი **არა**. `<service>.onrender.com`-ს აპი თვითონ ამატებს. მის გარეშე ყველა მოთხოვნა, health-იც, `400 Invalid host header`-ს აბრუნებს; პასუხი `TRUSTED_HOSTS`-ს არ ახსენებს, ლოგი — ახსენებს. ↓ იხ. TRUSTED_HOSTS |
 | `CORS_ORIGINS` | `https://voltbox.ge` | **სერვერი არ აიწევს** ცარიელზე, `*`-ზე, local origin-ზე (`localhost`, `127.0.0.1`, `::1`) ან ელემენტზე, რომელიც origin არ არის (`voltbox.ge` სქემის გარეშე, `https://voltbox.ge/shop` path-ით). სწორი ფორმის, მაგრამ სხვა დომენის origin-ზე აიწევს — და ბრაუზერი მოთხოვნებს დაბლოკავს |
-| `SITE_URL` | `https://voltbox.ge` | sitemap-ის ბმულები არასწორ დომენზე მიუთითებს |
+| `SITE_URL` | `https://voltbox.ge` | **სერვერი არ აიწევს** დაუყენებლად (ნაგულისხმევი `http://localhost:5173`-ია), ცარიელზე, `https`-ის გარეშე ან local მისამართზე (`localhost`, `127.x.x.x`, `::1`, `*.localhost`). სწორი ფორმის, მაგრამ სხვა დომენზე აიწევს — sitemap-ის ყველა ბმული და Telegram-ის შეტყობინების ადმინ-ბმული იქ მიუთითებს |
 | `REDIS_URL` | Redis-ის URL | **სერვერი არ აიწევს**, თუ worker-ი >1. counter-ები worker-ებად გაიყოფა და ლიმიტი გამრავლდება |
 | `SUPABASE_PROJECT_REF` | პროექტის ref | სურათების ატვირთვა ჩავარდება (production-ში `RuntimeError`) |
 | `SUPABASE_SERVICE_ROLE_KEY` | service role key | იგივე |
@@ -110,9 +142,10 @@ grep -v '^\s*#' frontend/render.yaml | grep -oE '<[A-Z_]+>'
 `Host`-ით აგზავნის, *თუ domain-ი verify-ებულია*; მანამდე — service-ის
 `onrender.com` hostname-ით. ამ hostname-ს Render service-ს
 `RENDER_EXTERNAL_HOSTNAME`-ში აწვდის, და აპი მას `TRUSTED_HOSTS`-ის სიას
-**თვითონ უმატებს** — ხელით არსად იწერება. ამიტომ service-ის შექმნისას:
+**თვითონ უმატებს** — ხელით არსად იწერება. ამიტომ:
 
-1. `TRUSTED_HOSTS=api.voltbox.ge`, Health Check Path — **`/api/v1/health/live`**
+1. `TRUSTED_HOSTS=api.voltbox.ge` და Health Check Path —
+   **`/api/v1/health/live`** — ორივე `backend/render.yaml`-შია, შექმნისთანავე
    (არა `/api/v1/health` — მიზეზი §9-შია).
 2. პირველი deploy-ის შემდეგ:
 
@@ -141,7 +174,8 @@ Render → service → **Logs** → ძებნა `TRUSTED_HOSTS`. თუ heal
 იღებს, Render deploy-ს 15 წუთში გააუქმებს და ეს ხაზი ყოველ ცდაზე მეორდება: სიას
 აკლია სახელი, რომლითაც API-ს მიმართავენ — `api.voltbox.ge`, ან, თუ 400-ს
 onrender.com-ის მისამართი აბრუნებს, `RENDER_EXTERNAL_HOSTNAME` არ დაყენდა და
-onrender-ის hostname-ი `TRUSTED_HOSTS`-ს ხელით ემატება. უარყოფილ `Host`-ს ხაზი
+onrender-ის hostname-ი `TRUSTED_HOSTS`-ს ხელით ემატება — `backend/render.yaml`-ში,
+არა პანელში, რომელსაც შემდეგი sync-ი გადააწერს. უარყოფილ `Host`-ს ხაზი
 **განზრახ არ შეიცავს** — მას გამგზავნი წერს, ხშირად უცხო. სწორი სახელები
 dashboard-შია: Settings → Custom Domains. ცალკეული ასეთი ხაზი, როცა დანარჩენი
 მოთხოვნები გადის, ჩვეულებრივია — სკანერები უცხო `Host`-ით აკაკუნებენ.
@@ -207,20 +241,21 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 `scripts/prune_refresh_tokens.py` შლის მწკრივებს, რომლების ვადაც 7 დღეზე მეტი
 ხნის წინ გავიდა. რატომ ზუსტად ასე — `ASSUMPTIONS.md` 8.13.
 
-**Render → New → Cron Job**, იმავე repo-თი და Dockerfile-ით (`backend/`), რაც
-backend-ის web service-ი:
+job-ი `backend/render.yaml`-შია (`voltbox-prune-refresh-tokens`) და Blueprint
+მას API-სთან ერთად ქმნის — ხელით არაფერი ემატება:
 
 | ველი | მნიშვნელობა |
 |---|---|
 | Schedule | `0 23 * * *` — Render-ის cron-ი UTC-ზეა, ეს 03:00 თბილისით |
-| Docker Command (Advanced) | `python scripts/prune_refresh_tokens.py` |
-| Environment | `DATABASE_URL` და `JWT_SECRET` — Environment Group-იდან, რომელიც web service-ზეც linked-ია |
+| Docker Command | `python scripts/prune_refresh_tokens.py` — იგივე Dockerfile, რაც API-ს |
+| `DATABASE_URL` | group `voltbox-database`-იდან, იგივე, რაც API-ს (↑ Blueprint-ის შექმნა) |
+| `JWT_SECRET` | Render აგენერირებს (`generateValue`) |
 
-Environment Group-ი იმისთვისაა, რომ შეცვლილი პაროლი job-ს უკან არ დატოვებს:
-job-ზე ცალკე ჩაწერილი `DATABASE_URL` პაროლის შემდეგ rotation-ზე ძველი
-დარჩებოდა, და job-ი ყოველ ღამე ჩავარდნდა. `JWT_SECRET` job-ს არ სჭირდება,
-მაგრამ Settings-ი მის გარეშე არ აიწევს. კავშირი ერთია, წამებით, ↑ ბიუჯეტს არ
-ცვლის.
+group-ი იმისთვისაა, რომ შეცვლილი პაროლი job-ს უკან არ დატოვებს: job-ზე ცალკე
+ჩაწერილი `DATABASE_URL` პაროლის შემდეგ rotation-ზე ძველი დარჩებოდა, და job-ი
+ყოველ ღამე ჩავარდნდა. `JWT_SECRET` job-ს არ სჭირდება, მაგრამ Settings-ი მის
+გარეშე არ აიწევს — ამიტომ მისი მნიშვნელობა შემთხვევითია და API-ს secret-ის
+ასლი არ არის. კავშირი ერთია, წამებით, ↑ ბიუჯეტს არ ცვლის.
 
 **რა მოხდება, თუ დამავიწყდება:** არაფერი ტყდება. `refresh_tokens` ყოველ
 refresh-ზე ერთ მწკრივით იზრდება — ზღვრის გარეშე, 500 MB-ისკენ.
@@ -316,12 +351,13 @@ chat id საიდუმლო არ არის: ტოკენის გ�
 
 ეს **ბილდის დროს** იკითხება, არა გაშვებისას — შეცვლის შემდეგ ხელახლა ბილდი.
 
-`VITE_API_MODE=http` `frontend/render.yaml`-შია. დანარჩენ ორს Render
-Blueprint-ის შექმნისას **ერთხელ** იკითხავს (§1); შემდეგ — სერვისის
-Environment-ის გვერდიდან.
+`NODE_VERSION` და `VITE_API_MODE` `frontend/render.yaml`-შია. `VITE_API_BASE_URL`-ს
+და `VITE_SITE_URL`-ს Render Blueprint-ის შექმნისას **ერთხელ** იკითხავს (§1);
+შემდეგ — სერვისის Environment-ის გვერდიდან.
 
 | ცვლადი | მნიშვნელობა | რა მოხდება, თუ არასწორია |
 |---|---|---|
+| `NODE_VERSION` | `22` | Render საკუთარი ნაგულისხმევით ააწყობს (24.21.0, 2026-09-ის მდგომარეობით) — არა 22-ით, რომლითაც CI ბილდავს და ტესტავს. Render მას `.node-version`-ზე, `.nvmrc`-ზე და `engines`-ზე ადრე კითხულობს, ამიტომ ის წყვეტს |
 | `VITE_API_MODE` | `http` | **მაღაზია 61 სატესტო პროდუქტს აჩვენებს** მეხსიერებიდან და შეკვეთა არსად წავა |
 | `VITE_API_BASE_URL` | `https://api.voltbox.ge/api/v1` | ვერცერთი მოთხოვნა ვერ გავა. origin-ი CSP-ის `connect-src`-ს უნდა ემთხვეოდეს (§1) |
 | `VITE_SITE_URL` | `https://voltbox.ge` | canonical და გაზიარების სურათი `localhost:5173`-ზე მიუთითებს |

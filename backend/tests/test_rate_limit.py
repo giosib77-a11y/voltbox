@@ -188,6 +188,7 @@ def test_a_named_proxy_starts_normally(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("TRUSTED_HOSTS", "voltbox.ge")
     monkeypatch.setenv("CORS_ORIGINS", "https://voltbox.ge")
+    monkeypatch.setenv("SITE_URL", "https://voltbox.ge")
     conf = load_gunicorn_conf()
 
     conf.on_starting(None)
@@ -225,6 +226,7 @@ def _conf_with(monkeypatch: pytest.MonkeyPatch, **env: str) -> ModuleType:
     # Same reason: the origins check runs before the counters and the budget, so
     # without a valid value it would answer for every test in those sections.
     monkeypatch.setenv("CORS_ORIGINS", "https://voltbox.ge")
+    monkeypatch.setenv("SITE_URL", "https://voltbox.ge")
     for key in ("WEB_CONCURRENCY", "DB_POOL_SIZE", "DB_MAX_OVERFLOW", "DB_CONNECTION_BUDGET"):
         monkeypatch.delenv(key, raising=False)
     for key, value in env.items():
@@ -325,6 +327,7 @@ def test_a_named_deployment_passes(monkeypatch: pytest.MonkeyPatch, app_env: str
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("TRUSTED_HOSTS", "voltbox.ge")
     monkeypatch.setenv("CORS_ORIGINS", "https://voltbox.ge")
+    monkeypatch.setenv("SITE_URL", "https://voltbox.ge")
     conf = load_gunicorn_conf()
 
     conf.on_starting(None)
@@ -594,6 +597,112 @@ def test_a_local_run_is_not_asked_for_origins(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("ALLOW_NON_PRODUCTION_SERVER", "1")
     monkeypatch.setenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:4173")
+    conf = load_gunicorn_conf()
+
+    conf.on_starting(None)
+
+
+# ── naming the site ──────────────────────────────────────────────────────────
+#
+# `SITE_URL` defaults to http://localhost:5173, and nothing that reads it fails:
+# the sitemap is still valid XML and the Telegram notice still arrives. Only
+# every link in them points at localhost.
+
+
+@pytest.mark.parametrize("app_env", ["production", "staging"])
+def test_a_deployment_that_never_named_its_site_is_refused(
+    monkeypatch: pytest.MonkeyPatch, app_env: str
+) -> None:
+    """Unset is the shipped default, which is what forgetting it leaves."""
+    conf = _conf_with(monkeypatch, APP_ENV=app_env)
+    monkeypatch.delenv("SITE_URL", raising=False)
+
+    with pytest.raises(SystemExit, match="SITE_URL is not set, so it defaults to"):
+        conf.on_starting(None)
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_an_empty_site_url_is_named_as_such(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    """Empty is not the default: pydantic takes it as given, and the sitemap's
+    URLs become bare paths. The message must not say localhost."""
+    conf = _conf_with(monkeypatch, SITE_URL=value)
+
+    with pytest.raises(SystemExit, match="set but empty"):
+        conf.on_starting(None)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "http://localhost:5173",
+        "https://localhost",
+        "https://127.0.0.1:5173",
+        "https://127.0.1.1",
+        "https://[::1]:5173",
+        "https://shop.localhost",
+    ],
+)
+def test_a_local_site_url_left_in_a_deployment_is_refused(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """The first is the shipped default written out. https does not rescue the
+    rest: the address is still the machine of whoever follows the link."""
+    conf = _conf_with(monkeypatch, SITE_URL=value)
+
+    with pytest.raises(SystemExit, match="a local development address"):
+        conf.on_starting(None)
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["http://voltbox.ge", "voltbox.ge", "ftp://voltbox.ge", "https://", "HTTP://voltbox.ge"],
+)
+def test_a_site_url_that_is_not_https_is_refused(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    conf = _conf_with(monkeypatch, SITE_URL=value)
+
+    with pytest.raises(SystemExit, match="not an https address"):
+        conf.on_starting(None)
+
+
+def test_a_site_url_that_cannot_be_read_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A traceback from urlsplit would say nothing about what to set."""
+    conf = _conf_with(monkeypatch, SITE_URL="https://[voltbox.ge")
+
+    with pytest.raises(SystemExit, match="cannot be read as a URL"):
+        conf.on_starting(None)
+
+
+def test_a_refusal_names_the_host_and_not_the_login(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The rule the CORS_ORIGINS refusals keep: a pasted URL's login stays out
+    of the deploy log."""
+    conf = _conf_with(monkeypatch, SITE_URL="http://probe:s3cret@localhost:5173")
+
+    with pytest.raises(SystemExit) as refused:
+        conf.on_starting(None)
+
+    message = str(refused.value)
+    assert "localhost" in message, message
+    assert "s3cret" not in message, message
+    assert "probe" not in message, message
+
+
+@pytest.mark.parametrize(
+    "value", ["https://voltbox.ge", "https://voltbox.ge/", "https://www.voltbox.ge:8443"]
+)
+def test_a_named_https_site_starts_normally(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    """A trailing slash is fine: both readers strip it before appending a path."""
+    conf = _conf_with(monkeypatch, SITE_URL=value)
+
+    conf.on_starting(None)
+
+
+def test_a_local_run_is_not_asked_for_a_site(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`docker compose --profile full up` runs gunicorn on the localhost default."""
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("ALLOW_NON_PRODUCTION_SERVER", "1")
+    monkeypatch.delenv("SITE_URL", raising=False)
     conf = load_gunicorn_conf()
 
     conf.on_starting(None)

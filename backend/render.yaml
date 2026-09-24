@@ -1,0 +1,118 @@
+# The API and its nightly clean-up as Render services: what they are built
+# from, where they run, which path Render probes, and every environment
+# variable a deployment needs.
+#
+# Why in the repo: point the health check at /api/v1/health instead of
+# /api/v1/health/live and nothing happens until the first database outage,
+# which then becomes a restart loop that cannot end before Supabase comes
+# back, and cancels any good deploy made during it (docs/deployment.md §9).
+# That is one wrong click in a dashboard, and a dashboard setting is one
+# nobody reviews.
+#
+# A Blueprint of its own, beside frontend/render.yaml rather than merged with
+# it into one file at the root. The repo is split by side everywhere else - a
+# Dockerfile, a compose file and a CI workflow each - and one file would buy
+# nothing: the two services share no value a Blueprint could pass between
+# them. What each needs of the other is a public address - the API's domain,
+# the shop's origin - and fromService hands out another service's variables
+# and private-network host, never its public URL, so those stay literals.
+# Create it with "Blueprint Path" set to backend/render.yaml
+# (docs/deployment.md §2). On each sync, what is named here overwrites the
+# dashboard; variables the file does not name are kept.
+
+# The one secret both services read. A group, so a rotated database password is
+# changed once and cannot be left behind on the job - a copy of DATABASE_URL on
+# each service would have the job failing every night after the next rotation,
+# visible only on its Runs page.
+#
+# Empty on purpose. Render ignores `sync: false` inside a group, silently, so a
+# secret cannot be declared here - DATABASE_URL is added to the group in the
+# dashboard once it exists (docs/deployment.md §2). Until then the API's first
+# deploy fails on a missing DATABASE_URL; adding it starts a new one.
+envVarGroups:
+  - name: voltbox-database
+    envVars: []
+
+services:
+  - type: web
+    runtime: docker
+    name: voltbox-api
+    # Supabase is in eu-central-1. Render's default is oregon, which would put
+    # the Atlantic between every query and its answer, and a service's region
+    # cannot be changed once it exists.
+    region: frankfurt
+    # 0.5 CPU and 512 MB, which the image-decode ceiling in docs/deployment.md
+    # is sized for; unlike free, it is not spun down between visitors. Change
+    # it here, not in the dashboard - a sync would put this back.
+    plan: 0.5c-512mb
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    # The Dockerfile's HEALTHCHECK probes the same path, for the same reason.
+    # /api/v1/health answers 503 when the database is down, and Render restarts
+    # an instance that fails this check - which does not bring Supabase back.
+    # tests/test_render_blueprint.py fails if this changes.
+    healthCheckPath: /api/v1/health/live
+    # A frontend commit is no reason to rebuild the API.
+    buildFilter:
+      paths:
+        - backend/**
+
+    envVars:
+      - fromGroup: voltbox-database
+
+      # Everything else in gunicorn.conf.py's startup checks hangs off this.
+      - key: APP_ENV
+        value: production
+      # The API's own name; the storefront's are CORS_ORIGINS. The service's
+      # onrender.com name is added by app/core/config.py from
+      # RENDER_EXTERNAL_HOSTNAME, so the health check passes before a custom
+      # domain is verified.
+      - key: TRUSTED_HOSTS
+        value: api.voltbox.ge
+      - key: CORS_ORIGINS
+        value: https://voltbox.ge
+      # Every URL in the sitemap and the admin link in each Telegram notice.
+      - key: SITE_URL
+        value: https://voltbox.ge
+
+      # Render asks for these when the Blueprint is created, and only then:
+      # later syncs ignore them, so a secret added after that is added in the
+      # dashboard.
+      - key: JWT_SECRET
+        sync: false
+      # Not secret, but not known yet: the address of the proxy in front.
+      - key: FORWARDED_ALLOW_IPS
+        sync: false
+      # Two workers need shared rate-limit counters, or gunicorn refuses to start.
+      - key: REDIS_URL
+        sync: false
+      - key: SUPABASE_PROJECT_REF
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are optional and not listed: a
+      # prompt at creation is the only thing listing them would add, and either
+      # one unset simply turns the notice off.
+
+  # Deletes refresh-token rows that expired more than 7 days ago
+  # (ASSUMPTIONS.md 8.13). Nothing breaks without it; the table just grows.
+  - type: cron
+    runtime: docker
+    name: voltbox-prune-refresh-tokens
+    region: frankfurt
+    plan: 0.5c-512mb
+    # UTC; 03:00 in Tbilisi.
+    schedule: "0 23 * * *"
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: python scripts/prune_refresh_tokens.py
+    buildFilter:
+      paths:
+        - backend/**
+
+    envVars:
+      - fromGroup: voltbox-database
+      # Settings will not load without one, and the job signs nothing, so it is
+      # a value nobody needs to know - not a copy of the API's.
+      - key: JWT_SECRET
+        generateValue: true
