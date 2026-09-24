@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 
 import httpx
 import pytest
+from app.db.models import Brand, Category
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.factories import make_brand, make_category, make_product
@@ -459,3 +461,100 @@ class TestPriceFilterRefusesNonsense:
 
         assert response.status_code == 200
         assert 0 < response.json()["total"] < everything
+
+
+class TestSubcategoriesRollUpIntoTheirParent:
+    """Phones lists what is assigned to its subcategory Samsung, and every number
+    around that list - total, pages, facets, the category card - agrees with it.
+
+    The `catalog` fixture puts three phones directly on Phones; this adds one on
+    a subcategory under it, priced above the rest so the price facet shows it.
+    """
+
+    @pytest.fixture
+    async def subcategory(self, db: AsyncSession, catalog: dict[str, object]) -> Category:
+        phones = await db.scalar(select(Category).where(Category.slug == "phones"))
+        samsung = await db.scalar(select(Brand).where(Brand.name == "Samsung"))
+        assert phones is not None and samsung is not None
+        galaxy_phones = await make_category(db, "samsung-phones")
+        galaxy_phones.parent_id = phones.id
+        await db.flush()
+        await make_product(
+            db,
+            galaxy_phones,
+            samsung,
+            slug="z-fold",
+            name="Galaxy Z Fold",
+            price="5999.00",
+            specs={"ram": "12 GB", "network": "5G", "color": "შავი"},
+        )
+        return galaxy_phones
+
+    async def test_the_parent_page_lists_the_subcategory_product(
+        self, client: httpx.AsyncClient, subcategory: Category
+    ) -> None:
+        body = (await client.get("/api/v1/products", params={"category": "phones"})).json()
+
+        slugs = {p["slug"] for p in body["items"]}
+        assert slugs == {"a15", "iphone-15", "s24-ultra", "z-fold"}
+
+    async def test_the_parent_count_and_facets_include_it(
+        self, client: httpx.AsyncClient, subcategory: Category
+    ) -> None:
+        body = (
+            await client.get("/api/v1/products", params={"category": "phones", "limit": 3})
+        ).json()
+
+        assert body["total"] == 4
+        assert body["totalPages"] == 2
+        assert body["facets"]["values"]["brand"] == {"Samsung": 3, "Apple": 1}
+        assert body["facets"]["values"]["specs.ram"] == {"6 GB": 2, "12 GB": 2}
+        assert body["facets"]["price"]["max"] == 5999
+
+    async def test_the_category_card_counts_it_under_both(
+        self, client: httpx.AsyncClient, subcategory: Category
+    ) -> None:
+        body = (await client.get("/api/v1/categories")).json()
+
+        counts = {c["slug"]: c["productsCount"] for c in body}
+        assert counts == {"phones": 4, "samsung-phones": 1}
+
+    async def test_the_search_category_facet_counts_it_under_the_parent(
+        self, client: httpx.AsyncClient, subcategory: Category
+    ) -> None:
+        """Ticking "phones" in this facet selects the whole tree, so the number
+        beside it has to count the whole tree too."""
+        body = (await client.get("/api/v1/products", params={"q": "galaxy"})).json()
+
+        assert body["facets"]["values"]["category"] == {"phones": 3, "samsung-phones": 1}
+        ticked = (
+            await client.get("/api/v1/products", params={"q": "galaxy", "category": "phones"})
+        ).json()
+        assert ticked["total"] == 3
+
+    async def test_the_subcategory_page_leaves_out_the_parent_products(
+        self, client: httpx.AsyncClient, subcategory: Category
+    ) -> None:
+        body = (await client.get("/api/v1/products", params={"category": "samsung-phones"})).json()
+
+        assert [p["slug"] for p in body["items"]] == ["z-fold"]
+        assert body["total"] == 1
+        assert body["facets"]["values"]["brand"] == {"Samsung": 1}
+        assert body["facets"]["price"]["min"] == 5999
+
+    async def test_a_deeper_level_still_rolls_up_to_the_root(
+        self, client: httpx.AsyncClient, db: AsyncSession, subcategory: Category
+    ) -> None:
+        """The admin form offers only roots as parents, but the API does not
+        bound depth, so a third level is reachable and must not fall off."""
+        apple = await db.scalar(select(Brand).where(Brand.name == "Apple"))
+        assert apple is not None
+        folds = await make_category(db, "folds")
+        folds.parent_id = subcategory.id
+        await db.flush()
+        await make_product(db, folds, apple, slug="deep-phone", price="100.00")
+
+        body = (await client.get("/api/v1/products", params={"category": "phones"})).json()
+
+        assert "deep-phone" in {p["slug"] for p in body["items"]}
+        assert body["total"] == 5

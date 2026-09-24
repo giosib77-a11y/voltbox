@@ -12,7 +12,7 @@ from typing import Any
 
 from sqlalchemy import Select, Text, and_, cast, func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import settings
@@ -49,6 +49,41 @@ def param_for(filter_config: dict[str, Any]) -> str:
     if isinstance(param, str) and param:
         return param
     return str(filter_config["key"]).split(".")[-1]
+
+
+def _category_tree(slugs: list[str] | None = None) -> Any:
+    """Each category paired with itself and every category below it.
+
+    Rows are `(ancestor_id, ancestor_slug, category_id)`. A product "is in" a
+    category when its own category is any `category_id` under that ancestor, so
+    Phones lists what is assigned to Samsung as well as to Phones itself.
+
+    Recursive rather than one join to the parent: the admin form offers only a
+    root as a parent, but that does not bound the depth - a root that already
+    has children can itself be given a parent, and the API checks for cycles
+    only. UNION, not UNION ALL, so a cycle that got in some other way ends the
+    recursion instead of looping.
+
+    `nesting=True` puts the WITH inside the subquery that uses it. The facet
+    query is a UNION ALL of one SELECT per filter group, each building its own
+    copy of this, and top-level CTEs of the same name would collide.
+
+    `slugs` seeds the walk with just those categories, for a filter.
+    """
+    seed = select(
+        Category.id.label("ancestor_id"),
+        Category.slug.label("ancestor_slug"),
+        Category.id.label("category_id"),
+    )
+    if slugs is not None:
+        seed = seed.where(Category.slug.in_(slugs))
+    tree = seed.cte("category_tree", recursive=True, nesting=True)
+    child = aliased(Category)
+    return tree.union(
+        select(tree.c.ancestor_id, tree.c.ancestor_slug, child.id).where(
+            child.parent_id == tree.c.category_id
+        )
+    )
 
 
 def _column_for(key: str) -> Any:
@@ -178,7 +213,11 @@ def collect_conditions(
     if skip_key != "category" and (raw_category := query_params.get("category")):
         slugs = [s.strip() for s in raw_category.split(",") if s.strip()]
         if slugs:
-            conditions.append(Category.slug.in_(slugs))
+            # The category and everything under it, not only products assigned
+            # to it directly. Every count, facet and total is built from this
+            # list, so they all move with the product list.
+            tree = _category_tree(slugs)
+            conditions.append(Product.category_id.in_(select(tree.c.category_id)))
 
     if skip_key != "price" and (raw_price := query_params.get("price")):
         condition = _price_condition(raw_price)
@@ -220,6 +259,14 @@ async def compute_facets(
         key = str(config["key"])
         column = _column_for(key)
         conditions = collect_conditions(filter_config, query_params, skip_key=key)
+        tree = None
+        if key == "category":
+            # Counted the way the filter selects: a Samsung phone counts
+            # towards Phones too, or ticking "Phones (5)" would list twelve.
+            # A subquery rather than the CTE itself, because a branch of a
+            # UNION cannot open with its own WITH.
+            tree = select(_category_tree()).subquery()
+            column = tree.c.ancestor_slug
 
         stmt = (
             select(
@@ -233,9 +280,10 @@ async def compute_facets(
             .select_from(Product)
             .join(Brand, Product.brand_id == Brand.id)
             .join(Category, Product.category_id == Category.id)
-            .where(Product.is_active.is_(True), column.is_not(None))
-            .group_by(column)
         )
+        if tree is not None:
+            stmt = stmt.join(tree, tree.c.category_id == Product.category_id)
+        stmt = stmt.where(Product.is_active.is_(True), column.is_not(None)).group_by(column)
         for condition in conditions + extra_conditions:
             stmt = stmt.where(condition)
         parts.append(stmt)
@@ -377,9 +425,15 @@ async def get_related(db: AsyncSession, product: Product, limit: int = 8) -> lis
 
 
 async def list_categories(db: AsyncSession) -> list[tuple[Category, int]]:
+    # The count a category card shows is what its page lists, subcategories
+    # included - the same tree the category filter walks.
+    tree = select(_category_tree()).subquery()
     stmt = (
         select(Category, func.count(Product.id))
-        .outerjoin(Product, and_(Product.category_id == Category.id, Product.is_active.is_(True)))
+        .outerjoin(tree, tree.c.ancestor_id == Category.id)
+        .outerjoin(
+            Product, and_(Product.category_id == tree.c.category_id, Product.is_active.is_(True))
+        )
         .group_by(Category.id)
         .order_by(Category.position, Category.name)
     )
