@@ -132,7 +132,7 @@ export default function ProductDetails() {
               showBadge
             />
             {savings > 0 && (
-              <p className="mt-1.5 text-sm font-medium text-accent-400">
+              <p className="mt-1.5 text-sm font-medium text-accent-fg">
                 დაზოგავთ {formatPrice(savings)}
               </p>
             )}

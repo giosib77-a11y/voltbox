@@ -32,6 +32,7 @@ export const STORAGE_KEYS = {
   orders: 'orders:v1',
   addresses: 'addresses:v1',
   recentSearches: 'recent-searches:v1',
+  theme: 'theme:v1',
 };
 
 /* -------------------------------------------------------------------------- */

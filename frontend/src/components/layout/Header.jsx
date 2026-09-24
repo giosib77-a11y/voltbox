@@ -7,6 +7,7 @@ import MobileMenu from './MobileMenu.jsx';
 import UserMenu from './UserMenu.jsx';
 import CartBadge from '../cart/CartBadge.jsx';
 import SearchBar from '../search/SearchBar.jsx';
+import ThemeToggle from './ThemeToggle.jsx';
 import { CONTACT, QUERY_KEYS, SHIPPING } from '../../constants/index.js';
 import { formatPrice } from '../../utils/format.js';
 
@@ -68,6 +69,7 @@ export default function Header({ categories = [] }) {
           </div>
 
           <div className="ml-auto flex items-center gap-0.5 md:ml-0">
+            <ThemeToggle />
             <UserMenu />
             <CartBadge />
           </div>

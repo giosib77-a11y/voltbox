@@ -14,6 +14,7 @@ with the cross-cutting checks a running server makes possible at the end.
 """
 
 import io
+import re
 import shutil
 import struct
 import sys
@@ -439,11 +440,11 @@ def main() -> None:
             image.status_code == 200 and image.headers["content-type"] == "image/png",
             str(image.status_code),
         )
-        bundle = page.text.split('src="')[1].split('"')[0]
+        # The module script is the app. It is not the first `src=` any more:
+        # public/theme-init.js runs ahead of it in <head>.
+        bundle = re.search(r'<script type="module"[^>]*\bsrc="([^"]+)"', page.text).group(1)
         asset = httpx.get(f"{SHOP}{bundle}", timeout=20)
         check("the bundle downloads", asset.status_code == 200, str(asset.status_code))
-        # The exact base URL the build was given, not just "/api/v1" - that
-        # string would be there whatever the bundle was pointed at.
         # The exact base URL the build was given, not just "/api/v1" - that
         # string would be there whatever the bundle was pointed at. localhost
         # rather than 127.0.0.1 because that is what the build was handed.

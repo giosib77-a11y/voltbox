@@ -3,169 +3,202 @@ import plugin from 'tailwindcss/plugin';
 /* ------------------------------------------------------------------------
  * Palette — VoltBox
  *
- * Every colour the app uses is defined here, twice: `light` is the admin
- * panel (and was the whole site until the dark storefront), `dark` is the
- * storefront. Classes do not name hex values; they name a role, and the role
- * resolves through a CSS variable to whichever theme the element sits in.
+ * Every colour the app uses is defined here, once per theme. Classes do not
+ * name hex values; they name a role, and the role resolves through a CSS
+ * variable to the theme the page is in:
  *
- * The dark theme applies inside `.theme-dark` (the storefront's Layout root)
- * and to the whole document while one is mounted (`:root:has(.theme-dark)`),
- * which is what reaches the body background and the Modal and Toast portals.
- * The admin never mounts `.theme-dark`, so it resolves every variable to
- * `light` — the same hex values it used before this palette existed.
+ *   admin  the admin panel, frozen. It is what the whole site looked like
+ *          before the storefront had themes, and the panel must not move.
+ *   light  the storefront's light theme: `admin` with the five steps that
+ *          missed WCAG AA on it corrected (see the overrides below).
+ *   dark   the storefront's dark theme.
  *
- * A step keeps its job in both themes; only its value moves:
+ * `:root` carries `admin`, so anything outside the storefront is unchanged.
+ * The storefront's theme is a class on <html>, `theme-light` or `theme-dark`,
+ * set before first paint by public/theme-init.js and kept in step by
+ * src/utils/theme.js. The admin tree carries `data-admin`, which resets the
+ * variables to `admin` — for the panel itself, and for the whole document
+ * while it is mounted, because a shopper can walk from the shop into the
+ * panel without a reload and the class on <html> stays behind.
+ *
+ * A step keeps its job in every theme; only its value moves:
  *   ink-50  page background       ink-100 raised fill, hover
  *   surface cards, panels, inputs ink-200 dividers (decorative)
  *   ink-300 control borders       ink-400 icons, separators, disabled
  *   ink-500 muted text            ink-600…900 text, strongest at 900
  *   primary-50…200 tints   400/500 borders, focus   600 solid fill
  *   primary-700…900 text on a surface or a tint
- * `primary-hover`/`-press` exist because the solid button's states used
- * primary-700/800, which are text colours in the dark theme. `danger-fg` is
- * there for the same reason: danger-600 is both the danger button's fill and
- * the error text, and no red is readable on white text and on near-black too.
+ * `primary-hover`/`-press`, `danger-fg` and `accent-fg` exist because one
+ * step used to do two jobs: fill behind white text, and text on the page.
+ * No colour passes 4.5:1 against white and against a dark page at once.
  *
- * Contrast ratios for the dark pairs are in the commit that introduced this.
+ * src/utils/palette.test.js holds every text/background pair to WCAG AA in
+ * both storefront themes; change a value here and it re-measures.
  * ---------------------------------------------------------------------- */
-const palette = {
-  light: {
-    surface: '#ffffff',
-    // behind product photos; the same light tile in both themes
-    media: '#eef0f4',
-    'media-shade': '#dde1e9',
-    // modal backdrop
-    scrim: '#12151d',
-    ink: {
-      50: '#f7f8fa',
-      100: '#eef0f4',
-      200: '#dde1e9',
-      300: '#c2c9d6',
-      400: '#97a1b5',
-      500: '#657086',
-      600: '#56617a',
-      700: '#454e63',
-      800: '#333a4a',
-      900: '#1e2330',
-      950: '#12151d',
-    },
-    primary: {
-      50: '#eef3ff',
-      100: '#dbe5ff',
-      200: '#bfd0ff',
-      300: '#94b0ff',
-      400: '#6285ff',
-      500: '#3a5bf5',
-      600: '#2440e0',
-      700: '#1e33bd',
-      800: '#1d2f99',
-      900: '#1e2e79',
-      950: '#141c47',
-      hover: '#1e33bd',
-      press: '#1d2f99',
-    },
-    accent: {
-      50: '#fff8ed',
-      100: '#ffefd4',
-      200: '#ffdba8',
-      300: '#ffc071',
-      400: '#ff9c38',
-      500: '#ff7f11',
-      600: '#c74407',
-      700: '#9e360e',
-      800: '#7f2e0f',
-      900: '#66250c',
-    },
-    success: {
-      50: '#ecfdf5',
-      100: '#d1fae5',
-      500: '#10b981',
-      600: '#059669',
-      700: '#047857',
-    },
-    danger: {
-      50: '#fef2f2',
-      100: '#fee2e2',
-      500: '#ef4444',
-      600: '#dc2626',
-      700: '#b91c1c',
-      fg: '#dc2626',
-    },
-    warning: {
-      50: '#fffbeb',
-      100: '#fef3c7',
-      500: '#f59e0b',
-      600: '#aa5d05',
-    },
+const admin = {
+  surface: '#ffffff',
+  // behind product photos; the same light tile in every theme
+  media: '#eef0f4',
+  'media-shade': '#dde1e9',
+  // modal backdrop
+  scrim: '#12151d',
+  ink: {
+    50: '#f7f8fa',
+    100: '#eef0f4',
+    200: '#dde1e9',
+    300: '#c2c9d6',
+    400: '#97a1b5',
+    500: '#657086',
+    600: '#56617a',
+    700: '#454e63',
+    800: '#333a4a',
+    900: '#1e2330',
+    950: '#12151d',
   },
-  dark: {
-    surface: '#12151c',
-    media: '#eef0f4',
-    'media-shade': '#dde1e9',
-    scrim: '#000000',
-    ink: {
-      50: '#0a0c10',
-      100: '#1a1e27',
-      200: '#262b36',
-      300: '#646d80',
-      400: '#737c90',
-      500: '#959db0',
-      600: '#aab1c1',
-      700: '#c0c6d2',
-      800: '#d6dbe3',
-      900: '#eceef3',
-      950: '#f7f8fa',
-    },
-    primary: {
-      50: '#141a36',
-      100: '#1a2250',
-      200: '#222e6e',
-      300: '#2e3c8f',
-      400: '#5b78ff',
-      500: '#7690ff',
-      600: '#3a5bf5',
-      700: '#9db3ff',
-      800: '#bfceff',
-      900: '#dde6ff',
-      950: '#eef3ff',
-      hover: '#2f4de6',
-      press: '#2842cc',
-    },
-    accent: {
-      50: '#2a180b',
-      100: '#3a200c',
-      200: '#5c3413',
-      300: '#8a4a17',
-      400: '#ffa24a',
-      500: '#ff8a2a',
-      600: '#c74407',
-      700: '#a8390a',
-      800: '#8f320c',
-      900: '#66250c',
-    },
-    success: {
-      50: '#0d2419',
-      100: '#113020',
-      500: '#34d399',
-      600: '#34d399',
-      700: '#6ee7b7',
-    },
-    danger: {
-      50: '#2a1114',
-      100: '#3a1519',
-      500: '#f87171',
-      600: '#dc2626',
-      700: '#b91c1c',
-      fg: '#fca5a5',
-    },
-    warning: {
-      50: '#2a1f08',
-      100: '#3a2a0a',
-      500: '#f59e0b',
-      600: '#fbbf24',
-    },
+  primary: {
+    50: '#eef3ff',
+    100: '#dbe5ff',
+    200: '#bfd0ff',
+    300: '#94b0ff',
+    400: '#6285ff',
+    500: '#3a5bf5',
+    600: '#2440e0',
+    700: '#1e33bd',
+    800: '#1d2f99',
+    900: '#1e2e79',
+    950: '#141c47',
+    hover: '#1e33bd',
+    press: '#1d2f99',
+  },
+  accent: {
+    50: '#fff8ed',
+    100: '#ffefd4',
+    200: '#ffdba8',
+    300: '#ffc071',
+    400: '#ff9c38',
+    500: '#ff7f11',
+    600: '#c74407',
+    700: '#9e360e',
+    800: '#7f2e0f',
+    900: '#66250c',
+    fg: '#c74407',
+  },
+  success: {
+    50: '#ecfdf5',
+    100: '#d1fae5',
+    500: '#10b981',
+    600: '#059669',
+    700: '#047857',
+  },
+  danger: {
+    50: '#fef2f2',
+    100: '#fee2e2',
+    500: '#ef4444',
+    600: '#dc2626',
+    700: '#b91c1c',
+    fg: '#dc2626',
+  },
+  warning: {
+    50: '#fffbeb',
+    100: '#fef3c7',
+    500: '#f59e0b',
+    600: '#aa5d05',
   },
 };
+
+const light = {
+  ...admin,
+  ink: {
+    ...admin.ink,
+    // control borders: 1.46–1.66:1 before, 3:1 is the floor
+    300: '#7b8599',
+    // icons and separators: 2.28–2.60:1 before
+    400: '#6f798e',
+    // muted text: 4.37:1 on ink-100 before
+    500: '#5f6a80',
+  },
+  accent: {
+    ...admin.accent,
+    // rating stars: 2.09:1 on white before
+    400: '#d26a08',
+  },
+  danger: {
+    ...admin.danger,
+    // error text: 4.41:1 on danger-50 before
+    fg: '#c81e1e',
+  },
+};
+
+const dark = {
+  surface: '#1f242e',
+  media: '#eef0f4',
+  'media-shade': '#dde1e9',
+  scrim: '#05070a',
+  ink: {
+    50: '#171b23',
+    100: '#283040',
+    200: '#353d4d',
+    300: '#747d93',
+    400: '#7f889d',
+    500: '#a3abbd',
+    600: '#b8bfcd',
+    700: '#cad0da',
+    800: '#dde1e8',
+    900: '#f0f2f6',
+    950: '#f8f9fb',
+  },
+  primary: {
+    50: '#1f2749',
+    100: '#252f62',
+    200: '#2e3a80',
+    300: '#3a4899',
+    400: '#6583ff',
+    500: '#7f98ff',
+    600: '#4466f7',
+    700: '#a7bbff',
+    800: '#c4d2ff',
+    900: '#e0e8ff',
+    950: '#eef3ff',
+    hover: '#3558ea',
+    press: '#2d4ed8',
+  },
+  accent: {
+    50: '#33220f',
+    100: '#422a10',
+    200: '#5c3a17',
+    300: '#8a4a17',
+    400: '#ffa24a',
+    500: '#ff8a2a',
+    600: '#c74407',
+    700: '#a8390a',
+    800: '#8f320c',
+    900: '#66250c',
+    fg: '#ffa24a',
+  },
+  success: {
+    50: '#14302a',
+    100: '#173a31',
+    500: '#34d399',
+    600: '#34d399',
+    700: '#6ee7b7',
+  },
+  danger: {
+    50: '#331a1f',
+    100: '#421d23',
+    500: '#f87171',
+    600: '#dc2626',
+    700: '#b91c1c',
+    fg: '#fca5a5',
+  },
+  warning: {
+    50: '#33290f',
+    100: '#423411',
+    500: '#f59e0b',
+    600: '#fbbf24',
+  },
+};
+
+export const palette = { admin, light, dark };
 
 /** `#rrggbb` → `r g b`, the form `rgb(var(--x) / <alpha-value>)` needs. */
 function channels(hex) {
@@ -200,13 +233,12 @@ function colorsFrom(theme) {
   return out;
 }
 
-const themed = colorsFrom(palette.light);
+const themed = colorsFrom(palette.admin);
 
 /** @type {import('tailwindcss').Config} */
 export default {
-  // `dark:` = inside the storefront. Only for what a token cannot say (a blend
-  // mode); colours go through the palette.
-  darkMode: ['variant', ['&:is(.theme-dark *)', ':root:has(.theme-dark) &']],
+  // No `darkMode`: a theme is the palette, never a `dark:` class on one
+  // element. src/utils/palette.test.js fails on any `dark:` in the source.
   // `relative: true` — glob-ები ამ ფაილის მიმართ იხსნება და არა
   // `process.cwd()`-ის მიმართ. ამის გარეშე repo-ს ძირიდან გაშვებული ბილდი
   // ვერცერთ კლასს ვერ იპოვის და CSS თითქმის ცარიელი გამოვა — warning-ით,
@@ -313,14 +345,19 @@ export default {
     },
   },
   plugins: [
-    plugin(({ addBase }) => {
+    plugin(({ addBase, addVariant }) => {
+      // Separate rules, in this order: the later ones win at equal
+      // specificity, and a browser without `:has` drops only its own rule.
+      addBase({ ':root': cssVariables(palette.admin) });
+      addBase({ ':root.theme-light': cssVariables(palette.light) });
+      addBase({ ':root.theme-dark': { ...cssVariables(palette.dark), 'color-scheme': 'dark' } });
+      addBase({ '[data-admin]': { ...cssVariables(palette.admin), 'color-scheme': 'light' } });
       addBase({
-        ':root': cssVariables(palette.light),
-        '.theme-dark, :root:has(.theme-dark)': {
-          ...cssVariables(palette.dark),
-          'color-scheme': 'dark',
-        },
+        ':root:has([data-admin])': { ...cssVariables(palette.admin), 'color-scheme': 'light' },
       });
+      // `storefront:` = inside the shop's Layout, in either theme. For what a
+      // token cannot say: the product photo's blend into its tile.
+      addVariant('storefront', ':is([data-storefront] &)');
     }),
   ],
 };

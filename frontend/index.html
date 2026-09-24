@@ -3,6 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Sets the storefront's light/dark class on <html> before the body paints.
+      Blocking and first on purpose. A file, not inline code: the CSP in
+      render.yaml is script-src 'self' without 'unsafe-inline'.
+    -->
+    <script src="/theme-init.js"></script>
     <meta name="theme-color" content="#2440e0" />
     <meta
       name="description"

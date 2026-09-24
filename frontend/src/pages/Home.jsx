@@ -64,7 +64,7 @@ function Hero() {
       <div aria-hidden="true" className="bg-tech-grid absolute inset-0" />
       <div
         aria-hidden="true"
-        className="absolute -right-24 -top-32 h-96 w-96 rounded-full bg-primary-600/25 blur-3xl"
+        className="absolute -right-24 -top-32 h-96 w-96 rounded-full bg-primary-200/70 blur-3xl"
       />
       <div
         aria-hidden="true"

@@ -39,7 +39,7 @@ export default function CartSummary({
 
         <div className="flex items-baseline justify-between gap-4">
           <dt className="text-ink-600">{TEXT.shipping}</dt>
-          <dd className={shipping === 0 ? 'font-semibold text-success-600' : 'font-semibold text-ink-900'}>
+          <dd className={shipping === 0 ? 'font-semibold text-success-700' : 'font-semibold text-ink-900'}>
             {shipping === 0 ? TEXT.free : formatPrice(shipping)}
           </dd>
         </div>
@@ -47,7 +47,7 @@ export default function CartSummary({
         {savings > 0 && (
           <div className="flex items-baseline justify-between gap-4">
             <dt className="text-ink-600">დაზოგილი</dt>
-            <dd className="font-semibold text-accent-400">−{formatPrice(savings)}</dd>
+            <dd className="font-semibold text-accent-fg">−{formatPrice(savings)}</dd>
           </div>
         )}
 

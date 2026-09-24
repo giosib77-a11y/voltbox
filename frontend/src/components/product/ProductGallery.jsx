@@ -85,7 +85,7 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
         <img
           src={images[index]}
           alt={`${alt} — სურათი ${index + 1}`}
-          className="h-full w-full object-cover transition-transform duration-200 dark:mix-blend-multiply"
+          className="h-full w-full object-cover transition-transform duration-200 storefront:mix-blend-multiply"
           style={
             zoom
               ? { transform: 'scale(1.8)', transformOrigin: `${zoom.x}% ${zoom.y}%` }

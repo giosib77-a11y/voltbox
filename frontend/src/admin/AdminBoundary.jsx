@@ -13,20 +13,24 @@ import { Suspense } from 'react';
 import { Outlet } from 'react-router';
 
 export default function AdminBoundary() {
+  // `data-admin` pins the panel to its own palette whatever theme the shop is
+  // in (tailwind.config.js). `contents`: the wrapper adds no box to lay out.
   return (
-    <Suspense
-      fallback={
-        <div
-          className="flex min-h-screen items-center justify-center bg-ink-50"
-          role="status"
-          aria-live="polite"
-        >
-          <span className="sr-only">იტვირთება…</span>
-          <span className="h-8 w-8 animate-spin rounded-full border-2 border-ink-300 border-t-accent-600" />
-        </div>
-      }
-    >
-      <Outlet />
-    </Suspense>
+    <div data-admin className="contents">
+      <Suspense
+        fallback={
+          <div
+            className="flex min-h-screen items-center justify-center bg-ink-50"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="sr-only">იტვირთება…</span>
+            <span className="h-8 w-8 animate-spin rounded-full border-2 border-ink-300 border-t-accent-600" />
+          </div>
+        }
+      >
+        <Outlet />
+      </Suspense>
+    </div>
   );
 }

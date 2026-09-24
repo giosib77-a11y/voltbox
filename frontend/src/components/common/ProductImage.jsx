@@ -42,7 +42,7 @@ export default function ProductImage({
             setStatus('loaded');
           }
         }}
-        className={`h-full w-full object-cover transition-opacity dark:mix-blend-multiply duration-300 ${
+        className={`h-full w-full object-cover transition-opacity storefront:mix-blend-multiply duration-300 ${
           status === 'loaded' ? 'opacity-100' : 'opacity-0'
         } ${imgClassName}`}
       />
