@@ -2,10 +2,11 @@ import { Link } from 'react-router';
 import { ArrowRight, BadgePercent, Headphones, ShieldCheck, Truck, Zap } from 'lucide-react';
 import Button from '../components/common/Button.jsx';
 import CategoryIcon from '../components/common/CategoryIcon.jsx';
+import CategoryNav from '../components/layout/CategoryNav.jsx';
 import ProductCarousel from '../components/product/ProductCarousel.jsx';
 import ErrorState from '../components/common/ErrorState.jsx';
 import { Skeleton } from '../components/common/Skeleton.jsx';
-import { useAsync } from '../hooks/useProducts.js';
+import { useAsync, useCategories } from '../hooks/useProducts.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import * as api from '../services/api.js';
 import { HOME_SECTION_TITLES, SHIPPING, SITE_DESCRIPTION } from '../constants/index.js';
@@ -22,12 +23,25 @@ const BENEFITS = [
 export default function Home() {
   useDocumentTitle('');
   const { data, loading, error, reload } = useAsync(() => api.getHomeSections(), []);
+  // იგივე მოთხოვნა, რაც header-ისა და footer-ის — useCategories მას ერთხელ აგზავნის
+  const { data: categories } = useCategories();
 
   const sections = data || {};
 
   return (
     <div className="container-page pb-12">
-      <Hero />
+      {/* desktop: კატეგორიების სია hero-ს მარცხნივ, ქვეკატეგორიები მარჯვნივ hero-ს
+          თავზე იშლება (z-10 — hero და მის შემდეგ მოსული სექციები ქვემოთ რჩება).
+          mobile-ზე სია არ არის — იქ drawer-ია */}
+      <div className="mt-4 md:grid md:grid-cols-[14rem_minmax(0,1fr)] md:gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <aside className="relative z-10 hidden md:block">
+          <CategoryNav
+            categories={categories || []}
+            className="h-full rounded-card border border-line bg-surface"
+          />
+        </aside>
+        <Hero />
+      </div>
       <Benefits />
 
       <PopularCategories categories={sections.popularCategories || []} loading={loading} />
@@ -61,7 +75,7 @@ export default function Home() {
 
 function Hero() {
   return (
-    <section className="relative mt-4 overflow-hidden rounded-card border border-line bg-surface px-6 py-12 sm:px-10 sm:py-16 lg:px-14 lg:py-20">
+    <section className="relative overflow-hidden rounded-card border border-line bg-surface px-6 py-12 sm:px-10 sm:py-16 lg:px-14 lg:py-20">
       <div aria-hidden="true" className="bg-tech-grid absolute inset-0" />
       <div
         aria-hidden="true"
@@ -104,12 +118,15 @@ function Hero() {
   );
 }
 
-/** The bolt in rings on the right of the hero. Decoration, large screens only. */
+/**
+ * The bolt in rings on the right of the hero. Decoration, from xl only: below
+ * that the category column leaves the hero too narrow, and it covers the text.
+ */
 function HeroMark() {
   return (
     <div
       aria-hidden="true"
-      className="absolute right-12 top-1/2 hidden -translate-y-1/2 lg:block xl:right-20"
+      className="absolute right-8 top-1/2 hidden -translate-y-1/2 xl:block 2xl:right-20"
     >
       <div className="relative flex h-72 w-72 items-center justify-center rounded-full border border-primary-500/15">
         <div className="absolute inset-8 rounded-full border border-primary-500/25" />

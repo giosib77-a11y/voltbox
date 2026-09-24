@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router';
 import { Menu, Phone, Truck } from 'lucide-react';
-import CategoryNav from './CategoryNav.jsx';
+import { CategoryMenuButton } from './CategoryNav.jsx';
 import Logo from './Logo.jsx';
 import MobileMenu from './MobileMenu.jsx';
 import UserMenu from './UserMenu.jsx';
@@ -13,12 +13,14 @@ import { formatPrice } from '../../utils/format.js';
 
 /**
  * Sticky header.
- * Desktop: ლოგო · კატეგორიები · ძებნა · ანგარიში · კალათა
+ * Desktop: ლოგო · კატეგორიები · ძებნა · ანგარიში · კალათა. მთავარ გვერდზე
+ * კატეგორიების ღილაკი არ არის — იქ იგივე სია hero-ს გვერდით დგას.
  * Mobile (< 768px): hamburger · ლოგო · ანგარიში/კალათა, ძებნა ცალკე ხაზში.
  */
 export default function Header({ categories = [] }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
+  const isHome = location.pathname === '/';
 
   const searchDefault =
     location.pathname === '/search'
@@ -64,6 +66,12 @@ export default function Header({ categories = [] }) {
 
           <Logo />
 
+          {!isHome && (
+            <div className="hidden md:block">
+              <CategoryMenuButton categories={categories} />
+            </div>
+          )}
+
           <div className="mx-auto hidden max-w-xl flex-1 md:block">
             <SearchBar defaultValue={searchDefault} />
           </div>
@@ -74,8 +82,6 @@ export default function Header({ categories = [] }) {
             <CartBadge />
           </div>
         </div>
-
-        <CategoryNav categories={categories} />
 
         {/* ძებნა — mobile */}
         <div className="pb-3 md:hidden">
