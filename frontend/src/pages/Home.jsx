@@ -10,6 +10,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import * as api from '../services/api.js';
 import { HOME_SECTION_TITLES, SHIPPING, SITE_DESCRIPTION } from '../constants/index.js';
 import { formatPrice } from '../utils/format.js';
+import { rootCategories } from '../utils/categoryTree.js';
 
 const BENEFITS = [
   { icon: Truck, title: 'უფასო მიწოდება', text: `${formatPrice(SHIPPING.freeThreshold)}-ზე მეტ შეკვეთაზე` },
@@ -143,6 +144,10 @@ function Benefits() {
 }
 
 function PopularCategories({ categories, loading }) {
+  // Samsung belongs under Phones, not beside it - and its products are already
+  // in the Phones count
+  const roots = rootCategories(categories);
+
   return (
     <section className="pt-10 sm:pt-12">
       <h2 className="mb-4 text-xl font-bold tracking-tight text-fg sm:mb-5 sm:text-2xl">
@@ -154,7 +159,7 @@ function PopularCategories({ categories, loading }) {
           ? Array.from({ length: 6 }, (_, i) => (
               <Skeleton key={i} className="h-28" rounded="rounded-card" />
             ))
-          : categories.map((category) => (
+          : roots.map((category) => (
               <Link
                 key={category.id}
                 to={`/category/${category.slug}`}

@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import { Clock, Mail, MapPin, Phone, Zap } from 'lucide-react';
 import { CONTACT, SHIPPING, SITE_DESCRIPTION, SITE_NAME } from '../../constants/index.js';
 import { formatPrice } from '../../utils/format.js';
+import { rootCategories } from '../../utils/categoryTree.js';
 
 /** საიტის ქვედა კოლონტიტული. */
 
@@ -34,7 +35,7 @@ export default function Footer({ categories = [] }) {
         <nav aria-label="კატეგორიები (ქვედა მენიუ)">
           <h2 className="text-sm font-bold text-ink-900">კატეგორიები</h2>
           <ul className="mt-3 space-y-2">
-            {categories.map((category) => (
+            {rootCategories(categories).map((category) => (
               <li key={category.id}>
                 <Link
                   to={`/category/${category.slug}`}
