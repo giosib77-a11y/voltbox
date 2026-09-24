@@ -210,13 +210,39 @@ async def create_order(
 
     `items` მხოლოდ (productId, qty) წყვილებია — ფასი კლიენტისგან არ მოდის.
     """
+    order, _ = await place_order(
+        db,
+        items=items,
+        customer=customer,
+        payment_method=payment_method,
+        user=user,
+        idempotency_key=idempotency_key,
+    )
+    return order
+
+
+async def place_order(
+    db: AsyncSession,
+    *,
+    items: list[tuple[UUID, int]],
+    customer: dict[str, Any],
+    payment_method: str,
+    user: User | None,
+    idempotency_key: str | None = None,
+) -> tuple[Order, bool]:
+    """`create_order`, plus whether this call placed the order.
+
+    False means a replay: the order already existed under this Idempotency-Key.
+    The route needs to know, so that a double-submitted checkout does not tell
+    the owner about the same order twice.
+    """
     if idempotency_key:
         existing = await db.scalar(select(Order).where(Order.idempotency_key == idempotency_key))
         if existing is not None:
             # ორმაგად გაგზავნილი checkout — იმავე შეკვეთას ვაბრუნებთ და მეორეს
             # არ ვქმნით. მფლობელობა აუცილებლად მოწმდება: გასაღები კლიენტის
             # არჩეულია და გამოცნობილით სხვისი შეკვეთა იკითხებოდა.
-            return _replay(existing, user=user, customer=customer)
+            return _replay(existing, user=user, customer=customer), False
 
     # ერთი პროდუქტი ორჯერ: რაოდენობებს ვაჯამებთ, თორემ FOR UPDATE-ის შემდეგ
     # ორივე ხაზი ერთსა და იმავე მარაგს დაუპირისპირდებოდა
@@ -252,7 +278,7 @@ async def create_order(
         existing = await db.scalar(select(Order).where(Order.idempotency_key == idempotency_key))
         if existing is None:  # pragma: no cover - the violation proves it exists
             raise
-        return _replay(existing, user=user, customer=customer)
+        return _replay(existing, user=user, customer=customer), False
 
     products = await _lock_products(db, sorted(quantities))
 
@@ -342,7 +368,7 @@ async def create_order(
             order_id=order.id,
         )
 
-    return order
+    return order, True
 
 
 async def list_for_user(db: AsyncSession, user_id: UUID) -> list[Order]:

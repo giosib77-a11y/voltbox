@@ -3,8 +3,9 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Header, Request, status
+from fastapi import APIRouter, BackgroundTasks, Header, Request, status
 
+from app.core.config import settings
 from app.core.deps import CurrentUser, Db, OptionalUser
 from app.core.errors import ValidationError
 from app.core.rate_limit import LOOKUP_RATE_LIMIT, limiter
@@ -19,6 +20,7 @@ from app.schemas.order import (
     OrderTotals,
 )
 from app.services import order as order_service
+from app.services import telegram
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -96,6 +98,7 @@ async def create_order(
     db: Db,
     user: OptionalUser,
     payload: CreateOrderRequest,
+    background: BackgroundTasks,
     # The header is required, but it is declared optional here on purpose: a
     # parameter FastAPI itself marks required fails in its own validator, and
     # that answer is the generic VALIDATION_ERROR / "Field required", which
@@ -108,7 +111,7 @@ async def create_order(
 ) -> OrderOut:
     # ქართული ახსნა: მთელი ლოგიკა სერვისშია ერთ ტრანზაქციაში — router მხოლოდ
     # (productId, qty) წყვილებს გადასცემს. ფასი კლიენტისგან არსად არ მოდის.
-    order = await order_service.create_order(
+    order, created = await order_service.place_order(
         db,
         items=[(item.product_id, item.qty) for item in payload.items],
         customer=payload.customer.model_dump(exclude_none=True),
@@ -118,6 +121,21 @@ async def create_order(
     )
     await db.commit()
     await db.refresh(order)
+
+    # After the commit and after the response: a background task runs once the
+    # response has been sent, so Telegram can neither fail this order nor slow
+    # it down. A replay was announced the first time.
+    if created and settings.telegram_enabled:
+        background.add_task(
+            telegram.notify_order_placed,
+            telegram.OrderNotice(
+                order_id=order.id,
+                order_number=order.order_number,
+                total=order.total,
+                currency=order.currency,
+                item_count=sum(item.quantity for item in order.items),
+            ),
+        )
     return _to_out(order)
 
 

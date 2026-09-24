@@ -21,11 +21,13 @@ from app.core.hosts import LoggedTrustedHostMiddleware
 from app.core.logging import RequestContextMiddleware, configure_logging
 from app.core.rate_limit import limiter
 from app.db.session import engine
+from app.services import telegram
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     configure_logging()
+    telegram.log_configuration()
     yield
     await engine.dispose()
 

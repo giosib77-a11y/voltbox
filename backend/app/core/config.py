@@ -160,6 +160,13 @@ class Settings(BaseSettings):
     # and the image URLs snapshotted into past orders.
     supabase_storage_bucket: str = "product-images"
 
+    # --- Telegram (არასავალდებულო — ახალი შეკვეთის შეტყობინება) ---------------
+    # Either one empty turns the notification off; see app/services/telegram.py.
+    # The token lets anyone post as the bot and read what is sent to it. The
+    # chat id grants nothing without the token and stays plain.
+    telegram_bot_token: SecretStr = SecretStr("")
+    telegram_chat_id: str = ""
+
     # Business-day boundaries ("today", date filters) are computed here, not in
     # UTC - an order placed at 01:00 Tbilisi time belongs to that day, not to
     # the previous one.
@@ -201,6 +208,16 @@ class Settings(BaseSettings):
         for junk in ("?sslmode=require", "&sslmode=require", "?sslmode=prefer", "&sslmode=prefer"):
             url = url.replace(junk, "")
         return SecretStr(url)
+
+    @field_validator("telegram_bot_token")
+    @classmethod
+    def strip_telegram_token(cls, value: SecretStr) -> SecretStr:
+        """A token pasted with a trailing space or newline is the same token."""
+        return SecretStr(value.get_secret_value().strip())
+
+    @property
+    def telegram_enabled(self) -> bool:
+        return bool(self.telegram_bot_token.get_secret_value() and self.telegram_chat_id.strip())
 
     @property
     def cookie_path(self) -> str:
