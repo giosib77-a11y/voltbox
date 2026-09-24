@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { LogIn, ShieldCheck } from 'lucide-react';
 import Breadcrumbs from '../components/common/Breadcrumbs.jsx';
@@ -75,10 +75,47 @@ export default function Checkout() {
     }));
   }, [user]);
 
+  // მიწოდების ველებს მომხმარებელი თუ ერთხელ მაინც შეეხო (ბრაუზერის autofill-იც
+  // ითვლება), შენახული მისამართი მათ აღარ ეხება — გვიან მოსული პასუხიც კი
+  const deliveryEditedRef = useRef(false);
+
+  // ნაგულისხმევი მისამართი ცალკე endpoint-ზეა და `user`-ში არ მოდის.
+  // ქალაქი და მისამართი ერთად ივსება ან საერთოდ არა: აკრეფილ ქუჩასთან შენახული
+  // ქალაქის მიწებება ორი სხვადასხვა მისამართის ნაზავს მისცემდა. ეს ერთადერთი
+  // პირობა იდემპოტენტობის გასაღებსაც იცავს: სავალდებულო ველები ცარიელი ვერ
+  // იქნება გაგზავნისას, ამიტომ პასუხი უკვე გაგზავნილ შეკვეთას ვეღარ შეცვლის.
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return undefined;
+    let cancelled = false;
+    api
+      .getAddresses()
+      .then((addresses) => {
+        const saved = Array.isArray(addresses) ? addresses.find((a) => a.isDefault) : null;
+        if (cancelled || !saved || deliveryEditedRef.current) return;
+        setValues((current) => {
+          if (current.city || current.address) return current;
+          return {
+            ...current,
+            // სიაში არმყოფ ქალაქს select ვერ აჩვენებს — მაშინ ირჩევს თავად
+            city: CITIES.includes(saved.city) ? saved.city : '',
+            address: saved.address || '',
+          };
+        });
+      })
+      .catch(() => {
+        // შევსება მხოლოდ მოხერხებულობაა — ცარიელი ველებით შეკვეთა ისევ მუშაობს
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
   const cityOptions = useMemo(() => CITIES.map((city) => ({ value: city, label: city })), []);
 
   function handleChange(name, rawValue) {
     const value = name === 'phone' ? formatPhone(rawValue) : rawValue;
+    if (name === 'city' || name === 'address') deliveryEditedRef.current = true;
     setValues((current) => ({ ...current, [name]: value }));
     if (touched[name]) {
       setErrors((current) => ({ ...current, [name]: validateField(name, value, values) }));

@@ -11,8 +11,13 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
+
+// api.js re-exports whichever implementation `.env` selects, and CI has no
+// `.env`, so it would get mockApi there and httpApi here. The prefill tests
+// replace only `fetch`, which means api.js has to sit on httpApi everywhere.
+vi.mock('virtual:api-impl', () => import('../services/httpApi.js'));
 
 import Checkout from './Checkout.jsx';
 import * as api from '../services/api.js';
@@ -30,9 +35,12 @@ let cartValue;
 vi.mock('../hooks/useCart.js', () => ({
   useCart: () => cartValue,
 }));
+let authValue;
 vi.mock('../hooks/useAuth.js', () => ({
-  useAuth: () => ({ user: null, isAuthenticated: false }),
+  useAuth: () => authValue,
 }));
+
+const GUEST = { user: null, isAuthenticated: false };
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -83,6 +91,10 @@ beforeEach(() => {
   sessionStorage.clear();
   navigate = vi.fn();
   cartValue = cart(ITEMS);
+  authValue = GUEST;
+  global.fetch = vi.fn(async () => {
+    throw new Error('this test did not expect a request');
+  });
 });
 
 describe('the checkout form', () => {
@@ -201,5 +213,170 @@ describe('the checkout form', () => {
     settle({ orderNumber: 'VB-20260918-1000' });
     await waitFor(() => expect(navigate).toHaveBeenCalled());
     expect(createOrder).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * A signed-in shopper's default address fills the delivery fields.
+ *
+ * These go through the real api.js and httpApi; only `fetch` is replaced, so a
+ * facade that stops exporting getAddresses (the 1ebe26b failure) fails here.
+ */
+describe('prefilling the saved address', () => {
+  const SHOPPER = {
+    user: { id: 'u1', firstName: 'გიორგი', lastName: 'ბერიძე', phone: '555123456' },
+    isAuthenticated: true,
+  };
+
+  const saved = (overrides) => ({
+    id: 'a1',
+    label: 'სახლი',
+    city: 'თბილისი',
+    address: 'ჭავჭავაძის 42',
+    isDefault: false,
+    fullName: null,
+    phone: null,
+    apartment: null,
+    postalCode: null,
+    ...overrides,
+  });
+
+  const reply = (body, status = 200) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  });
+
+  /**
+   * Routes the two calls checkout makes. `addresses` is a function so a test
+   * can hold the answer back; `orders` answers each POST in turn.
+   */
+  function serve({ addresses, orders = [] }) {
+    const orderReplies = [...orders];
+    global.fetch = vi.fn(async (url, options = {}) => {
+      if (String(url).endsWith('/addresses') && (options.method ?? 'GET') === 'GET') {
+        return addresses();
+      }
+      if (String(url).endsWith('/orders') && options.method === 'POST') {
+        return orderReplies.shift();
+      }
+      throw new Error(`unexpected request: ${options.method} ${url}`);
+    });
+  }
+
+  const addressRequests = () =>
+    global.fetch.mock.calls.filter(([url]) => String(url).endsWith('/addresses'));
+  const orderRequests = () =>
+    global.fetch.mock.calls.filter(([url]) => String(url).endsWith('/orders'));
+
+  /** Lets the pending fetch → json → setState chain run to the end. */
+  const settle = () => act(async () => {});
+
+  const placed = reply({ orderNumber: 'VB-20260924-1000' }, 201);
+
+  beforeEach(() => {
+    authValue = SHOPPER;
+  });
+
+  it('fills city and address from the default address and sends them', async () => {
+    serve({
+      addresses: () =>
+        reply([saved({ id: 'a1', city: 'ბათუმი', address: 'რუსთაველის 1' }), saved({ id: 'a2', isDefault: true })]),
+      orders: [placed],
+    });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByLabelText(/^მისამართი/)).toHaveValue('ჭავჭავაძის 42'));
+    expect(screen.getByLabelText(/^ქალაქი/)).toHaveValue('თბილისი');
+
+    // Nothing typed: the profile and the saved address make a complete order.
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(navigate).toHaveBeenCalled());
+    const [, options] = orderRequests()[0];
+    expect(JSON.parse(options.body).customer).toMatchObject({
+      city: 'თბილისი',
+      address: 'ჭავჭავაძის 42',
+    });
+    expect(options.headers['Idempotency-Key']).toMatch(UUID_V4);
+  });
+
+  it('leaves the fields empty when no address is marked default', async () => {
+    serve({ addresses: () => reply([saved({ city: 'ბათუმი', address: 'რუსთაველის 1' })]) });
+    renderPage();
+
+    await waitFor(() => expect(addressRequests()).toHaveLength(1));
+    await settle();
+
+    expect(screen.getByLabelText(/^ქალაქი/)).toHaveValue('');
+    expect(screen.getByLabelText(/^მისამართი/)).toHaveValue('');
+  });
+
+  it('does not overwrite what the shopper typed before the address arrived', async () => {
+    let answer;
+    serve({ addresses: () => new Promise((resolve) => (answer = resolve)) });
+    renderPage();
+    await waitFor(() => expect(addressRequests()).toHaveLength(1));
+
+    fireEvent.change(screen.getByLabelText(/^მისამართი/), { target: { value: 'ვაჟა-ფშაველას 7' } });
+    answer(reply([saved({ isDefault: true })]));
+    await settle();
+
+    expect(screen.getByLabelText(/^მისამართი/)).toHaveValue('ვაჟა-ფშაველას 7');
+    // Not half of it either: the saved city beside a typed street would be an
+    // address nobody entered.
+    expect(screen.getByLabelText(/^ქალაქი/)).toHaveValue('');
+  });
+
+  it('keeps the key of a failed attempt when the address arrives before the retry', async () => {
+    let answer;
+    serve({
+      addresses: () => new Promise((resolve) => (answer = resolve)),
+      orders: [reply({ error: { code: 'INTERNAL_ERROR', message: 'boom' } }, 500), placed],
+    });
+    renderPage();
+    await waitFor(() => expect(addressRequests()).toHaveLength(1));
+
+    fillValidForm();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(orderRequests()).toHaveLength(1));
+    await waitFor(() => expect(submitButton()).toBeEnabled());
+
+    // A different saved address lands between the failure and the retry.
+    answer(reply([saved({ city: 'ბათუმი', address: 'რუსთაველის 1', isDefault: true })]));
+    await settle();
+
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(navigate).toHaveBeenCalled());
+
+    const [first, retry] = orderRequests().map(([, options]) => options);
+    expect(retry.headers['Idempotency-Key']).toBe(first.headers['Idempotency-Key']);
+    expect(JSON.parse(retry.body).customer.address).toBe('ჭავჭავაძის 42');
+  });
+
+  it('still places the order when the addresses cannot be loaded', async () => {
+    serve({
+      addresses: () => reply({ error: { code: 'INTERNAL_ERROR', message: 'boom' } }, 500),
+      orders: [placed],
+    });
+    renderPage();
+    await waitFor(() => expect(addressRequests()).toHaveLength(1));
+    await settle();
+
+    expect(screen.getByLabelText(/^მისამართი/)).toHaveValue('');
+    fillValidForm();
+    fireEvent.click(submitButton());
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/checkout/success/VB-20260924-1000', { replace: true }));
+    expect(orderRequests()).toHaveLength(1);
+  });
+
+  it('asks nothing for a guest', async () => {
+    authValue = GUEST;
+    serve({ addresses: () => reply([saved({ isDefault: true })]) });
+    renderPage();
+    await settle();
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/^მისამართი/)).toHaveValue('');
   });
 });
