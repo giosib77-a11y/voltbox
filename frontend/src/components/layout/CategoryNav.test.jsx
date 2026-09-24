@@ -83,6 +83,10 @@ describe('CategoryNav', () => {
     // show it drawn. Beside the list, from its top, and not below the row
     expect(panel).toHaveClass('left-full', 'top-0', 'min-h-full');
     expect(panel).not.toHaveClass('top-full');
+    // At least as tall as the list, never capped at it: a short list must not
+    // clip a long run of subcategories
+    expect(panel).not.toHaveClass('h-full');
+    expect(panel).not.toHaveClass('overflow-hidden');
     // Positioned against the list, not the row, so it spans the list's height
     expect(panel.closest('li')).not.toHaveClass('relative');
     expect(panel.closest('nav')).toHaveClass('relative');

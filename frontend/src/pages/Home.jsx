@@ -32,12 +32,17 @@ export default function Home() {
     <div className="container-page pb-12">
       {/* desktop: კატეგორიების სია hero-ს მარცხნივ, ქვეკატეგორიები მარჯვნივ hero-ს
           თავზე იშლება (z-10 — hero და მის შემდეგ მოსული სექციები ქვემოთ რჩება).
-          mobile-ზე სია არ არის — იქ drawer-ია */}
+          mobile-ზე სია არ არის — იქ drawer-ია.
+          სვეტი თავისი შიგთავსის სიმაღლისაა (self-start) და არა hero-სი: ყოველი
+          ახალი კატეგორია მას ერთი ხაზით ზრდის. hero-ზე გრძელი სია hero-ს გასცდება
+          და საკუთარ scroll-ს არ იღებს: hover-ით სამართავ მენიუში scroll-ის მიღმა
+          კატეგორიები დამალული დარჩებოდა, და ამოსული flyout ხაზს ჩამოშორდებოდა.
+          hero ამ დროს stretch-ით სვეტამდე იზრდება, ასე რომ ხვრელი არ რჩება */}
       <div className="mt-4 md:grid md:grid-cols-[14rem_minmax(0,1fr)] md:gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
-        <aside className="relative z-10 hidden md:block">
+        <aside className="relative z-10 hidden md:block md:self-start">
           <CategoryNav
             categories={categories || []}
-            className="h-full rounded-card border border-line bg-surface"
+            className="rounded-card border border-line bg-surface"
           />
         </aside>
         <Hero />

@@ -73,4 +73,15 @@ describe('Home', () => {
       screen.getByRole('heading', { level: 1 }).closest('section')
     );
   });
+
+  it('sizes the menu column to its categories, not to the hero', async () => {
+    mount();
+
+    const nav = await screen.findByRole('navigation', { name: 'კატეგორიები' });
+    // jsdom has no layout, so this reads the classes; the screenshots show it
+    // drawn. A grid item stretches to its row by default: the column opts out,
+    // and the list inside it does not fill the column either
+    expect(nav.closest('aside')).toHaveClass('md:self-start');
+    expect(nav).not.toHaveClass('h-full');
+  });
 });
