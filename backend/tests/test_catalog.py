@@ -318,10 +318,44 @@ async def test_home_sections_returns_all_four_groups(
 ) -> None:
     body = (await client.get("/api/v1/home-sections")).json()
 
-    assert set(body) == {"newArrivals", "discounted", "featured", "popularCategories"}
+    assert set(body) == {"newArrivals", "discounted", "featured", "latest", "popularCategories"}
     assert [p["slug"] for p in body["newArrivals"]] == ["s24-ultra"]
     assert [p["slug"] for p in body["discounted"]] == ["iphone-15"]
     assert [p["slug"] for p in body["featured"]] == ["iphone-15"]
+    # The groups have products, so the fallback stays empty rather than repeat them
+    assert body["latest"] == []
+
+
+async def test_home_sections_fall_back_to_newest_when_no_product_is_flagged(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """A new shop: products added, no flag, no old price. Newest first, active only."""
+    chargers = await make_category(db, "chargers")
+    anker = await make_brand(db, "Anker", "ჩინეთი")
+    await make_product(
+        db, chargers, anker, slug="older", created_at=datetime(2026, 3, 1, tzinfo=UTC)
+    )
+    await make_product(
+        db, chargers, anker, slug="newer", created_at=datetime(2026, 4, 1, tzinfo=UTC)
+    )
+    hidden = await make_product(
+        db, chargers, anker, slug="hidden", created_at=datetime(2026, 5, 1, tzinfo=UTC)
+    )
+    hidden.is_active = False
+    await db.flush()
+
+    body = (await client.get("/api/v1/home-sections")).json()
+
+    assert body["newArrivals"] == body["discounted"] == body["featured"] == []
+    assert [p["slug"] for p in body["latest"]] == ["newer", "older"]
+
+
+async def test_home_sections_with_an_empty_catalog_are_all_empty(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    body = (await client.get("/api/v1/home-sections")).json()
+
+    assert body["newArrivals"] == body["discounted"] == body["featured"] == body["latest"] == []
 
 
 async def test_search_falls_back_to_global_facets(

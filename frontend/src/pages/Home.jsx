@@ -72,6 +72,11 @@ export default function Home() {
             products={sections.featured || []}
             loading={loading}
           />
+          {/* API-ს სავსე მხოლოდ მაშინ, როცა სამივე ზემოთა ცარიელია. ჩატვირთვისას
+              skeleton-ს არ ვაჩვენებთ — თორემ მეოთხე ზოლი ყოველ ჯერზე გაქრებოდა */}
+          {!loading && (
+            <ProductCarousel title={HOME_SECTION_TITLES.latest} products={sections.latest || []} />
+          )}
         </>
       )}
     </div>

@@ -126,4 +126,7 @@ class HomeSectionsOut(ApiModel):
     new_arrivals: list[ProductOut]
     discounted: list[ProductOut]
     featured: list[ProductOut]
+    # Filled only when the three groups above are all empty: the newest active
+    # products, so a shop with no flags or discounts set yet is not bare.
+    latest: list[ProductOut]
     popular_categories: list[CategoryOut]

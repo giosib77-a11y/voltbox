@@ -183,7 +183,13 @@ export async function getHomeSections() {
     productsCount: rawProducts.filter((p) => p.category === category.id).length,
   }));
 
-  return { newArrivals, discounted, featured, popularCategories };
+  // იგივე წესი, რაც API-ში: მხოლოდ სამივე ცარიელზე, უახლესი აქტიური
+  const latest =
+    newArrivals.length || discounted.length || featured.length
+      ? []
+      : [...decorated].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 8);
+
+  return { newArrivals, discounted, featured, latest, popularCategories };
 }
 
 /** Autocomplete-ისთვის — მსუბუქი, დაყოვნების გარეშე მაქსიმალურად სწრაფი. */

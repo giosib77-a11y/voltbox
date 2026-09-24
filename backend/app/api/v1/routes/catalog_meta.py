@@ -38,7 +38,10 @@ async def list_brands(db: Annotated[AsyncSession, Depends(get_db)]) -> list[Bran
 @router.get(
     "/home-sections",
     summary="Home page sections",
-    description="New arrivals, discounted, featured products and popular categories.",
+    description=(
+        "New arrivals, discounted, featured products and popular categories. `latest` holds "
+        "the newest active products, and only when the three product groups are all empty."
+    ),
     response_model=HomeSectionsOut,
 )
 async def home_sections(
@@ -50,6 +53,7 @@ async def home_sections(
         new_arrivals=[product_to_out(p) for p in sections["new_arrivals"]],
         discounted=[product_to_out(p) for p in sections["discounted"]],
         featured=[product_to_out(p) for p in sections["featured"]],
+        latest=[product_to_out(p) for p in sections["latest"]],
         popular_categories=[
             category_to_out(c, count) for c, count in sections["popular_categories"]
         ],

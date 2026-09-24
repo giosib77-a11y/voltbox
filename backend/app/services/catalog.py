@@ -451,7 +451,7 @@ async def list_brands(db: AsyncSession) -> list[tuple[Brand, int]]:
 
 
 async def home_sections(db: AsyncSession, limit: int = 8) -> dict[str, Any]:
-    """მთავარი გვერდის ოთხივე სექცია ერთი გამოძახებით."""
+    """მთავარი გვერდის სექციები ერთი გამოძახებით (+ `latest` — მხოლოდ სამივე ცარიელზე)."""
     base = _base_query().options(selectinload(Product.images))
 
     new_arrivals = (
@@ -484,10 +484,22 @@ async def home_sections(db: AsyncSession, limit: int = 8) -> dict[str, Any]:
         (await db.scalars(base.where(Product.is_featured.is_(True)).limit(limit))).unique().all()
     )
 
+    # Fallback for a new shop: each group above needs something the admin
+    # sets per product (is_new, is_featured, an old price), and a product is
+    # created with none of them. With all three empty, the newest active
+    # products are shown instead, so a stocked catalog never shows an empty
+    # home page. Only when all three are empty: otherwise it would repeat them.
+    latest: list[Product] = []
+    if not (new_arrivals or discounted or featured):
+        latest = list(
+            (await db.scalars(base.order_by(Product.created_at.desc()).limit(limit))).unique().all()
+        )
+
     return {
         "new_arrivals": list(new_arrivals),
         "discounted": list(discounted),
         "featured": list(featured),
+        "latest": latest,
         "popular_categories": await list_categories(db),
     }
 

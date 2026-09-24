@@ -8,13 +8,17 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 
 import { HOME_SECTION_TITLES } from '../constants/index.js';
 
 import Home from './Home.jsx';
 import * as api from '../services/api.js';
+
+// A product card has an add-to-cart button; the cart itself is not what these check
+vi.mock('../hooks/useCart.js', () => ({ useCart: () => ({ addItem: () => {}, quantities: {} }) }));
+vi.mock('../hooks/useToast.js', () => ({ useToast: () => ({ success: () => {} }) }));
 
 const POPULAR = [
   { id: 'c-phones', slug: 'phones', name: 'ტელეფონები', icon: 'Smartphone', parentId: null, productsCount: 4 },
@@ -35,6 +39,24 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+const PRODUCT = (slug, name) => ({
+  id: `p-${slug}`,
+  slug,
+  name,
+  brand: 'Anker',
+  price: 45.5,
+  oldPrice: null,
+  hasDiscount: false,
+  discountPercent: 0,
+  images: [],
+  rating: 0,
+  reviewsCount: 0,
+  inStock: true,
+  stock: 5,
+  isNew: false,
+  isFeatured: false,
+});
 
 function mount() {
   render(
@@ -83,5 +105,43 @@ describe('Home', () => {
     // and the list inside it does not fill the column either
     expect(nav.closest('aside')).toHaveClass('md:self-start');
     expect(nav).not.toHaveClass('h-full');
+  });
+
+  it('shows the newest products when no product is flagged or discounted', async () => {
+    // What a new shop's API returns: the three groups empty, the fallback filled
+    api.getHomeSections.mockResolvedValue({
+      newArrivals: [],
+      discounted: [],
+      featured: [],
+      latest: [PRODUCT('anker-nano', 'Anker Nano 20W'), PRODUCT('anker-cable', 'Anker PowerLine')],
+      popularCategories: POPULAR,
+    });
+    mount();
+
+    const section = (await screen.findByRole('heading', { name: HOME_SECTION_TITLES.latest })).closest('section');
+    expect(within(section).getByRole('link', { name: /Anker Nano 20W/ })).toHaveAttribute(
+      'href',
+      '/product/anker-nano'
+    );
+    expect(within(section).getByRole('link', { name: /Anker PowerLine/ })).toBeInTheDocument();
+  });
+
+  it('shows no product and does not break with an empty catalog', async () => {
+    api.getHomeSections.mockResolvedValue({
+      newArrivals: [],
+      discounted: [],
+      featured: [],
+      latest: [],
+      popularCategories: [],
+    });
+    mount();
+
+    // Loaded: the category grid's skeletons are gone and the page is still there
+    await screen.findByRole('heading', { name: HOME_SECTION_TITLES.popularCategories });
+    await waitFor(() => expect(document.querySelector('.animate-shimmer')).toBeNull());
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: HOME_SECTION_TITLES.latest })).toBeNull();
+    expect(document.querySelector('a[href^="/product/"]')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
