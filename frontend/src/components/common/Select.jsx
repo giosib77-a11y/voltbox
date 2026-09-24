@@ -33,7 +33,7 @@ const Select = forwardRef(function Select(
       {label && (
         <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-ink-800">
           {label}
-          {required && <span className="ml-0.5 text-danger-600" aria-hidden="true">*</span>}
+          {required && <span className="ml-0.5 text-danger-fg" aria-hidden="true">*</span>}
         </label>
       )}
       <div className="relative">
@@ -44,7 +44,7 @@ const Select = forwardRef(function Select(
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
           className={[
-            'field-text h-11 w-full appearance-none rounded-control border bg-white pl-3.5 pr-10 text-ink-900',
+            'field-text h-11 w-full appearance-none rounded-control border bg-surface pl-3.5 pr-10 text-ink-900',
             'transition-colors focus:outline-none focus:ring-2',
             error
               ? 'border-danger-500 focus:border-danger-500 focus:ring-danger-500/30'
@@ -72,7 +72,7 @@ const Select = forwardRef(function Select(
         />
       </div>
       {error ? (
-        <p id={errorId} className="mt-1.5 text-xs font-medium text-danger-600">
+        <p id={errorId} className="mt-1.5 text-xs font-medium text-danger-fg">
           {error}
         </p>
       ) : (

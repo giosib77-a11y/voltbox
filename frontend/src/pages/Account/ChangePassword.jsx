@@ -59,7 +59,7 @@ export default function ChangePassword() {
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="max-w-md rounded-card border border-ink-200 bg-white p-5 sm:p-6">
+    <form onSubmit={handleSubmit} noValidate className="max-w-md rounded-card border border-ink-200 bg-surface p-5 sm:p-6">
       <h2 className="text-base font-bold text-ink-900">პაროლის შეცვლა</h2>
       <p className="mt-1 text-sm text-ink-600">
         ახალი პაროლი უნდა შეიცავდეს მინიმუმ {MIN_PASSWORD_LENGTH} სიმბოლოს.

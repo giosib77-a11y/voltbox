@@ -8,7 +8,7 @@ export function Skeleton({ className = '', rounded = 'rounded-md' }) {
       className={`relative overflow-hidden bg-ink-200/70 ${rounded} ${className}`}
       aria-hidden="true"
     >
-      <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+      <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-surface/60 to-transparent" />
     </div>
   );
 }
@@ -16,7 +16,7 @@ export function Skeleton({ className = '', rounded = 'rounded-md' }) {
 /** პროდუქტის ბარათის skeleton — ProductCard-ის იდენტური გეომეტრიით. */
 export function ProductCardSkeleton() {
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-card border border-ink-200 bg-white">
+    <div className="flex h-full flex-col overflow-hidden rounded-card border border-ink-200 bg-surface">
       <Skeleton className="aspect-square w-full" rounded="rounded-none" />
       <div className="flex flex-1 flex-col gap-2 p-4">
         <Skeleton className="h-3 w-16" />

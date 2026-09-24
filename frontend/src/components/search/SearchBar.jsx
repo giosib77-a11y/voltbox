@@ -179,7 +179,7 @@ export default function SearchBar({ defaultValue = '', autoFocus = false, onSubm
             setOpen(true);
           }}
           onKeyDown={handleKeyDown}
-          className="field-text h-11 w-full rounded-control border border-ink-200 bg-ink-50 pl-10 pr-10 text-ink-900 transition-colors placeholder:text-ink-500 hover:bg-white focus:border-primary-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/25 [&::-webkit-search-cancel-button]:hidden"
+          className="field-text h-11 w-full rounded-control border border-line-strong bg-ink-100 pl-10 pr-10 text-fg transition-colors placeholder:text-fg-muted hover:border-ink-400 focus:border-primary-500 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary-500/25 [&::-webkit-search-cancel-button]:hidden"
         />
 
         {value && (

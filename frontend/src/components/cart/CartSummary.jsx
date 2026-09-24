@@ -25,7 +25,7 @@ export default function CartSummary({
   const remaining = amountToFreeShipping(subtotal);
 
   return (
-    <div className={`rounded-card border border-ink-200 bg-white p-5 ${className}`}>
+    <div className={`rounded-card border border-ink-200 bg-surface p-5 ${className}`}>
       <h2 className="text-base font-bold text-ink-900">შეკვეთის შეჯამება</h2>
 
       <dl className="mt-4 space-y-2.5 text-sm">
@@ -47,7 +47,7 @@ export default function CartSummary({
         {savings > 0 && (
           <div className="flex items-baseline justify-between gap-4">
             <dt className="text-ink-600">დაზოგილი</dt>
-            <dd className="font-semibold text-accent-600">−{formatPrice(savings)}</dd>
+            <dd className="font-semibold text-accent-400">−{formatPrice(savings)}</dd>
           </div>
         )}
 

@@ -24,9 +24,9 @@ export default function ProductImage({
   }, [src]);
 
   return (
-    <div className={`relative overflow-hidden bg-ink-100 ${className}`}>
+    <div className={`relative overflow-hidden bg-media ${className}`}>
       {status === 'loading' && (
-        <div className="absolute inset-0 animate-pulse bg-ink-200/60" aria-hidden="true" />
+        <div className="absolute inset-0 animate-pulse bg-media-shade/60" aria-hidden="true" />
       )}
       <img
         src={currentSrc}
@@ -42,7 +42,7 @@ export default function ProductImage({
             setStatus('loaded');
           }
         }}
-        className={`h-full w-full object-cover transition-opacity duration-300 ${
+        className={`h-full w-full object-cover transition-opacity dark:mix-blend-multiply duration-300 ${
           status === 'loaded' ? 'opacity-100' : 'opacity-0'
         } ${imgClassName}`}
       />

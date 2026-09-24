@@ -89,7 +89,7 @@ export default function Addresses() {
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2">
           {addresses.map((address) => (
-            <li key={address.id} className="rounded-card border border-ink-200 bg-white p-4">
+            <li key={address.id} className="rounded-card border border-ink-200 bg-surface p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 text-sm font-semibold text-ink-900">
@@ -109,7 +109,7 @@ export default function Addresses() {
                   type="button"
                   onClick={() => handleDelete(address.id)}
                   aria-label="მისამართის წაშლა"
-                  className="-mr-1.5 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-danger-50 hover:text-danger-600"
+                  className="-mr-1.5 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-danger-50 hover:text-danger-fg"
                 >
                   <Trash2 className="h-4 w-4" aria-hidden="true" />
                 </button>

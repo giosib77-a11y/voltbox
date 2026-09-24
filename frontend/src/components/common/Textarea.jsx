@@ -19,7 +19,7 @@ const Textarea = forwardRef(function Textarea(
       {label && (
         <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-ink-800">
           {label}
-          {required && <span className="ml-0.5 text-danger-600" aria-hidden="true">*</span>}
+          {required && <span className="ml-0.5 text-danger-fg" aria-hidden="true">*</span>}
         </label>
       )}
       <textarea
@@ -30,7 +30,7 @@ const Textarea = forwardRef(function Textarea(
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy || undefined}
         className={[
-          'field-text w-full rounded-control border bg-white px-3.5 py-2.5 text-ink-900 transition-colors',
+          'field-text w-full rounded-control border bg-surface px-3.5 py-2.5 text-ink-900 transition-colors',
           'placeholder:text-ink-500 focus:outline-none focus:ring-2',
           error
             ? 'border-danger-500 focus:border-danger-500 focus:ring-danger-500/30'
@@ -42,7 +42,7 @@ const Textarea = forwardRef(function Textarea(
         {...rest}
       />
       {error ? (
-        <p id={errorId} className="mt-1.5 text-xs font-medium text-danger-600">
+        <p id={errorId} className="mt-1.5 text-xs font-medium text-danger-fg">
           {error}
         </p>
       ) : (

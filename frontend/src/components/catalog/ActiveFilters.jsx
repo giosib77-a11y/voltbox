@@ -28,9 +28,9 @@ export default function ActiveFilters({ filters = [], active = {}, onChange, onC
           <button
             type="button"
             onClick={() => handleRemove(chip)}
-            className="group inline-flex items-center gap-1.5 rounded-pill border border-ink-200 bg-white py-1 pl-3 pr-2 text-xs font-medium text-ink-700 transition-colors hover:border-danger-300 hover:bg-danger-50 hover:text-danger-700"
+            className="group inline-flex items-center gap-1.5 rounded-pill border border-ink-200 bg-surface py-1 pl-3 pr-2 text-xs font-medium text-ink-700 transition-colors hover:border-danger-300 hover:bg-danger-50 hover:text-danger-fg"
           >
-            <span className="text-ink-500 group-hover:text-danger-500">{chip.groupLabel}:</span>
+            <span className="text-ink-500 group-hover:text-danger-fg">{chip.groupLabel}:</span>
             {chip.label}
             <X className="h-3.5 w-3.5" aria-hidden="true" />
             <span className="sr-only">ფილტრის მოხსნა</span>

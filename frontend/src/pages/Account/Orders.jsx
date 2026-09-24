@@ -48,7 +48,7 @@ export default function Orders() {
         const status = ORDER_STATUS_LABELS[order.status] || UNKNOWN_ORDER_STATUS;
 
         return (
-          <li key={order.orderNumber} className="rounded-card border border-ink-200 bg-white">
+          <li key={order.orderNumber} className="rounded-card border border-ink-200 bg-surface">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 p-4">
               <div>
                 <p className="text-sm font-bold tabular-nums text-ink-900">{order.orderNumber}</p>

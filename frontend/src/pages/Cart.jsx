@@ -69,7 +69,7 @@ export default function Cart() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:gap-7">
-        <div className="rounded-card border border-ink-200 bg-white px-4 sm:px-5">
+        <div className="rounded-card border border-ink-200 bg-surface px-4 sm:px-5">
           <ul className="divide-y divide-ink-100">
             {items.map((item) => (
               <CartItem

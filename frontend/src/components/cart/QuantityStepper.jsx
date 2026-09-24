@@ -30,7 +30,7 @@ export default function QuantityStepper({
 
   return (
     <div
-      className={`inline-flex items-center overflow-hidden rounded-control border border-ink-300 bg-white ${dims.wrap} ${className}`}
+      className={`inline-flex items-center overflow-hidden rounded-control border border-ink-300 bg-surface ${dims.wrap} ${className}`}
     >
       <button
         type="button"
@@ -51,7 +51,7 @@ export default function QuantityStepper({
         disabled={disabled}
         aria-label={label}
         onChange={(event) => commit(event.target.value)}
-        className={`border-x border-ink-200 bg-white text-center font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500/40 disabled:text-ink-400 ${dims.wrap} ${dims.input}`}
+        className={`border-x border-ink-200 bg-surface text-center font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500/40 disabled:text-ink-400 ${dims.wrap} ${dims.input}`}
       />
 
       <button

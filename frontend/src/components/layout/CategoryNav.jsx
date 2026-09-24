@@ -21,7 +21,7 @@ export default function CategoryNav({ categories }) {
   // იცვლება, ამიტომ ერთი წყარო JS-ში უნდა იყოს
   const canHover = useMediaQuery(CAN_HOVER);
   return (
-    <nav aria-label="კატეგორიები" className="hidden border-t border-ink-100 md:block">
+    <nav aria-label="კატეგორიები" className="hidden border-t border-ink-100/80 md:block">
       {/* flex-wrap და არა overflow-x-auto: გადახვევადი კონტეინერი ჩამოსაშლელს მოჭრიდა */}
       <ul className="flex flex-wrap items-center gap-1 py-1.5">
         {categoryTree(categories).map((category) => (
@@ -34,7 +34,9 @@ export default function CategoryNav({ categories }) {
 
 function linkClass({ isActive }) {
   return `block whitespace-nowrap rounded-control px-3 py-2 text-sm font-medium transition-colors ${
-    isActive ? 'bg-primary-50 text-primary-700' : 'text-ink-700 hover:bg-ink-100 hover:text-primary-700'
+    isActive
+      ? 'bg-primary-50 text-primary-800 ring-1 ring-inset ring-primary-200'
+      : 'text-ink-600 hover:bg-ink-100 hover:text-fg'
   }`;
 }
 
@@ -109,7 +111,7 @@ function CategoryNavItem({ category, canHover }) {
           onClick={() => setOpen((value) => !value)}
           {...disclosure}
           aria-label={`${category.name} — ქვეკატეგორიები`}
-          className="flex h-9 w-7 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100 hover:text-primary-700"
+          className="flex h-9 w-7 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-ink-100 hover:text-fg"
         >
           <ChevronDown
             className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`}
@@ -128,7 +130,7 @@ function CategoryNavItem({ category, canHover }) {
         hidden={!open}
         className="absolute left-0 top-full z-drawer pt-1"
       >
-        <ul className="w-56 overflow-hidden rounded-card border border-ink-200 bg-white py-1.5 shadow-popover">
+        <ul className="w-56 overflow-hidden rounded-card border border-ink-200 bg-ink-100 py-1.5 shadow-popover">
           {category.children.map((child) => (
             <li key={child.id}>
               <NavLink
@@ -136,7 +138,7 @@ function CategoryNavItem({ category, canHover }) {
                 onClick={() => setOpen(false)}
                 className={({ isActive }) =>
                   `block px-3 py-2 text-sm transition-colors ${
-                    isActive ? 'bg-primary-50 text-primary-700' : 'text-ink-700 hover:bg-ink-50'
+                    isActive ? 'bg-primary-50 text-primary-800' : 'text-ink-700 hover:bg-ink-200 hover:text-fg'
                   }`
                 }
               >

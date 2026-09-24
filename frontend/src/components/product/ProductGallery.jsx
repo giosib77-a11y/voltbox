@@ -80,12 +80,12 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
         onMouseLeave={() => setZoom(null)}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        className="group relative aspect-square overflow-hidden rounded-card border border-ink-200 bg-white"
+        className="group relative aspect-square overflow-hidden rounded-card border border-ink-200 bg-media"
       >
         <img
           src={images[index]}
           alt={`${alt} — სურათი ${index + 1}`}
-          className="h-full w-full object-cover transition-transform duration-200"
+          className="h-full w-full object-cover transition-transform duration-200 dark:mix-blend-multiply"
           style={
             zoom
               ? { transform: 'scale(1.8)', transformOrigin: `${zoom.x}% ${zoom.y}%` }
@@ -102,7 +102,7 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
               type="button"
               onClick={() => go(-1)}
               aria-label="წინა სურათი"
-              className="absolute left-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink-700 shadow-card transition-opacity hover:bg-white lg:opacity-0 lg:group-hover:opacity-100"
+              className="absolute left-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-surface/90 text-ink-700 shadow-card transition-opacity hover:bg-surface lg:opacity-0 lg:group-hover:opacity-100"
             >
               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -110,7 +110,7 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
               type="button"
               onClick={() => go(1)}
               aria-label="შემდეგი სურათი"
-              className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink-700 shadow-card transition-opacity hover:bg-white lg:opacity-0 lg:group-hover:opacity-100"
+              className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-surface/90 text-ink-700 shadow-card transition-opacity hover:bg-surface lg:opacity-0 lg:group-hover:opacity-100"
             >
               <ChevronRight className="h-5 w-5" aria-hidden="true" />
             </button>

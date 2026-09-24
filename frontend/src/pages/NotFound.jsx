@@ -8,7 +8,7 @@ export default function NotFound() {
 
   return (
     <div className="container-page flex min-h-[60vh] flex-col items-center justify-center py-14 text-center">
-      <p className="text-7xl font-bold tracking-tight text-primary-600 sm:text-8xl">404</p>
+      <p className="text-7xl font-bold tracking-tight text-primary-700 sm:text-8xl">404</p>
       <h1 className="mt-4 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
         გვერდი ვერ მოიძებნა
       </h1>

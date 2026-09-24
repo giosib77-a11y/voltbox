@@ -35,24 +35,26 @@ function ProductCard({ product, className = '', priority = false }) {
 
   return (
     <article
-      className={`group relative flex h-full flex-col overflow-hidden rounded-card border border-ink-200 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:border-ink-300 hover:shadow-card-hover ${className}`}
+      className={`group relative flex h-full flex-col overflow-hidden rounded-card border border-line bg-surface transition-all duration-200 hover:-translate-y-0.5 hover:border-primary-400/60 hover:shadow-glow ${className}`}
     >
       <Link
         to={`/product/${product.slug}`}
         className="flex flex-1 flex-col focus-visible:outline-none"
         aria-label={product.name}
       >
-        <div className="relative">
+        {/* სურათი ღია ფილაზე, ბარათის კიდიდან შეწეული: თეთრფონიანი ფოტო მუქ
+            ბარათზე ნათელ მართკუთხედად აღარ იკითხება — ფილა მისი ჩარჩოა */}
+        <div className="relative p-2 pb-0">
           <ProductImage
             src={product.images?.[0]}
             alt={product.name}
-            className="aspect-square w-full"
+            className="aspect-square w-full rounded-control"
             imgClassName="transition-transform duration-300 group-hover:scale-[1.04]"
             loading={priority ? 'eager' : 'lazy'}
             sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
           />
 
-          <div className="pointer-events-none absolute left-2.5 top-2.5 flex flex-col items-start gap-1.5">
+          <div className="pointer-events-none absolute left-4 top-4 flex flex-col items-start gap-1.5">
             {product.isNew && <Badge tone="new">{TEXT.isNew}</Badge>}
             {product.hasDiscount && (
               <Badge tone="discount">{formatDiscount(product.discountPercent)}</Badge>
@@ -60,8 +62,8 @@ function ProductCard({ product, className = '', priority = false }) {
           </div>
 
           {isOutOfStock && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
-              <span className="rounded-pill bg-ink-800 px-3 py-1.5 text-xs font-semibold text-white">
+            <div className="absolute inset-2 bottom-0 flex items-center justify-center rounded-control bg-white/70 backdrop-blur-[1px]">
+              <span className="rounded-pill bg-scrim/85 px-3 py-1.5 text-xs font-semibold text-white">
                 {TEXT.outOfStock}
               </span>
             </div>
@@ -69,13 +71,13 @@ function ProductCard({ product, className = '', priority = false }) {
         </div>
 
         <div className="flex flex-1 flex-col gap-1.5 p-3.5 sm:p-4">
-          <p className="text-2xs font-semibold uppercase tracking-wide text-ink-500">{product.brand}</p>
+          <p className="text-2xs font-semibold uppercase tracking-wide text-fg-muted">{product.brand}</p>
 
-          <h3 className="line-clamp-2-fallback min-h-[2.5rem] text-sm font-semibold leading-tight text-ink-900 transition-colors group-hover:text-primary-700">
+          <h3 className="line-clamp-2-fallback min-h-[2.5rem] text-sm font-semibold leading-tight text-fg transition-colors group-hover:text-primary-700">
             {product.name}
           </h3>
 
-          <p className="line-clamp-2-fallback text-xs leading-relaxed text-ink-500">
+          <p className="line-clamp-2-fallback text-xs leading-relaxed text-fg-muted">
             {product.shortDescription}
           </p>
 

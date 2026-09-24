@@ -30,15 +30,20 @@ export default function Header({ categories = [] }) {
   }, [location.pathname]);
 
   return (
-    <header className="sticky top-0 z-header border-b border-ink-200 bg-white/95 shadow-header backdrop-blur">
+    <header className="sticky top-0 z-header border-b border-line bg-canvas/85 backdrop-blur-xl supports-[backdrop-filter]:bg-canvas/70">
+      {/* სინათლის წვრილი ხაზი header-ის ქვედა კიდეზე — მხოლოდ დეკორი */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-transparent via-primary-500/50 to-transparent"
+      />
       {/* დამხმარე ზოლი — მხოლოდ დიდ ეკრანებზე */}
-      <div className="hidden border-b border-ink-100 bg-ink-50 lg:block">
-        <div className="container-page flex h-9 items-center justify-between text-xs text-ink-600">
+      <div className="hidden border-b border-ink-100 lg:block">
+        <div className="container-page flex h-9 items-center justify-between text-xs text-fg-muted">
           <p className="flex items-center gap-1.5">
-            <Truck className="h-3.5 w-3.5" aria-hidden="true" />
+            <Truck className="h-3.5 w-3.5 text-primary-700" aria-hidden="true" />
             უფასო მიწოდება {formatPrice(SHIPPING.freeThreshold)}-ზე მეტ შეკვეთაზე
           </p>
-          <a href={CONTACT.phoneHref} className="flex items-center gap-1.5 hover:text-primary-700">
+          <a href={CONTACT.phoneHref} className="flex items-center gap-1.5 transition-colors hover:text-fg">
             <Phone className="h-3.5 w-3.5" aria-hidden="true" />
             {CONTACT.phone}
           </a>
@@ -51,7 +56,7 @@ export default function Header({ categories = [] }) {
             type="button"
             onClick={() => setMenuOpen(true)}
             aria-label="მენიუს გახსნა"
-            className="-ml-2 flex h-10 w-10 items-center justify-center rounded-control text-ink-700 transition-colors hover:bg-ink-100 md:hidden"
+            className="-ml-2 flex h-10 w-10 items-center justify-center rounded-control text-ink-700 transition-colors hover:bg-ink-100 hover:text-fg md:hidden"
           >
             <Menu className="h-5 w-5" aria-hidden="true" />
           </button>

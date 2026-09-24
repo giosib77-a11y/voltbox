@@ -107,7 +107,7 @@ export default function CheckoutSuccess() {
           <Badge tone={status.tone}>{status.label}</Badge>
         </div>
 
-        <div className="mt-5 inline-flex items-center gap-2 rounded-card border border-ink-200 bg-white px-4 py-2.5">
+        <div className="mt-5 inline-flex items-center gap-2 rounded-card border border-ink-200 bg-surface px-4 py-2.5">
           <span className="text-sm text-ink-500">შეკვეთის ნომერი:</span>
           <strong className="text-base tabular-nums text-ink-900">{order.orderNumber}</strong>
           <button
@@ -121,7 +121,7 @@ export default function CheckoutSuccess() {
         </div>
       </div>
 
-      <section className="mt-8 rounded-card border border-ink-200 bg-white p-5 sm:p-6">
+      <section className="mt-8 rounded-card border border-ink-200 bg-surface p-5 sm:p-6">
         <h2 className="text-base font-bold text-ink-900">შეკვეთის დეტალები</h2>
 
         <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2">

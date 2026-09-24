@@ -123,7 +123,7 @@ export default function ProductDetails() {
 
           <p className="mt-4 text-sm leading-relaxed text-ink-600">{product.shortDescription}</p>
 
-          <div className="mt-5 rounded-card border border-ink-200 bg-white p-4">
+          <div className="mt-5 rounded-card border border-ink-200 bg-surface p-4">
             <PriceTag
               price={product.price}
               oldPrice={product.oldPrice}
@@ -132,7 +132,7 @@ export default function ProductDetails() {
               showBadge
             />
             {savings > 0 && (
-              <p className="mt-1.5 text-sm font-medium text-accent-600">
+              <p className="mt-1.5 text-sm font-medium text-accent-400">
                 დაზოგავთ {formatPrice(savings)}
               </p>
             )}
@@ -166,19 +166,19 @@ export default function ProductDetails() {
 
           <ul className="mt-5 grid gap-2.5 text-sm text-ink-600 sm:grid-cols-2">
             <li className="flex items-start gap-2.5">
-              <Truck className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
+              <Truck className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" aria-hidden="true" />
               მიწოდება {SHIPPING.etaDays}
             </li>
             <li className="flex items-start gap-2.5">
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" aria-hidden="true" />
               გარანტია {formatSpecValue(product.specs?.warranty || '12 თვე')}
             </li>
             <li className="flex items-start gap-2.5">
-              <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
+              <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" aria-hidden="true" />
               დაბრუნება 14 დღეში
             </li>
             <li className="flex items-start gap-2.5">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" aria-hidden="true" />
               ორიგინალი პროდუქცია
             </li>
           </ul>
@@ -201,7 +201,7 @@ function ProductTabs({ product, tab, onTabChange }) {
   const specEntries = Object.entries(product.specs || {});
 
   return (
-    <section className="mt-10 rounded-card border border-ink-200 bg-white">
+    <section className="mt-10 rounded-card border border-ink-200 bg-surface">
       <div role="tablist" aria-label="პროდუქტის დეტალები" className="flex overflow-x-auto border-b border-ink-200">
         {TABS.map((item) => (
           <button

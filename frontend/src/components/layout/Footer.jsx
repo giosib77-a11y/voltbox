@@ -16,7 +16,7 @@ export default function Footer({ categories = [] }) {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="mt-auto border-t border-ink-200 bg-white">
+    <footer className="mt-auto border-t border-ink-200 bg-surface">
       <div className="container-page grid gap-8 py-10 sm:grid-cols-2 lg:grid-cols-4 lg:py-12">
         <div>
           <div className="flex items-center gap-2.5">

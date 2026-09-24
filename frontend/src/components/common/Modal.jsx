@@ -125,7 +125,7 @@ export default function Modal({
         type="button"
         aria-label="დახურვა"
         tabIndex={-1}
-        className="absolute inset-0 cursor-default bg-ink-950/50 animate-fade-in"
+        className="absolute inset-0 cursor-default bg-scrim/50 animate-fade-in"
         onClick={onClose}
       />
 
@@ -137,7 +137,7 @@ export default function Modal({
         aria-labelledby={labelledBy}
         tabIndex={-1}
         className={[
-          'relative flex flex-col overflow-hidden bg-white shadow-popover focus:outline-none',
+          'relative flex flex-col overflow-hidden bg-surface shadow-popover focus:outline-none',
           PANELS[position] || PANELS.center,
           position === 'center' ? CENTER_WIDTHS[size] || CENTER_WIDTHS.lg : '',
           panelClassName,
@@ -163,7 +163,7 @@ export default function Modal({
 
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
 
-        {footer && <div className="shrink-0 border-t border-ink-200 bg-white p-4">{footer}</div>}
+        {footer && <div className="shrink-0 border-t border-ink-200 bg-surface p-4">{footer}</div>}
       </div>
     </div>,
     document.body,

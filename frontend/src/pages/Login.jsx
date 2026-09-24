@@ -62,7 +62,7 @@ export default function Login() {
   return (
     <div className="container-page flex justify-center py-10 lg:py-16">
       <div className="w-full max-w-md">
-        <div className="rounded-card border border-ink-200 bg-white p-6 sm:p-8">
+        <div className="rounded-card border border-ink-200 bg-surface p-6 sm:p-8">
           <h1 className="text-2xl font-bold tracking-tight text-ink-900">შესვლა</h1>
           <p className="mt-1.5 text-sm text-ink-600">
             შედით ანგარიშში შეკვეთების ისტორიისა და მისამართების სანახავად.

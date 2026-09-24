@@ -42,7 +42,7 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
                   <Link
                     to="/admin"
                     onClick={onClose}
-                    className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-semibold text-accent-800 transition-colors hover:bg-accent-50"
+                    className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-semibold text-accent-400 transition-colors hover:bg-accent-50"
                   >
                     <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
                     ადმინ პანელი
@@ -83,7 +83,7 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-danger-700 transition-colors hover:bg-danger-50"
+                  className="flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-danger-fg transition-colors hover:bg-danger-50"
                 >
                   <LogOut className="h-5 w-5" aria-hidden="true" />
                   გასვლა

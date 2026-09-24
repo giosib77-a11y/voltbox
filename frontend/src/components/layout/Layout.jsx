@@ -23,7 +23,7 @@ export default function Layout() {
   // old behaviour on a browser that does not know the unit, where dropping to
   // `auto` would let the footer float up the page.
   return (
-    <div className="flex min-h-screen flex-col bg-ink-50 [@supports(min-height:100dvh)]:min-h-[100dvh]">
+    <div className="theme-dark flex min-h-screen flex-col bg-canvas text-fg [@supports(min-height:100dvh)]:min-h-[100dvh]">
       <a href="#main-content" className="skip-link">
         მთავარ კონტენტზე გადასვლა
       </a>

@@ -173,7 +173,7 @@ export default function Checkout() {
 
       <form onSubmit={handleSubmit} noValidate className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:gap-7">
         <div className="space-y-5">
-          <fieldset className="rounded-card border border-ink-200 bg-white p-5">
+          <fieldset className="rounded-card border border-ink-200 bg-surface p-5">
             <legend className="px-1 text-base font-bold text-ink-900">მიმღების მონაცემები</legend>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -247,7 +247,7 @@ export default function Checkout() {
             </div>
           </fieldset>
 
-          <fieldset className="rounded-card border border-ink-200 bg-white p-5">
+          <fieldset className="rounded-card border border-ink-200 bg-surface p-5">
             <legend className="px-1 text-base font-bold text-ink-900">გადახდის მეთოდი</legend>
             <div className="mt-4 space-y-2.5">
               {PAYMENT_METHODS.map((method) => (
@@ -280,7 +280,7 @@ export default function Checkout() {
 
         <div>
           <div className="lg:sticky lg:top-[8.5rem]">
-            <div className="mb-4 rounded-card border border-ink-200 bg-white p-4">
+            <div className="mb-4 rounded-card border border-ink-200 bg-surface p-4">
               <h2 className="text-sm font-bold text-ink-900">შეკვეთა ({itemsCount} ცალი)</h2>
               <ul className="mt-3 space-y-3">
                 {items.map((item) => (

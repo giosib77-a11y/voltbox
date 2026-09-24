@@ -91,7 +91,7 @@ export default function SearchResults() {
       </div>
 
       {!query ? (
-        <div className="rounded-card border border-dashed border-ink-300 bg-white px-6 py-14 text-center">
+        <div className="rounded-card border border-dashed border-ink-300 bg-surface px-6 py-14 text-center">
           <Search className="mx-auto h-8 w-8 text-ink-400" aria-hidden="true" />
           <h2 className="mt-4 text-lg font-semibold text-ink-900">რას ეძებთ?</h2>
           <p className="mt-1.5 text-sm text-ink-600">
@@ -104,7 +104,7 @@ export default function SearchResults() {
       ) : (
         <div className="lg:flex lg:gap-7">
           <aside className="hidden w-60 shrink-0 lg:block">
-            <div className="sticky top-[8.5rem] max-h-[calc(100vh-10rem)] overflow-y-auto rounded-card border border-ink-200 bg-white p-4 pr-3">
+            <div className="sticky top-[8.5rem] max-h-[calc(100vh-10rem)] overflow-y-auto rounded-card border border-ink-200 bg-surface p-4 pr-3">
               {sidebar}
             </div>
           </aside>

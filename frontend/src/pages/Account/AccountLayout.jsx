@@ -31,7 +31,7 @@ export default function AccountLayout() {
       <div className="lg:flex lg:gap-7">
         <aside className="mb-5 lg:mb-0 lg:w-60 lg:shrink-0">
           <nav aria-label="ანგარიშის ნავიგაცია">
-            <ul className="flex gap-2 overflow-x-auto rounded-card border border-ink-200 bg-white p-2 lg:flex-col lg:gap-1">
+            <ul className="flex gap-2 overflow-x-auto rounded-card border border-ink-200 bg-surface p-2 lg:flex-col lg:gap-1">
               {NAV.map((item) => (
                 <li key={item.to} className="shrink-0 lg:shrink">
                   <NavLink
@@ -53,7 +53,7 @@ export default function AccountLayout() {
                 <button
                   type="button"
                   onClick={logout}
-                  className="flex w-full items-center gap-2.5 whitespace-nowrap rounded-control px-3 py-2.5 text-sm font-medium text-danger-700 transition-colors hover:bg-danger-50"
+                  className="flex w-full items-center gap-2.5 whitespace-nowrap rounded-control px-3 py-2.5 text-sm font-medium text-danger-fg transition-colors hover:bg-danger-50"
                 >
                   <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
                   გასვლა

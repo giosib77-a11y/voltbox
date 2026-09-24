@@ -34,7 +34,7 @@ export default function Pagination({ page = 1, totalPages = 1, onChange, classNa
         onClick={() => onChange(page - 1)}
         disabled={page <= 1}
         aria-label="წინა გვერდი"
-        className={`${buttonBase} border-ink-300 bg-white text-ink-700 hover:border-primary-400 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink-300 disabled:hover:text-ink-700`}
+        className={`${buttonBase} border-ink-300 bg-surface text-ink-700 hover:border-primary-400 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink-300 disabled:hover:text-ink-700`}
       >
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
       </button>
@@ -53,7 +53,7 @@ export default function Pagination({ page = 1, totalPages = 1, onChange, classNa
             className={`${buttonBase} ${
               item === page
                 ? 'border-primary-600 bg-primary-600 text-white'
-                : 'border-ink-300 bg-white text-ink-700 hover:border-primary-400 hover:text-primary-700'
+                : 'border-ink-300 bg-surface text-ink-700 hover:border-primary-400 hover:text-primary-700'
             }`}
           >
             {item}
@@ -66,7 +66,7 @@ export default function Pagination({ page = 1, totalPages = 1, onChange, classNa
         onClick={() => onChange(page + 1)}
         disabled={page >= totalPages}
         aria-label="შემდეგი გვერდი"
-        className={`${buttonBase} border-ink-300 bg-white text-ink-700 hover:border-primary-400 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink-300 disabled:hover:text-ink-700`}
+        className={`${buttonBase} border-ink-300 bg-surface text-ink-700 hover:border-primary-400 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink-300 disabled:hover:text-ink-700`}
       >
         <ChevronRight className="h-4 w-4" aria-hidden="true" />
       </button>

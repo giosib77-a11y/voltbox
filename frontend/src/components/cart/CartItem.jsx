@@ -47,7 +47,7 @@ export default function CartItem({ item, onQtyChange, onRemove }) {
             type="button"
             onClick={() => onRemove(productId)}
             aria-label={`${snapshot.name} — ${TEXT.remove}`}
-            className="-mr-1.5 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-danger-50 hover:text-danger-600"
+            className="-mr-1.5 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-danger-50 hover:text-danger-fg"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>

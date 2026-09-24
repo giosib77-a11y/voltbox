@@ -10,18 +10,18 @@ import { useToast } from '../../context/ToastContext.jsx';
 const STYLES = {
   success: {
     icon: CheckCircle2,
-    wrapper: 'border-success-500/30 bg-white',
+    wrapper: 'border-success-500/30 bg-surface',
     iconClass: 'text-success-600',
   },
   error: {
     icon: AlertCircle,
-    wrapper: 'border-danger-500/30 bg-white',
-    iconClass: 'text-danger-600',
+    wrapper: 'border-danger-500/30 bg-surface',
+    iconClass: 'text-danger-fg',
   },
   info: {
     icon: Info,
-    wrapper: 'border-primary-500/30 bg-white',
-    iconClass: 'text-primary-600',
+    wrapper: 'border-primary-500/30 bg-surface',
+    iconClass: 'text-primary-700',
   },
 };
 

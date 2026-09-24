@@ -94,7 +94,7 @@ export default function Category() {
 
       <div className="lg:flex lg:gap-7">
         <aside className="hidden w-64 shrink-0 lg:block">
-          <div className="sticky top-[8.5rem] max-h-[calc(100vh-10rem)] overflow-y-auto rounded-card border border-ink-200 bg-white p-4 pr-3">
+          <div className="sticky top-[8.5rem] max-h-[calc(100vh-10rem)] overflow-y-auto rounded-card border border-ink-200 bg-surface p-4 pr-3">
             {sidebar}
           </div>
         </aside>

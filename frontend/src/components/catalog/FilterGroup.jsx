@@ -104,7 +104,7 @@ function CheckboxControl({ options, selected, config, onToggle, labelFor }) {
             >
               <span
                 className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
-                  isChecked ? 'border-primary-600 bg-primary-600' : 'border-ink-300 bg-white'
+                  isChecked ? 'border-primary-600 bg-primary-600' : 'border-ink-300 bg-surface'
                 }`}
               >
                 {isChecked && <Check className="h-3 w-3 text-white" aria-hidden="true" />}
@@ -145,7 +145,7 @@ function SwatchControl({ options, selected, config, onToggle, labelFor }) {
               className={`flex h-9 items-center gap-2 rounded-pill border px-2.5 text-xs transition-all ${
                 isChecked
                   ? 'border-primary-600 bg-primary-50 font-semibold text-primary-800'
-                  : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300'
+                  : 'border-ink-200 bg-surface text-ink-700 hover:border-ink-300'
               } ${isDisabled ? 'cursor-not-allowed opacity-40' : ''}`}
             >
               <span
@@ -185,7 +185,7 @@ function ToggleControl({ config, counts, value, onToggle }) {
         }`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-surface shadow-sm transition-all ${
             isOn ? 'left-[1.375rem]' : 'left-0.5'
           }`}
         />

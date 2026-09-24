@@ -9,13 +9,13 @@ import { Loader2 } from 'lucide-react';
 
 const VARIANTS = {
   primary:
-    'bg-primary-600 text-white shadow-sm hover:bg-primary-700 active:bg-primary-800 disabled:bg-primary-300',
+    'bg-primary-600 text-white shadow-sm hover:bg-primary-hover active:bg-primary-press disabled:bg-primary-300',
   secondary:
-    'bg-ink-900 text-white shadow-sm hover:bg-ink-800 active:bg-ink-950 disabled:bg-ink-400',
+    'bg-ink-900 text-surface shadow-sm hover:bg-ink-800 active:bg-ink-950 disabled:bg-ink-400',
   accent:
     'bg-accent-600 text-white shadow-sm hover:bg-accent-700 active:bg-accent-800 disabled:bg-accent-200',
   outline:
-    'border border-ink-300 bg-white text-ink-800 hover:border-primary-400 hover:bg-primary-50 hover:text-primary-700 active:bg-primary-100 disabled:text-ink-400',
+    'border border-ink-300 bg-surface text-ink-800 hover:border-primary-400 hover:bg-primary-50 hover:text-primary-700 active:bg-primary-100 disabled:text-ink-400',
   ghost:
     'text-ink-700 hover:bg-ink-100 active:bg-ink-200 disabled:text-ink-400',
   danger:

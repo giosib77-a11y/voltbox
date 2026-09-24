@@ -28,7 +28,7 @@ export default function ProductCarousel({
   return (
     <section className="py-8 sm:py-10">
       <div className="mb-4 flex items-end justify-between gap-4 sm:mb-5">
-        <h2 className="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">{title}</h2>
+        <h2 className="text-xl font-bold tracking-tight text-fg sm:text-2xl">{title}</h2>
 
         <div className="flex items-center gap-2">
           {viewAllTo && (
@@ -44,7 +44,7 @@ export default function ProductCarousel({
               type="button"
               onClick={() => scrollBy(-1)}
               aria-label="წინა პროდუქტები"
-              className="flex h-9 w-9 items-center justify-center rounded-control border border-ink-300 bg-white text-ink-600 transition-colors hover:border-primary-400 hover:text-primary-700"
+              className="flex h-9 w-9 items-center justify-center rounded-control border border-line-strong bg-surface text-ink-700 transition-colors hover:border-primary-400 hover:bg-ink-100 hover:text-fg"
             >
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -52,7 +52,7 @@ export default function ProductCarousel({
               type="button"
               onClick={() => scrollBy(1)}
               aria-label="შემდეგი პროდუქტები"
-              className="flex h-9 w-9 items-center justify-center rounded-control border border-ink-300 bg-white text-ink-600 transition-colors hover:border-primary-400 hover:text-primary-700"
+              className="flex h-9 w-9 items-center justify-center rounded-control border border-line-strong bg-surface text-ink-700 transition-colors hover:border-primary-400 hover:bg-ink-100 hover:text-fg"
             >
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </button>

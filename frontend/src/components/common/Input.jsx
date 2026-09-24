@@ -32,7 +32,7 @@ const Input = forwardRef(function Input(
       {label && (
         <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-ink-800">
           {label}
-          {required && <span className="ml-0.5 text-danger-600" aria-hidden="true">*</span>}
+          {required && <span className="ml-0.5 text-danger-fg" aria-hidden="true">*</span>}
         </label>
       )}
 
@@ -50,7 +50,7 @@ const Input = forwardRef(function Input(
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
           className={[
-            'field-text h-11 w-full rounded-control border bg-white px-3.5 text-ink-900 transition-colors',
+            'field-text h-11 w-full rounded-control border bg-surface px-3.5 text-ink-900 transition-colors',
             'placeholder:text-ink-500 focus:outline-none focus:ring-2 focus:ring-offset-0',
             LeftIcon ? 'pl-9' : '',
             rightSlot ? 'pr-11' : '',
@@ -68,7 +68,7 @@ const Input = forwardRef(function Input(
       </div>
 
       {error ? (
-        <p id={errorId} className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-danger-600">
+        <p id={errorId} className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-danger-fg">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           {error}
         </p>

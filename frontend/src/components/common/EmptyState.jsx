@@ -16,7 +16,7 @@ export default function EmptyState({
 }) {
   return (
     <div
-      className={`flex flex-col items-center justify-center rounded-card border border-dashed border-ink-300 bg-white px-6 py-14 text-center ${className}`}
+      className={`flex flex-col items-center justify-center rounded-card border border-dashed border-ink-300 bg-surface px-6 py-14 text-center ${className}`}
     >
       <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-ink-100">
         <Icon className="h-7 w-7 text-ink-500" aria-hidden="true" />
