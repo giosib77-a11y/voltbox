@@ -57,7 +57,10 @@ services:
       # claim this path and answer with index.html - a 200 that is not a sitemap.
       - type: rewrite
         source: /sitemap.xml
-        destination: https://api.voltbox.ge/sitemap.xml
+        # TEMP-ONRENDER: the API's temporary onrender.com address for the free
+        # test deployment. Back to https://api.voltbox.ge/sitemap.xml once
+        # voltbox.ge is bought.
+        destination: https://voltbox-api.onrender.com/sitemap.xml
       # React Router resolves the path in the browser, but only after
       # index.html has loaded. A rewrite, not a redirect: a redirect would swap
       # the address someone shared for /index.html.
@@ -105,6 +108,11 @@ services:
       # The img-src origin is the Supabase project's public URL - the scheme and
       # host of every product image link, no path. Not a secret. A different
       # project means a different host here, or every product image is blocked.
+      #
+      # TEMP-ONRENDER: connect-src names the API's temporary onrender.com
+      # address for the free test deployment. Back to https://api.voltbox.ge
+      # once voltbox.ge is bought - with VITE_API_BASE_URL, whose origin it has
+      # to match.
       - path: /*
         name: Content-Security-Policy
         value: >-
@@ -113,7 +121,7 @@ services:
           style-src 'self';
           img-src 'self' https://jnfokdczfpcysnqiwask.supabase.co;
           font-src 'self';
-          connect-src 'self' https://api.voltbox.ge;
+          connect-src 'self' https://voltbox-api.onrender.com;
           form-action 'none';
           base-uri 'none';
           frame-ancestors 'none'

@@ -30,21 +30,33 @@ backend   →  Docker, gunicorn + uvicorn worker-ები
 - Health Check Path უფასოზეც მუშაობს — Render-ის უფასოს შეზღუდვების სიაში ის არ
   არის — და ფაილში რჩება.
 
-**სამი ცვლადი, რომლებიც დომენამდე onrender.com-ზე მიუთითებს.** სახელებს Render
-სერვისის შექმნისას აძლევს (დაკავებულ სახელს სუფიქსს უმატებს) — ზუსტი მისამართი
-სერვისის გვერდზეა. იცვლება `backend/render.yaml`-ში, არა პანელში — sync-ი
-პანელისას გადააწერს:
+**დომენამდე onrender.com-ზე მიუთითებს.** სახელებს Render სერვისის შექმნისას
+აძლევს (დაკავებულ სახელს სუფიქსს უმატებს). API — `https://voltbox-api.onrender.com`;
+storefront-ი ჯერ შექმნილი არ არის — `https://voltbox-storefront.onrender.com`
+მხოლოდ მაშინ, თუ სახელი თავისუფალია; სხვა მისამართის შემთხვევაში ქვემოთ
+storefront-ის ორი მნიშვნელობა ისევ იცვლება. ყველაფერი Blueprint-ის ფაილებშია —
+იცვლება კოდში, არა პანელში, რომელსაც შემდეგი sync-ი გადააწერს:
 
-| ცვლადი | დომენამდე | რა მოხდება, თუ დარჩა `voltbox.ge` |
+| სად | დომენამდე | დომენის შემდეგ |
 |---|---|---|
-| `CORS_ORIGINS` | `https://<storefront>.onrender.com` | ბრაუზერი მაღაზიის **ყველა** API-მოთხოვნას ბლოკავს |
-| `SITE_URL` | `https://<storefront>.onrender.com` | sitemap-ის და Telegram-ის ადმინის ბმულები არარსებულ დომენზე მიდის |
-| `TRUSTED_HOSTS` | ცვლილება არ სჭირდება: `<api>.onrender.com`-ს აპი `RENDER_EXTERNAL_HOSTNAME`-იდან თვითონ უმატებს (§2) | არაფერი — `api.voltbox.ge` დომენამდე უბრალოდ არავის ემთხვევა |
+| `CORS_ORIGINS` (`backend/render.yaml`) | `https://voltbox-storefront.onrender.com` | `https://voltbox.ge` |
+| `SITE_URL` (`backend/render.yaml`) | `https://voltbox-storefront.onrender.com` | `https://voltbox.ge` |
+| `connect-src` (`frontend/render.yaml`) | `https://voltbox-api.onrender.com` | `https://api.voltbox.ge` |
+| `/sitemap.xml`-ის rewrite (`frontend/render.yaml`) | `https://voltbox-api.onrender.com/sitemap.xml` | `https://api.voltbox.ge/sitemap.xml` |
+| `TRUSTED_HOSTS` | ცვლილება არ სჭირდება: `voltbox-api.onrender.com`-ს აპი `RENDER_EXTERNAL_HOSTNAME`-იდან თვითონ უმატებს (§2) | `api.voltbox.ge` — უკვე ასეა |
 
-storefront-ის CSP-ის `connect-src` და `/sitemap.xml`-ის rewrite
-(`frontend/render.yaml`) ჯერ ისევ `https://api.voltbox.ge`-ს ასახელებს — API-ს
-onrender.com-ის მისამართი მხოლოდ მისი შექმნის შემდეგ ჩანს და **შემდეგ ნაბიჯზე
-იცვლება**. მანამდე მაღაზიის API-მოთხოვნებს CSP ბლოკავს.
+თითოეულ დროებით მნიშვნელობას ფაილში `TEMP-ONRENDER` კომენტარი ახლავს —
+დომენის ყიდვის შემდეგ ყველა ერთი ძებნით იპოვება:
+
+```bash
+grep -rn TEMP-ONRENDER backend/render.yaml frontend/render.yaml
+```
+
+storefront-ის Blueprint-ის შექმნისას Render იკითხავს (§3):
+`VITE_API_BASE_URL=https://voltbox-api.onrender.com/api/v1` — origin-ი
+`connect-src`-ს უნდა ემთხვეოდეს — და
+`VITE_SITE_URL=https://voltbox-storefront.onrender.com`. ეს ორი ფაილში არ წერია,
+ამიტომ დომენის შემდეგ პანელში იცვლება და ახალ deploy-ს სჭირდება.
 
 ---
 
@@ -94,7 +106,7 @@ sync-ისას ფაილში ჩამოთვლილი rule-ებ�
 | სად | მნიშვნელობა | რა მოხდება, თუ არ ემთხვევა |
 |---|---|---|
 | `img-src` | `https://jnfokdczfpcysnqiwask.supabase.co` — Supabase პროექტის საჯარო URL-ი, ყველა პროდუქტის სურათის ბმულში (საიდუმლო არ არის) | ბრაუზერი **ყველა პროდუქტის სურათს დაბლოკავს**. სხვა Supabase პროექტი = სხვა host-ი აქ |
-| `connect-src` | `https://api.voltbox.ge` | `VITE_API_BASE_URL`-ის origin-ს **უნდა ემთხვეოდეს** — თორემ ყველა API-მოთხოვნა ბლოკდება. დომენამდე — onrender.com-ის მისამართი (§0) |
+| `connect-src` | `https://api.voltbox.ge` (დომენამდე `https://voltbox-api.onrender.com`, §0) | `VITE_API_BASE_URL`-ის origin-ს **უნდა ემთხვეოდეს** — თორემ ყველა API-მოთხოვნა ბლოკდება |
 
 გაშვებამდე — placeholder-ი ფაილში აღარ უნდა დარჩეს:
 

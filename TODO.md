@@ -20,8 +20,8 @@
       `/product/<slug>` → 404, `/category/<slug>` → 404, `/admin` → 404.
 
       CSP-ის img-src-ში Supabase-ის origin-ი ჩაწერილია. connect-src და
-      sitemap-ის rewrite ჯერ api.voltbox.ge-ზეა — onrender.com-ზე სატესტოდ
-      API-ს შექმნის შემდეგ იცვლება (deployment.md §0).
+      sitemap-ის rewrite სატესტოდ voltbox-api.onrender.com-ზეა — დომენის
+      შემდეგ უკან api.voltbox.ge-ზე: grep -rn TEMP-ONRENDER (deployment.md §0).
 
       grep -v '^\s*#' frontend/render.yaml | grep -oE '<[A-Z_]+>'   ← ცარიელი უნდა იყოს
 

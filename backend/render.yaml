@@ -73,11 +73,17 @@ services:
       # domain is verified.
       - key: TRUSTED_HOSTS
         value: api.voltbox.ge
+      # TEMP-ONRENDER: the storefront's temporary onrender.com address for the
+      # free test deployment - what Render gives a static site named
+      # voltbox-storefront when the name is free; if it assigns another, this
+      # changes with it. Back to https://voltbox.ge once voltbox.ge is bought.
       - key: CORS_ORIGINS
-        value: https://voltbox.ge
+        value: https://voltbox-storefront.onrender.com
       # Every URL in the sitemap and the admin link in each Telegram notice.
+      # TEMP-ONRENDER: as CORS_ORIGINS above. Back to https://voltbox.ge once
+      # voltbox.ge is bought.
       - key: SITE_URL
-        value: https://voltbox.ge
+        value: https://voltbox-storefront.onrender.com
 
       # Render asks for these when the Blueprint is created, and only then:
       # later syncs ignore them, so a secret added after that is added in the
