@@ -13,14 +13,13 @@ import { formatPrice } from '../../utils/format.js';
 
 /**
  * Sticky header.
- * Desktop: ლოგო · კატეგორიები · ძებნა · ანგარიში · კალათა. მთავარ გვერდზე
- * კატეგორიების ღილაკი არ არის — იქ იგივე სია hero-ს გვერდით დგას.
+ * Desktop: ლოგო · კატეგორიები · ძებნა · ანგარიში · კალათა — ყველა გვერდზე ერთნაირად,
+ * მთავარზეც, სადაც იგივე სია hero-ს გვერდითაც დგას.
  * Mobile (< 768px): hamburger · ლოგო · ანგარიში/კალათა, ძებნა ცალკე ხაზში.
  */
 export default function Header({ categories = [] }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
-  const isHome = location.pathname === '/';
 
   const searchDefault =
     location.pathname === '/search'
@@ -66,11 +65,9 @@ export default function Header({ categories = [] }) {
 
           <Logo />
 
-          {!isHome && (
-            <div className="hidden md:block">
-              <CategoryMenuButton categories={categories} />
-            </div>
-          )}
+          <div className="hidden md:block">
+            <CategoryMenuButton categories={categories} />
+          </div>
 
           <div className="mx-auto hidden max-w-xl flex-1 md:block">
             <SearchBar defaultValue={searchDefault} />

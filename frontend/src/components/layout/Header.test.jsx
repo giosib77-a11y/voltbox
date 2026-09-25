@@ -1,7 +1,7 @@
 /**
- * The header's "კატეგორიები" button: on every page but the home page it opens
- * the vertical category menu as a dropdown. On the home page the same menu
- * stands beside the hero, so the header has no button.
+ * The header's "კატეგორიები" button: on every page, the home page included, it
+ * opens the vertical category menu as a dropdown, so the header is the same
+ * everywhere. On the home page the same menu also stands beside the hero.
  *
  * The header's other controls need the auth and cart providers and are not
  * what these check, so they are stubbed.
@@ -39,11 +39,18 @@ const menuButton = () => screen.getByRole('button', { name: 'კატეგო�
 const phonesLink = () => screen.getByRole('link', { name: 'ტელეფონები' });
 
 describe('Header category button', () => {
-  it('is not on the home page, where the menu stands beside the hero', () => {
+  it('is on the home page too, and opens the same menu there', async () => {
+    const user = userEvent.setup();
     mountAt('/');
 
-    expect(screen.queryByRole('button', { name: 'კატეგორიები' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'ტელეფონები', hidden: true })).toBeNull();
+    expect(menuButton()).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('link', { name: 'ტელეფონები' })).toBeNull();
+
+    await user.click(menuButton());
+
+    const dropdown = document.getElementById(menuButton().getAttribute('aria-controls'));
+    expect(dropdown).toBeVisible();
+    expect(dropdown).toContainElement(phonesLink());
   });
 
   it('opens the vertical menu on a category page', async () => {
