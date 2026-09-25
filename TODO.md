@@ -19,8 +19,9 @@
       იმუშავებს და **ყველა გაზიარებული ბმული 404-ს დააბრუნებს** — გაზომილია:
       `/product/<slug>` → 404, `/category/<slug>` → 404, `/admin` → 404.
 
-      ⚠️ deploy-ამდე CSP-ში ერთ placeholder-ი: `<SUPABASE_STORAGE_ORIGIN>`
-      (სურათების URL-ის origin). დაუწერლად ყველა სურათი ბლოკდება.
+      CSP-ის img-src-ში Supabase-ის origin-ი ჩაწერილია. connect-src და
+      sitemap-ის rewrite ჯერ api.voltbox.ge-ზეა — onrender.com-ზე სატესტოდ
+      API-ს შექმნის შემდეგ იცვლება (deployment.md §0).
 
       grep -v '^\s*#' frontend/render.yaml | grep -oE '<[A-Z_]+>'   ← ცარიელი უნდა იყოს
 
@@ -37,8 +38,10 @@
 
       Render → New → Blueprint → Blueprint Path: backend/render.yaml
 
-      API, refresh-ტოკენების cron job-ი, Health Check Path (/api/v1/health/live),
-      APP_ENV, TRUSTED_HOSTS, CORS_ORIGINS და SITE_URL ფაილშია.
+      API (plan: free — სატესტოდ, deployment.md §0), Health Check Path
+      (/api/v1/health/live), APP_ENV, TRUSTED_HOSTS, CORS_ORIGINS და SITE_URL
+      ფაილშია. ⚠️ refresh-ტოკენების cron job-ი უფასოზე ამოღებულია — ფასიანზე
+      გადასვლისას plan 0.5c-512mb-ზე და job-ი უკან (deployment.md §2, Cron job).
 
       შექმნისას ერთხელ იკითხება:
       JWT_SECRET=<ახალი>            ← python -c "import secrets; print(secrets.token_urlsafe(48))"

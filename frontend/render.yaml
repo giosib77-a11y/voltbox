@@ -102,18 +102,16 @@ services:
       #                       submission would only mean a handler failed before
       #                       preventDefault, and a reload is the wrong outcome.
       #
-      # FILL IN BEFORE THE FIRST DEPLOY: the storage origin is not decided.
-      # SUPABASE_STORAGE_ORIGIN, in angle brackets below, is the scheme and host
-      # of the image URLs the API returns, no path. The placeholder cannot pass
-      # for a host - left in, a browser drops it as an invalid source, names it
-      # in the console, and blocks every product image.
+      # The img-src origin is the Supabase project's public URL - the scheme and
+      # host of every product image link, no path. Not a secret. A different
+      # project means a different host here, or every product image is blocked.
       - path: /*
         name: Content-Security-Policy
         value: >-
           default-src 'none';
           script-src 'self';
           style-src 'self';
-          img-src 'self' <SUPABASE_STORAGE_ORIGIN>;
+          img-src 'self' https://jnfokdczfpcysnqiwask.supabase.co;
           font-src 'self';
           connect-src 'self' https://api.voltbox.ge;
           form-action 'none';

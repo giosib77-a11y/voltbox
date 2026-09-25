@@ -13,6 +13,41 @@ backend   →  Docker, gunicorn + uvicorn worker-ები
 
 ---
 
+## 0. სატესტო deploy — Render Free, დომენის გარეშე
+
+`voltbox.ge`-ის ყიდვამდე ორივე Blueprint Render-ის უფასო tier-ზეა, onrender.com-ის
+მისამართებით. API — `plan: free` (`backend/render.yaml`), 0.1 CPU და 512 MB.
+
+**ლიმიტები (Render-ის docs, `render.com/docs/free`):**
+
+- უფასო web service-ი **15 წუთი მოთხოვნის გარეშე იძინებს**. შემდეგი მოთხოვნა
+  მის გაღვიძებას **დაახლოებით ერთ წუთს ელოდება** — მაღაზიის პირველი გახსნა
+  დიდი ხნის შემდეგ პროდუქტებს წუთით აგვიანებს. ეს შეცდომა არ არის.
+- workspace-ს თვეში 750 უფასო საათი აქვს — ერთ სერვისს მთელი თვე ჰყოფნის.
+- **cron job-ი უფასო არ არსებობს** — refresh-ტოკენების წაშლა ფაილიდან ამოღებულია
+  (§2, Cron job). ფასიანზე გადასვლისას **უკან ბრუნდება**, `plan`-თან ერთად
+  (`0.5c-512mb`).
+- Health Check Path უფასოზეც მუშაობს — Render-ის უფასოს შეზღუდვების სიაში ის არ
+  არის — და ფაილში რჩება.
+
+**სამი ცვლადი, რომლებიც დომენამდე onrender.com-ზე მიუთითებს.** სახელებს Render
+სერვისის შექმნისას აძლევს (დაკავებულ სახელს სუფიქსს უმატებს) — ზუსტი მისამართი
+სერვისის გვერდზეა. იცვლება `backend/render.yaml`-ში, არა პანელში — sync-ი
+პანელისას გადააწერს:
+
+| ცვლადი | დომენამდე | რა მოხდება, თუ დარჩა `voltbox.ge` |
+|---|---|---|
+| `CORS_ORIGINS` | `https://<storefront>.onrender.com` | ბრაუზერი მაღაზიის **ყველა** API-მოთხოვნას ბლოკავს |
+| `SITE_URL` | `https://<storefront>.onrender.com` | sitemap-ის და Telegram-ის ადმინის ბმულები არარსებულ დომენზე მიდის |
+| `TRUSTED_HOSTS` | ცვლილება არ სჭირდება: `<api>.onrender.com`-ს აპი `RENDER_EXTERNAL_HOSTNAME`-იდან თვითონ უმატებს (§2) | არაფერი — `api.voltbox.ge` დომენამდე უბრალოდ არავის ემთხვევა |
+
+storefront-ის CSP-ის `connect-src` და `/sitemap.xml`-ის rewrite
+(`frontend/render.yaml`) ჯერ ისევ `https://api.voltbox.ge`-ს ასახელებს — API-ს
+onrender.com-ის მისამართი მხოლოდ მისი შექმნის შემდეგ ჩანს და **შემდეგ ნაბიჯზე
+იცვლება**. მანამდე მაღაზიის API-მოთხოვნებს CSP ბლოკავს.
+
+---
+
 ## 🔴 1. SPA-ს rewrite — ყველაზე მნიშვნელოვანი
 
 **გაზომილი, არა ნავარაუდევი.** სტატიკური ჰოსტი rewrite-ის წესის გარეშე:
@@ -52,35 +87,31 @@ sync-ისას ფაილში ჩამოთვლილი rule-ებ�
 **გადააწერს**, პანელში დამატებული დანარჩენი რჩება. **ცვლილება — ფაილში, არა
 პანელში**, თორემ შემდეგი sync-ი მას ჩუმად დააბრუნებს.
 
-### ⚠️ CSP-ის placeholder-ი
+### ⚠️ CSP-ის origin-ები
 
-`Content-Security-Policy`-ში ერთ მნიშვნელობა განზრახ ცარიელია — Supabase
-Storage-ის origin-ი, საიდანაც პროდუქტის სურათები მოდის:
+`Content-Security-Policy` ორ გარე origin-ს ასახელებს:
 
-| Placeholder | რა ჩაიწერება | რა მოხდება, თუ დამავიწყდება |
+| სად | მნიშვნელობა | რა მოხდება, თუ არ ემთხვევა |
 |---|---|---|
-| `<SUPABASE_STORAGE_ORIGIN>` | API-ს დაბრუნებული სურათის URL-ის scheme + host, path-ის გარეშე | ბრაუზერი token-ს უგულებელყოფს და **ყველა პროდუქტის სურათს დაბლოკავს** |
+| `img-src` | `https://jnfokdczfpcysnqiwask.supabase.co` — Supabase პროექტის საჯარო URL-ი, ყველა პროდუქტის სურათის ბმულში (საიდუმლო არ არის) | ბრაუზერი **ყველა პროდუქტის სურათს დაბლოკავს**. სხვა Supabase პროექტი = სხვა host-ი აქ |
+| `connect-src` | `https://api.voltbox.ge` | `VITE_API_BASE_URL`-ის origin-ს **უნდა ემთხვეოდეს** — თორემ ყველა API-მოთხოვნა ბლოკდება. დომენამდე — onrender.com-ის მისამართი (§0) |
 
-API-ს origin-ი (`https://api.voltbox.ge`) `connect-src`-ში უკვე წერია და
-`VITE_API_BASE_URL`-ის origin-ს **უნდა ემთხვეოდეს** — თორემ ყველა API-მოთხოვნა
-ბლოკდება.
-
-გაშვებამდე:
+გაშვებამდე — placeholder-ი ფაილში აღარ უნდა დარჩეს:
 
 ```bash
 grep -v '^\s*#' frontend/render.yaml | grep -oE '<[A-Z_]+>'
 ```
 
-ახლა ერთ ხაზს აჩვენებს — `<SUPABASE_STORAGE_ORIGIN>`. **deploy-ამდე ცარიელი
-უნდა იყოს.**
+**ცარიელი უნდა იყოს.**
 
 ---
 
 ## 2. Backend-ის environment
 
-API და refresh-ტოკენების cron job-ი `backend/render.yaml`-შია: region
-(`frankfurt` — Supabase-ის გვერდით; შექმნის შემდეგ აღარ იცვლება), plan,
-Dockerfile, **Health Check Path** და ის ცვლადები, რომლებიც საიდუმლო არ არის.
+API `backend/render.yaml`-შია: region (`frankfurt` — Supabase-ის გვერდით;
+შექმნის შემდეგ აღარ იცვლება), plan, Dockerfile, **Health Check Path** და ის
+ცვლადები, რომლებიც საიდუმლო არ არის. refresh-ტოკენების cron job-ი უფასო plan-ზე
+ფაილიდან ამოღებულია — ↓ Cron job.
 
 ### Blueprint-ის შექმნა
 
@@ -94,8 +125,8 @@ Blueprint ვერ გადასცემს და ორივე მხა
    `REDIS_URL`-ს, `SUPABASE_PROJECT_REF`-ს და `SUPABASE_SERVICE_ROLE_KEY`-ს —
    **მხოლოდ ამ ერთხელ**, შემდეგი sync-ები მათ აღარ ეხება.
 2. `DATABASE_URL`-ს **არ იკითხავს**. ის Environment Group-შია —
-   `voltbox-database`, რომელსაც Blueprint ცარიელს ქმნის და ორივე სერვისს
-   უკავშირებს. group-ში `sync: false`-ს Render ჩუმად უგულებელყოფს, ამიტომ
+   `voltbox-database`, რომელსაც Blueprint ცარიელს ქმნის და API-ს (cron job-ის
+   დაბრუნების შემდეგ — job-საც) უკავშირებს. group-ში `sync: false`-ს Render ჩუმად უგულებელყოფს, ამიტომ
    ფაილში ვერ ჩაიწერება. API-ს პირველი deploy `DATABASE_URL`-ის გარეშე
    **ჩავარდება — ეს მოსალოდნელია**. შემდეგ: Environment Groups →
    `voltbox-database` → `DATABASE_URL` → შენახვა ახალ deploy-ს იწყებს.
@@ -241,8 +272,18 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 `scripts/prune_refresh_tokens.py` შლის მწკრივებს, რომლების ვადაც 7 დღეზე მეტი
 ხნის წინ გავიდა. რატომ ზუსტად ასე — `ASSUMPTIONS.md` 8.13.
 
-job-ი `backend/render.yaml`-შია (`voltbox-prune-refresh-tokens`) და Blueprint
-მას API-სთან ერთად ქმნის — ხელით არაფერი ემატება:
+⚠️ **უფასო plan-ზე job-ი `backend/render.yaml`-ში არ არის.** Render-ს უფასო
+cron job-ი არ აქვს (cron-ის plan-ები `0.5c-512mb`-იდან იწყება), და ფასიანი
+რესურსი უფასო deploy-ში არ უნდა იყოს. ამ დროს არაფერი ტყდება — `refresh_tokens`
+მხოლოდ იზრდება. **ფასიან plan-ზე გადასვლისას job-ი უკან უნდა დაბრუნდეს** —
+ზუსტად ის ბლოკი, რაც ამოღებამდე იყო:
+
+```bash
+git show cfb7052:backend/render.yaml   # services-ის მეორე ჩანაწერი, type: cron
+```
+
+დაბრუნებული job-ი (`voltbox-prune-refresh-tokens`) Blueprint-ის sync-ზე API-სთან
+ერთად იქმნება — ხელით არაფერი ემატება:
 
 | ველი | მნიშვნელობა |
 |---|---|
@@ -258,7 +299,8 @@ group-ი იმისთვისაა, რომ შეცვლილი პ
 ასლი არ არის. კავშირი ერთია, წამებით, ↑ ბიუჯეტს არ ცვლის.
 
 **რა მოხდება, თუ დამავიწყდება:** არაფერი ტყდება. `refresh_tokens` ყოველ
-refresh-ზე ერთ მწკრივით იზრდება — ზღვრის გარეშე, 500 MB-ისკენ.
+refresh-ზე ერთ მწკრივით იზრდება — ზღვრის გარეშე, 500 MB-ისკენ. სატესტო deploy-ის
+მოკლე ვადაში ეს უმნიშვნელოა; საჭიროების შემთხვევაში ↓ ხელით გაშვება მასვე შლის.
 
 **რა მოხდება, თუ job-ი ჩავარდა:** Render-ის docs failure-notification-ს არ
 აღწერს — ჩავარდნა მხოლოდ job-ის **Runs** გვერდზე ჩანს. გამორჩენილი run-ი წაშლას

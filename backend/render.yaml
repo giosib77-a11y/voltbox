@@ -1,6 +1,6 @@
-# The API and its nightly clean-up as Render services: what they are built
-# from, where they run, which path Render probes, and every environment
-# variable a deployment needs.
+# The API as a Render service: what it is built from, where it runs, which
+# path Render probes, and every environment variable a deployment needs. Its
+# nightly clean-up job is left out while the API is on the free plan (below).
 #
 # Why in the repo: point the health check at /api/v1/health instead of
 # /api/v1/health/live and nothing happens until the first database outage,
@@ -20,10 +20,11 @@
 # (docs/deployment.md §2). On each sync, what is named here overwrites the
 # dashboard; variables the file does not name are kept.
 
-# The one secret both services read. A group, so a rotated database password is
-# changed once and cannot be left behind on the job - a copy of DATABASE_URL on
-# each service would have the job failing every night after the next rotation,
-# visible only on its Runs page.
+# The one secret the API and the prune job read. A group, so a rotated database
+# password is changed once and cannot be left behind on the job - a copy of
+# DATABASE_URL on each service would have the job failing every night after
+# the next rotation, visible only on its Runs page. Kept while the job is out,
+# so restoring it is adding the job back and nothing in the dashboard.
 #
 # Empty on purpose. Render ignores `sync: false` inside a group, silently, so a
 # secret cannot be declared here - DATABASE_URL is added to the group in the
@@ -41,10 +42,13 @@ services:
     # the Atlantic between every query and its answer, and a service's region
     # cannot be changed once it exists.
     region: frankfurt
-    # 0.5 CPU and 512 MB, which the image-decode ceiling in docs/deployment.md
-    # is sized for; unlike free, it is not spun down between visitors. Change
-    # it here, not in the dashboard - a sync would put this back.
-    plan: 0.5c-512mb
+    # A test deployment on onrender.com before the domain is bought. Free is
+    # 0.1 CPU and the same 512 MB the image-decode ceiling in
+    # docs/deployment.md is sized for, but it sleeps after 15 minutes without a
+    # request and the next one waits about a minute for it (docs/deployment.md
+    # §0). Back to 0.5c-512mb for the real launch. Change it here, not in the
+    # dashboard - a sync would put this back.
+    plan: free
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     # The Dockerfile's HEALTHCHECK probes the same path, for the same reason.
@@ -94,25 +98,8 @@ services:
       # prompt at creation is the only thing listing them would add, and either
       # one unset simply turns the notice off.
 
-  # Deletes refresh-token rows that expired more than 7 days ago
-  # (ASSUMPTIONS.md 8.13). Nothing breaks without it; the table just grows.
-  - type: cron
-    runtime: docker
-    name: voltbox-prune-refresh-tokens
-    region: frankfurt
-    plan: 0.5c-512mb
-    # UTC; 03:00 in Tbilisi.
-    schedule: "0 23 * * *"
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
-    dockerCommand: python scripts/prune_refresh_tokens.py
-    buildFilter:
-      paths:
-        - backend/**
-
-    envVars:
-      - fromGroup: voltbox-database
-      # Settings will not load without one, and the job signs nothing, so it is
-      # a value nobody needs to know - not a copy of the API's.
-      - key: JWT_SECRET
-        generateValue: true
+  # The nightly refresh-token prune (voltbox-prune-refresh-tokens) is not here
+  # while the API is on free: Render has no free cron jobs - the schema's cron
+  # plans start at 0.5c-512mb - and a paid resource does not belong in a free
+  # deployment. Nothing breaks without it; refresh_tokens only grows. Restore
+  # it with the move to a paid plan (docs/deployment.md §2, Cron job).
