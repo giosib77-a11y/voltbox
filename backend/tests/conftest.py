@@ -19,6 +19,10 @@ os.environ.setdefault("APP_ENV", "test")
 os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://voltbox:voltbox@localhost:55432/voltbox_test"
 )
+# A developer's `.env` may hold a real Resend key, and some tests check out
+# with an address in them: without this, a test run would email them. The
+# confirmation tests switch it on against a fake transport.
+os.environ["RESEND_API_KEY"] = ""
 
 import httpx
 from alembic import command

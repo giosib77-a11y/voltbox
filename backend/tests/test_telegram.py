@@ -23,12 +23,12 @@ from app.core.config import settings
 from app.core.logging import JsonFormatter
 from app.db.models import Order, Product
 from app.main import app
-from app.services import telegram
+from app.services import outbound, telegram
 from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tests.factories import make_brand, make_category, make_product
+from tests.factories import make_brand, make_category, make_product, respond_while_held
 
 TOKEN = "7412345678:AAH-sEcReTtOkEn_0123456789abcdefghij"
 #: The part of the token that must never be printed. The bot id before the
@@ -95,7 +95,7 @@ FAILURES: dict[str, tuple[Handler, int]] = {
 def fake_telegram(monkeypatch: pytest.MonkeyPatch) -> FakeTelegram:
     fake = FakeTelegram()
     monkeypatch.setattr(telegram, "_transport", httpx.MockTransport(fake.handle))
-    monkeypatch.setattr(telegram, "RETRY_DELAYS", (0.0, 0.0))
+    monkeypatch.setattr(outbound, "RETRY_DELAYS", (0.0, 0.0))
     monkeypatch.setattr(settings, "telegram_bot_token", SecretStr(TOKEN))
     monkeypatch.setattr(settings, "telegram_chat_id", CHAT_ID)
     return fake
@@ -328,14 +328,13 @@ class TestTheTokenIsInNoLog:
             assert any('"level": "ERROR"' in line for line in lines)
 
 
+@pytest.mark.usefixtures("client")  # its database session serves the request
 async def test_the_response_is_sent_before_telegram_answers(
-    client: httpx.AsyncClient,
     fake_telegram: FakeTelegram,
     products: tuple[Product, Product],
 ) -> None:
-    """Straight ASGI, because the test client waits for background tasks and
-    would hide the order in which the two happen. Telegram is held until the
-    response has gone out; if the send ran first, the response never would."""
+    """Telegram is held until the response has gone out; if the send ran
+    first, the response never would."""
     release = asyncio.Event()
 
     async def held(request: httpx.Request) -> httpx.Response:
@@ -343,51 +342,11 @@ async def test_the_response_is_sent_before_telegram_answers(
         return await FakeTelegram.ok(request)
 
     fake_telegram.answer = held
-    body = json.dumps(_checkout_body(products)).encode()
-    scope = {
-        "type": "http",
-        "asgi": {"version": "3.0"},
-        "http_version": "1.1",
-        "method": "POST",
-        "scheme": "http",
-        "path": "/api/v1/orders",
-        "raw_path": b"/api/v1/orders",
-        "query_string": b"",
-        "root_path": "",
-        "headers": [
-            (b"host", b"test"),
-            (b"content-type", b"application/json"),
-            (b"content-length", str(len(body)).encode()),
-            (b"idempotency-key", str(uuid.uuid4()).encode()),
-        ],
-        "client": ("127.0.0.1", 50000),
-        "server": ("test", 80),
-    }
-    requested = False
 
-    async def receive() -> dict[str, Any]:
-        nonlocal requested
-        if not requested:
-            requested = True
-            return {"type": "http.request", "body": body, "more_body": False}
-        await asyncio.Event().wait()  # the client never disconnects
-        raise AssertionError("unreachable")
+    status, still_sending = await respond_while_held(
+        app, "/api/v1/orders", _checkout_body(products), release
+    )
 
-    responded = asyncio.Event()
-    status: list[int] = []
-
-    async def send(message: dict[str, Any]) -> None:
-        if message["type"] == "http.response.start":
-            status.append(message["status"])
-        if message["type"] == "http.response.body" and not message.get("more_body"):
-            responded.set()
-
-    running = asyncio.create_task(app(scope, receive, send))  # type: ignore[arg-type]
-    try:
-        await asyncio.wait_for(responded.wait(), timeout=5)
-        assert status == [201]
-        assert not running.done()  # the send is still waiting on Telegram
-    finally:
-        release.set()
-        await asyncio.wait_for(running, timeout=5)
+    assert status == 201
+    assert still_sending  # the send was still waiting on Telegram
     assert len(fake_telegram.requests) == 1

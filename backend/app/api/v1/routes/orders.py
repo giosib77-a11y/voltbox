@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.deps import CurrentUser, Db, OptionalUser
 from app.core.errors import ValidationError
 from app.core.rate_limit import LOOKUP_RATE_LIMIT, limiter
-from app.db.models import Order
+from app.db.models import Order, User
 from app.schemas.order import (
     CreateOrderRequest,
     CustomerOut,
@@ -20,7 +20,7 @@ from app.schemas.order import (
     OrderTotals,
 )
 from app.services import order as order_service
-from app.services import telegram
+from app.services import order_email, telegram
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -122,10 +122,20 @@ async def create_order(
     await db.commit()
     await db.refresh(order)
 
-    # After the commit and after the response: a background task runs once the
-    # response has been sent, so Telegram can neither fail this order nor slow
-    # it down. A replay was announced the first time.
-    if created and settings.telegram_enabled:
+    # A replay was announced the first time.
+    if created:
+        _announce(background, order, user)
+    return _to_out(order)
+
+
+def _announce(background: BackgroundTasks, order: Order, user: User | None) -> None:
+    """Tell the owner and the customer, after the commit and after the response.
+
+    A background task runs once the response has been sent, so neither Telegram
+    nor the email provider can fail this order or slow it down. What each
+    message needs is copied out now, while the session is still open.
+    """
+    if settings.telegram_enabled:
         background.add_task(
             telegram.notify_order_placed,
             telegram.OrderNotice(
@@ -138,7 +148,35 @@ async def create_order(
                 item_count=sum(item.quantity for item in order.items),
             ),
         )
-    return _to_out(order)
+
+    # A signed-in customer's address is their account's; a guest's is the
+    # optional one typed at checkout. Without one there is no one to write to.
+    recipient = user.email if user is not None else order.guest_email
+    if settings.order_email_enabled and recipient:
+        background.add_task(
+            order_email.send_confirmation,
+            order_email.OrderConfirmation(
+                order_id=order.id,
+                order_number=order.order_number,
+                recipient=recipient,
+                lines=tuple(
+                    order_email.Line(
+                        name=item.product_name,
+                        quantity=item.quantity,
+                        unit_price=item.unit_price,
+                        line_total=item.line_total,
+                    )
+                    for item in order.items
+                ),
+                subtotal=order.subtotal,
+                shipping=order.shipping,
+                total=order.total,
+                currency=order.currency,
+                city=str(order.shipping_address.get("city") or ""),
+                address=str(order.shipping_address.get("address") or ""),
+                payment_method=order.payment_method,
+            ),
+        )
 
 
 @router.get("", summary="List the current user's orders", response_model=list[OrderOut])

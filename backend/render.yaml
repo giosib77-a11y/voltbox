@@ -102,7 +102,8 @@ services:
         sync: false
       # TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are optional and not listed: a
       # prompt at creation is the only thing listing them would add, and either
-      # one unset simply turns the notice off.
+      # one unset simply turns the notice off. RESEND_API_KEY and EMAIL_FROM
+      # likewise, for the customer's confirmation email.
 
   # The nightly refresh-token prune (voltbox-prune-refresh-tokens) is not here
   # while the API is on free: Render has no free cron jobs - the schema's cron

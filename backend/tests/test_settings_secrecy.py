@@ -19,6 +19,7 @@ REDIS_PASSWORD = "redis-pw-5be04d18a6"
 JWT_SECRET = "jwt-3b9e1c7a5f2d4e6b8a0c9d1e3f5a7b9c"
 SERVICE_ROLE_KEY = "srk-8c1e6f0a2d4b9e7c"
 TELEGRAM_TOKEN = "7412345678:AAH-tg-4d2a9f6c1e8b3a7d"
+RESEND_KEY = "re_rs-9e2c4a7f1b3d"
 
 #: Field -> the part of its value that must not be printed. For the URLs that
 #: is the password inside them.
@@ -28,6 +29,7 @@ SECRETS = {
     "redis_url": REDIS_PASSWORD,
     "supabase_service_role_key": SERVICE_ROLE_KEY,
     "telegram_bot_token": TELEGRAM_TOKEN,
+    "resend_api_key": RESEND_KEY,
 }
 
 
@@ -40,6 +42,7 @@ def _settings(**overrides: Any) -> Settings:
         "redis_url": f"rediss://default:{REDIS_PASSWORD}@redis.example:6379",
         "supabase_service_role_key": SERVICE_ROLE_KEY,
         "telegram_bot_token": TELEGRAM_TOKEN,
+        "resend_api_key": RESEND_KEY,
     }
     return Settings(_env_file=None, **(values | overrides))
 

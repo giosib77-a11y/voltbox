@@ -167,6 +167,14 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_chat_id: str = ""
 
+    # --- ელფოსტა (არასავალდებულო — შეკვეთის დადასტურება მყიდველს) ------------
+    # Either one empty turns the confirmation off; see app/services/order_email.py.
+    # The key sends mail as the shop's domain. The sender is an address the
+    # customer sees in every confirmation and stays plain, e.g.
+    # `VoltBox <orders@voltbox.ge>`.
+    resend_api_key: SecretStr = SecretStr("")
+    email_from: str = ""
+
     # Business-day boundaries ("today", date filters) are computed here, not in
     # UTC - an order placed at 01:00 Tbilisi time belongs to that day, not to
     # the previous one.
@@ -209,15 +217,19 @@ class Settings(BaseSettings):
             url = url.replace(junk, "")
         return SecretStr(url)
 
-    @field_validator("telegram_bot_token")
+    @field_validator("telegram_bot_token", "resend_api_key")
     @classmethod
-    def strip_telegram_token(cls, value: SecretStr) -> SecretStr:
+    def strip_secret(cls, value: SecretStr) -> SecretStr:
         """A token pasted with a trailing space or newline is the same token."""
         return SecretStr(value.get_secret_value().strip())
 
     @property
     def telegram_enabled(self) -> bool:
         return bool(self.telegram_bot_token.get_secret_value() and self.telegram_chat_id.strip())
+
+    @property
+    def order_email_enabled(self) -> bool:
+        return bool(self.resend_api_key.get_secret_value() and self.email_from.strip())
 
     @property
     def cookie_path(self) -> str:

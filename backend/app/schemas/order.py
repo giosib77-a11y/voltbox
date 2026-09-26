@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import EmailStr, Field, field_validator
 
 from app.schemas.base import ApiModel, ApiRequest
 
@@ -31,7 +31,17 @@ class CustomerRequest(ApiRequest):
     city: str = Field(min_length=2, max_length=100)
     address: str = Field(min_length=5, max_length=500)
     comment: str = Field(default="", max_length=1000)
-    email: str | None = Field(default=None, max_length=255)
+    # A guest's, optional: the order confirmation goes here. A signed-in
+    # customer's is their account's, and the storefront does not ask for it.
+    # Checked as an address because a mistyped one is a confirmation sent
+    # nowhere - or to a stranger.
+    email: EmailStr | None = None
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def blank_email_is_none(cls, value: object) -> object:
+        """An emptied field is no address, not a malformed one."""
+        return None if isinstance(value, str) and not value.strip() else value
 
 
 #: The ways this shop can be paid. Both mean "on delivery" - there is no online

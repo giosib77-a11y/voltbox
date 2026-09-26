@@ -13,16 +13,14 @@ those is logged at ERROR, and the admin panel stays the list of orders to
 trust. No customer name, phone or address is sent: those stay in the admin.
 
 The token is part of the URL path (`/bot<token>/sendMessage`), and httpx puts
-that URL in two places by itself: an INFO line on the `httpx` logger for every
-request, successful ones included, and the message of the HTTPStatusError that
-`raise_for_status` raises. A transport error keeps it on `exc.request.url`.
-So nothing here raises for status or logs an exception object, and the `httpx`
-logger gets a filter that redacts the path segment.
+that URL in its own log line and exceptions; `redact` below is registered with
+`outbound`, which filters the `httpx` logger and our ERROR line through it.
+The retry and timeout policy is `outbound`'s too, shared with the customer's
+confirmation email.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 from dataclasses import dataclass
@@ -33,22 +31,11 @@ from uuid import UUID
 import httpx
 
 from app.core.config import settings
+from app.services import outbound
 
 logger = logging.getLogger("voltbox.telegram")
 
 API_BASE = "https://api.telegram.org"
-
-#: Per attempt. The send runs after the response, so this bounds how long a
-#: worker keeps a dead connection around, not how long a customer waits.
-TIMEOUT = httpx.Timeout(5.0)
-
-#: Pauses before the second and third attempt.
-RETRY_DELAYS: tuple[float, ...] = (1.0, 3.0)
-
-#: Worth another try: Telegram throttling us, or Telegram being down. A 400,
-#: 401 or 403 - wrong chat id, revoked token, bot blocked - fails the same way
-#: every time.
-RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 #: The token as it appears in any URL httpx prints - matched by position, not
 #: by value, because httpx percent-encodes a token pasted with a space in it,
@@ -66,21 +53,7 @@ def redact(text: str) -> str:
     return text.replace(token, "<redacted>") if token else text
 
 
-class _RedactToken(logging.Filter):
-    """Rewrites a record on the `httpx` logger before any handler sees it."""
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        message = record.getMessage()
-        cleaned = redact(message)
-        if cleaned != message:
-            record.msg, record.args = cleaned, None
-        return True
-
-
-# At import, not in the lifespan: the checkout route imports this module, so
-# the filter is in place before the first request can be sent, test runs
-# included - they do not run the lifespan.
-logging.getLogger("httpx").addFilter(_RedactToken())
+outbound.register_redactor(redact)
 
 
 @dataclass(frozen=True)
@@ -126,63 +99,30 @@ def message_text(notice: OrderNotice) -> str:
 
 
 async def _send(text: str) -> str | None:
-    """Send `text`, retrying what is worth retrying. None on success, else why not."""
+    """Send `text`. None on success, else why not."""
     # Quoted to stay one path segment: an unencoded `/` in a mistyped token
     # would move the request to another path, and out of reach of the redaction.
     token = quote(settings.telegram_bot_token.get_secret_value(), safe=":")
-    url = f"{API_BASE}/bot{token}/sendMessage"
-    payload = {
-        "chat_id": settings.telegram_chat_id.strip(),
-        "text": text,
-        "link_preview_options": {"is_disabled": True},
-    }
-
-    failure = ""
-    async with httpx.AsyncClient(transport=_transport, timeout=TIMEOUT) as client:
-        for delay in (0.0, *RETRY_DELAYS):
-            if delay:
-                await asyncio.sleep(delay)
-            try:
-                response = await client.post(url, json=payload)
-            except httpx.HTTPError as exc:
-                # The class says what happened; str() is often empty (a
-                # ConnectTimeout's is) and never the URL, but redact anyway.
-                failure = f"{type(exc).__name__}: {exc}".rstrip(": ")
-                continue
-            if response.is_success:
-                return None
-            failure = f"HTTP {response.status_code}: {_description(response)}"
-            if response.status_code not in RETRYABLE_STATUSES:
-                break
-    return failure
-
-
-def _description(response: httpx.Response) -> str:
-    """Telegram's own reason, e.g. "Unauthorized" or "Bad Request: chat not found"."""
-    try:
-        body = response.json()
-    except ValueError:
-        return response.reason_phrase
-    reason = body.get("description") if isinstance(body, dict) else None
-    return str(reason)[:200] if reason else response.reason_phrase
+    return await outbound.post_with_retries(
+        f"{API_BASE}/bot{token}/sendMessage",
+        json={
+            "chat_id": settings.telegram_chat_id.strip(),
+            "text": text,
+            "link_preview_options": {"is_disabled": True},
+        },
+        transport=_transport,
+        # Telegram's own reason, e.g. "Unauthorized" or "Bad Request: chat not found".
+        describe=lambda response: outbound.reason_from_body(response, "description"),
+    )
 
 
 async def notify_order_placed(notice: OrderNotice) -> None:
-    """Background task: tell the owner, and never raise.
-
-    Anything escaping a background task is logged by the server with its
-    traceback, and an httpx traceback can hold the URL.
-    """
+    """Background task: tell the owner, and never raise."""
     if not settings.telegram_enabled:
         return
-    try:
-        failure = await _send(message_text(notice))
-    except Exception as exc:  # see the docstring
-        failure = f"{type(exc).__name__}: {exc}"
-    if failure is not None:
-        logger.error(
-            "Telegram notification for order %s was not sent: %s. "
-            "The order is saved; see it in the admin panel.",
-            notice.order_number,
-            redact(failure),
-        )
+    await outbound.send_quietly(
+        lambda: _send(message_text(notice)),
+        logger=logger,
+        what="Telegram notification",
+        order_number=notice.order_number,
+    )

@@ -241,6 +241,67 @@ describe('the checkout form', () => {
 });
 
 /**
+ * A guest's email, where the order confirmation goes. Optional; a signed-in
+ * shopper's is their account's and is not asked for.
+ */
+describe('the guest email', () => {
+  const emailField = () => screen.queryByLabelText(/^ელ\. ფოსტა/);
+
+  it('is asked of a guest, optional, saying the confirmation goes there', async () => {
+    renderPage();
+
+    const field = emailField();
+    expect(field).toBeInTheDocument();
+    expect(field).not.toBeRequired();
+    expect(field).toHaveAccessibleDescription(/შეკვეთის დადასტურებას ამ მისამართზე გამოგიგზავნით/);
+  });
+
+  it('is sent, trimmed, when filled', async () => {
+    const createOrder = vi
+      .spyOn(api, 'createOrder')
+      .mockResolvedValue({ orderNumber: 'VB-20260918-1000' });
+    renderPage();
+
+    await fillValidForm();
+    fireEvent.change(emailField(), { target: { value: '  nino@example.ge ' } });
+    fireEvent.click(submitButton());
+
+    await waitFor(() => expect(navigate).toHaveBeenCalled());
+    expect(createOrder.mock.calls[0][0].customer.email).toBe('nino@example.ge');
+  });
+
+  it('refuses a malformed address and sends nothing', async () => {
+    const createOrder = vi.spyOn(api, 'createOrder');
+    renderPage();
+
+    await fillValidForm();
+    fireEvent.change(emailField(), { target: { value: 'nino@example' } });
+    fireEvent.click(submitButton());
+
+    expect(await screen.findByText('შეიყვანეთ სწორი ელ. ფოსტა')).toBeInTheDocument();
+    expect(createOrder).not.toHaveBeenCalled();
+    expect(emailField()).toHaveFocus();
+    expect(emailField()).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('is not asked of a signed-in shopper', async () => {
+    authValue = {
+      user: { id: 'u1', firstName: 'გიორგი', lastName: 'ბერიძე', phone: '555123456' },
+      isAuthenticated: true,
+    };
+    global.fetch = vi.fn(async (url) => {
+      if (isDelivery(url)) return reply(DELIVERY);
+      if (String(url).endsWith('/addresses')) return reply([]);
+      throw new Error('this test did not expect a request');
+    });
+    renderPage();
+
+    await screen.findByRole('option', { name: /^თბილისი/ });
+    expect(emailField()).not.toBeInTheDocument();
+  });
+});
+
+/**
  * A signed-in shopper's default address fills the delivery fields.
  *
  * These go through the real api.js and httpApi; only `fetch` is replaced, so a

@@ -7,8 +7,11 @@
 არაფერს აიმპორტებს.
 """
 
+import asyncio
 import importlib.util
+import json
 import sys
+import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -158,3 +161,63 @@ def load_script(name: str) -> ModuleType:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+async def respond_while_held(
+    app: Any, path: str, body: dict[str, Any], release: asyncio.Event
+) -> tuple[int, bool]:
+    """POST `body` straight through ASGI; (status, whether the app was still running).
+
+    The test client waits for background tasks before it returns, and would
+    hide whether the response went out before them. Here the response is
+    watched as it is sent: a background task held on `release` must leave the
+    app still running when the last body chunk goes out. `release` is then
+    set and the app waited out before this returns.
+    """
+    raw = json.dumps(body).encode()
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "query_string": b"",
+        "root_path": "",
+        "headers": [
+            (b"host", b"test"),
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(raw)).encode()),
+            (b"idempotency-key", str(uuid.uuid4()).encode()),
+        ],
+        "client": ("127.0.0.1", 50000),
+        "server": ("test", 80),
+    }
+    requested = False
+
+    async def receive() -> dict[str, Any]:
+        nonlocal requested
+        if not requested:
+            requested = True
+            return {"type": "http.request", "body": raw, "more_body": False}
+        await asyncio.Event().wait()  # the client never disconnects
+        raise AssertionError("unreachable")
+
+    responded = asyncio.Event()
+    status: list[int] = []
+
+    async def send(message: dict[str, Any]) -> None:
+        if message["type"] == "http.response.start":
+            status.append(message["status"])
+        if message["type"] == "http.response.body" and not message.get("more_body"):
+            responded.set()
+
+    running = asyncio.create_task(app(scope, receive, send))
+    try:
+        await asyncio.wait_for(responded.wait(), timeout=5)
+        still_running = not running.done()
+    finally:
+        release.set()
+        await asyncio.wait_for(running, timeout=5)
+    return status[0], still_running

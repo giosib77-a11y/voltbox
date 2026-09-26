@@ -60,6 +60,12 @@ export function validateField(name, value, allValues = {}) {
       if (!isRequired(value)) return MESSAGES.required;
       if (!isValidEmail(value)) return MESSAGES.email;
       return '';
+    case 'guestEmail':
+      // არასავალდებულო — მაგრამ შევსებული სწორი უნდა იყოს, თორემ დადასტურება
+      // არსად წავა, ან უცხოსთან
+      if (!isRequired(value)) return '';
+      if (!isValidEmail(value)) return MESSAGES.email;
+      return '';
     case 'city':
       if (!isRequired(value)) return MESSAGES.city;
       return '';
@@ -95,6 +101,8 @@ export function validateForm(values, fields) {
 }
 
 export const CHECKOUT_FIELDS = ['firstName', 'lastName', 'phone', 'city', 'address'];
+/** სტუმარს ელფოსტასაც ვეკითხებით; შესულისა ანგარიშიდან ვიცით. */
+export const GUEST_CHECKOUT_FIELDS = [...CHECKOUT_FIELDS, 'guestEmail'];
 export const LOGIN_FIELDS = ['email', 'password'];
 export const REGISTER_FIELDS = ['firstName', 'lastName', 'email', 'password', 'confirmPassword'];
 export const PROFILE_FIELDS = ['firstName', 'lastName', 'email', 'phone'];

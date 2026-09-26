@@ -17,7 +17,13 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import * as api from '../services/api.js';
 import { formatPhone, formatPrice } from '../utils/format.js';
 import { amountToFreeDelivery, deliveryFee, totalWithDelivery } from '../utils/pricing.js';
-import { CHECKOUT_FIELDS, digitsOnly, validateField, validateForm } from '../utils/validate.js';
+import {
+  CHECKOUT_FIELDS,
+  GUEST_CHECKOUT_FIELDS,
+  digitsOnly,
+  validateField,
+  validateForm,
+} from '../utils/validate.js';
 import { OFFERED_PAYMENT_METHODS, TEXT } from '../constants/index.js';
 
 const EMPTY_FORM = {
@@ -27,6 +33,7 @@ const EMPTY_FORM = {
   city: '',
   address: '',
   comment: '',
+  guestEmail: '',
   paymentMethod: OFFERED_PAYMENT_METHODS[0].value,
 };
 
@@ -61,6 +68,7 @@ export default function Checkout() {
         city: values.city,
         address: values.address.trim(),
         comment: values.comment.trim(),
+        guestEmail: values.guestEmail.trim(),
         paymentMethod: values.paymentMethod,
       }),
     [items, values],
@@ -145,18 +153,21 @@ export default function Checkout() {
     event.preventDefault();
     // ღილაკი `loading`-ითაც იბლოკება, მაგრამ Enter-ით გაგზავნა მას გვერდს უვლის
     if (submitting) return;
-    const nextErrors = validateForm(values, CHECKOUT_FIELDS);
+    const fields = isAuthenticated ? CHECKOUT_FIELDS : GUEST_CHECKOUT_FIELDS;
+    const nextErrors = validateForm(values, fields);
     setErrors(nextErrors);
-    setTouched(Object.fromEntries(CHECKOUT_FIELDS.map((field) => [field, true])));
+    setTouched(Object.fromEntries(fields.map((field) => [field, true])));
 
     if (Object.keys(nextErrors).length > 0) {
-      const firstField = CHECKOUT_FIELDS.find((field) => nextErrors[field]);
+      const firstField = fields.find((field) => nextErrors[field]);
       document.getElementById(`checkout-${firstField}`)?.focus();
       toast.error('შეავსეთ სავალდებულო ველები სწორად');
       return;
     }
 
     setSubmitting(true);
+    // შესულის ელფოსტა ანგარიშიდან მოდის — ველი მხოლოდ სტუმარს აქვს
+    const guestEmail = isAuthenticated ? '' : values.guestEmail.trim();
     try {
       const order = await api.createOrder({
         items,
@@ -167,6 +178,7 @@ export default function Checkout() {
           city: values.city,
           address: values.address.trim(),
           comment: values.comment.trim(),
+          ...(guestEmail ? { email: guestEmail } : {}),
         },
         paymentMethod: values.paymentMethod,
         idempotencyKey,
@@ -311,6 +323,22 @@ export default function Checkout() {
                 value={values.comment}
                 onChange={(e) => handleChange('comment', e.target.value)}
               />
+              {/* შესულის ელფოსტა ანგარიშიდან ვიცით */}
+              {!isAuthenticated && (
+                <Input
+                  id="checkout-guestEmail"
+                  label="ელ. ფოსტა"
+                  type="email"
+                  inputMode="email"
+                  placeholder="name@example.com"
+                  hint="შეკვეთის დადასტურებას ამ მისამართზე გამოგიგზავნით. არასავალდებულო."
+                  value={values.guestEmail}
+                  error={touched.guestEmail ? errors.guestEmail : ''}
+                  onChange={(e) => handleChange('guestEmail', e.target.value)}
+                  onBlur={() => handleBlur('guestEmail')}
+                  autoComplete="email"
+                />
+              )}
             </div>
           </fieldset>
 
