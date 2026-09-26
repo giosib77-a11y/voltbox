@@ -5,6 +5,7 @@ import { RouterProvider } from 'react-router/dom';
 import Layout from './components/layout/Layout.jsx';
 import RequireAuth from './components/layout/RequireAuth.jsx';
 import AdminBoundary from './admin/AdminBoundary.jsx';
+import { INFO_PAGES } from './constants/index.js';
 
 /**
  * გვერდები იტვირთება მოთხოვნისამებრ (`React.lazy`) — Vite თითოეულს ცალკე
@@ -30,6 +31,10 @@ const Orders = lazy(() => import('./pages/Account/Orders.jsx'));
 const Profile = lazy(() => import('./pages/Account/Profile.jsx'));
 const Addresses = lazy(() => import('./pages/Account/Addresses.jsx'));
 const ChangePassword = lazy(() => import('./pages/Account/ChangePassword.jsx'));
+const DeliveryTerms = lazy(() => import('./pages/Info/DeliveryTerms.jsx'));
+const ReturnsWarranty = lazy(() => import('./pages/Info/ReturnsWarranty.jsx'));
+const Privacy = lazy(() => import('./pages/Info/Privacy.jsx'));
+const Faq = lazy(() => import('./pages/Info/Faq.jsx'));
 
 /**
  * ადმინის მარშრუტები.
@@ -127,6 +132,10 @@ const router = createBrowserRouter(
         { path: 'register', element: <Register /> },
         { path: 'forgot-password', element: <ForgotPassword /> },
         { path: 'reset-password', element: <ResetPassword /> },
+        { path: INFO_PAGES.delivery.path, element: <DeliveryTerms /> },
+        { path: INFO_PAGES.returns.path, element: <ReturnsWarranty /> },
+        { path: INFO_PAGES.privacy.path, element: <Privacy /> },
+        { path: INFO_PAGES.faq.path, element: <Faq /> },
         {
           path: 'account',
           element: <RequireAuth />,

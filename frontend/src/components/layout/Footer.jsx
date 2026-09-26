@@ -1,18 +1,15 @@
 import { Link } from 'react-router';
 import { Clock, Mail, MapPin, Phone, Zap } from 'lucide-react';
-import { CONTACT, SITE_DESCRIPTION, SITE_NAME } from '../../constants/index.js';
+import { CONTACT, INFO_PAGES, SITE_DESCRIPTION, SITE_NAME } from '../../constants/index.js';
 import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { formatPrice } from '../../utils/format.js';
 import { rootCategories } from '../../utils/categoryTree.js';
 
 /** საიტის ქვედა კოლონტიტული. */
 
-const INFO_LINKS = [
-  { label: 'მიწოდების პირობები', to: '/category/phones' },
-  { label: 'დაბრუნება და გარანტია', to: '/category/accessories' },
-  { label: 'კონფიდენციალურობა', to: '/' },
-  { label: 'ხშირად დასმული კითხვები', to: '/' },
-];
+const INFO_LINKS = [INFO_PAGES.delivery, INFO_PAGES.returns, INFO_PAGES.privacy, INFO_PAGES.faq].map(
+  (page) => ({ label: page.title, to: page.path }),
+);
 
 export default function Footer({ categories = [] }) {
   const year = new Date().getFullYear();
