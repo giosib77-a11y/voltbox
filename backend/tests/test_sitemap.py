@@ -11,7 +11,9 @@ answers 404 for it; a sitemap that still advertised it would hand a crawler a
 list of dead links from the shop's own mouth.
 """
 
+import re
 from datetime import UTC, datetime
+from pathlib import Path
 
 import httpx
 import pytest
@@ -71,6 +73,28 @@ async def test_it_lists_the_pages_a_visitor_can_reach(
     assert f"<loc>{SITE}/</loc>" in body
     assert f"<loc>{SITE}/category/phones</loc>" in body
     assert f"<loc>{SITE}/product/live-one</loc>" in body
+
+
+def _info_page_paths() -> list[str]:
+    """The paths of the footer's information pages, as the storefront routes them."""
+    constants = (
+        Path(__file__).resolve().parents[2] / "frontend" / "src" / "constants" / "index.js"
+    ).read_text(encoding="utf-8")
+    block = re.search(r"export const INFO_PAGES = \{(.*?)\n\};", constants, re.S)
+    assert block, "INFO_PAGES moved; this test needs updating"
+    return re.findall(r"path: '([^']+)'", block.group(1))
+
+
+async def test_it_lists_the_footer_information_pages(client: httpx.AsyncClient) -> None:
+    # Read from the storefront, so renaming a page there fails here rather than
+    # leaving the sitemap pointing a crawler at a 404.
+    paths = _info_page_paths()
+    assert len(paths) == 4, paths
+
+    body = (await client.get("/sitemap.xml")).text
+
+    for path in paths:
+        assert f"<loc>{SITE}{path}</loc>" in body, path
 
 
 async def test_it_leaves_out_what_answers_404(client: httpx.AsyncClient, db: AsyncSession) -> None:

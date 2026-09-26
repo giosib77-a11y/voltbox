@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import { Skeleton } from '../../components/common/Skeleton.jsx';
-import { CONTACT, INFO_PAGES, SHOP_FACTS } from '../../constants/index.js';
+import { CONTACT, INFO_PAGES, SHIPPING } from '../../constants/index.js';
 import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { useEmailEnabled } from '../../hooks/useEmailEnabled.js';
 import InfoPage, { InfoSection, TEXT_LINK_CLASS } from './InfoPage.jsx';
@@ -10,14 +10,12 @@ import { ContactList } from './Contact.jsx';
 /**
  * ხშირად დასმული კითხვები.
  *
- * კითხვა, რომლის პასუხიც ჯერ უცნობია (`SHOP_FACTS`-ში `null`), საერთოდ არ
- * ჩანს. „შეკვეთის სტატუსი“ მხოლოდ რეგისტრირებულს პასუხობს: სტუმარს საიტზე
+ * „შეკვეთის სტატუსი“ მხოლოდ რეგისტრირებულს პასუხობს: სტუმარს საიტზე
  * შეკვეთის მოსაძებნი გვერდი არ აქვს — იხ. docs/info-pages-todo.md.
  */
 export default function Faq() {
   const { rules, loading } = useDeliveryRules();
   const emailEnabled = useEmailEnabled();
-  const { deliveryDays } = SHOP_FACTS;
 
   const items = [
     {
@@ -57,7 +55,7 @@ export default function Faq() {
     },
     {
       question: 'რამდენ ხანში მომივა?',
-      answer: deliveryDays && <p>{deliveryDays} სამუშაო დღეში.</p>,
+      answer: <p>{SHIPPING.etaDays}.</p>,
     },
     {
       question: 'შემიძლია დავაბრუნო?',
@@ -119,13 +117,11 @@ export default function Faq() {
       page={INFO_PAGES.faq}
       description="პასუხები ხშირ კითხვებზე: შეკვეთა, მიწოდება, გადახდა, დაბრუნება და ანგარიში."
     >
-      {items
-        .filter((item) => item.answer)
-        .map((item) => (
-          <InfoSection key={item.question} title={item.question}>
-            {item.answer}
-          </InfoSection>
-        ))}
+      {items.map((item) => (
+        <InfoSection key={item.question} title={item.question}>
+          {item.answer}
+        </InfoSection>
+      ))}
     </InfoPage>
   );
 }

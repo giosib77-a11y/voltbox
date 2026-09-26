@@ -6,7 +6,9 @@
  * follow the email switch (the FAQ's forgotten-password answer, Resend in the
  * privacy list); that no page shows a placeholder from its source text; and
  * that a fact listed in docs/info-pages-todo.md stays hidden until it is
- * written into SHOP_FACTS, then appears.
+ * written into SHOP_FACTS, then appears; the delivery time is SHIPPING's, the
+ * one the cart shows; and that what the privacy page says is stored, sent to
+ * Telegram and asked at registration is read from the code that does it.
  * Notes: the API is the real http client over a stubbed fetch, so a fixture is
  * the response body as the server sends it - money as strings.
  */
@@ -14,13 +16,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import DeliveryTerms from './DeliveryTerms.jsx';
 import ReturnsWarranty from './ReturnsWarranty.jsx';
 import Privacy from './Privacy.jsx';
 import Faq from './Faq.jsx';
-import { CONTACT, SHOP_FACTS } from '../../constants/index.js';
+import { CONTACT, SHIPPING, SHOP_FACTS, STORAGE_KEYS } from '../../constants/index.js';
 import { forgetDeliveryRules, loadDeliveryRules } from '../../hooks/useDeliveryRules.js';
+import { createOrder, register } from '../../services/httpApi.js';
 
 vi.mock('virtual:api-impl', () => import('../../services/httpApi.js'));
 
@@ -192,35 +197,22 @@ describe('facts the owner has not supplied yet', () => {
   it('leave their sentences out', async () => {
     answer(rules());
 
-    const delivery = await mount(DeliveryTerms);
-    expect(screen.queryByText(/მიიტანება/)).not.toBeInTheDocument();
-    delivery.unmount();
-
     const returns = await mount(ReturnsWarranty);
     expect(within(returnSteps()).getAllByRole('listitem')).toHaveLength(2);
     expect(screen.queryByText(/ვადით/)).not.toBeInTheDocument();
     returns.unmount();
 
-    const privacy = await mount(Privacy);
+    await mount(Privacy);
     expect(screen.queryByRole('heading', { name: 'ვინ ვართ' })).not.toBeInTheDocument();
-    privacy.unmount();
-
-    await mount(Faq);
-    expect(screen.queryByRole('heading', { name: 'რამდენ ხანში მომივა?' })).not.toBeInTheDocument();
   });
 
   it('appear once written into SHOP_FACTS', async () => {
     Object.assign(SHOP_FACTS, {
-      deliveryDays: '1–3',
       returnPickup: 'კურიერი პროდუქტს თქვენი მისამართიდან წაიღებს',
       warrantyPeriod: 'ერთი წელი',
       legalEntity: { name: 'შპს ვოლტბოქსი', idCode: '400000000', address: 'თბილისი' },
     });
     answer(rules());
-
-    const delivery = await mount(DeliveryTerms);
-    expect(screen.getByText(/შეკვეთა მიიტანება 1–3 სამუშაო დღეში\./)).toBeInTheDocument();
-    delivery.unmount();
 
     const returns = await mount(ReturnsWarranty);
     const steps = within(returnSteps()).getAllByRole('listitem');
@@ -229,13 +221,124 @@ describe('facts the owner has not supplied yet', () => {
     expect(screen.getByText('პროდუქტზე ვრცელდება გარანტია, ვადით ერთი წელი.')).toBeInTheDocument();
     returns.unmount();
 
-    const privacy = await mount(Privacy);
+    await mount(Privacy);
     expect(screen.getByRole('heading', { name: 'ვინ ვართ' })).toBeInTheDocument();
     expect(screen.getByText('400000000')).toBeInTheDocument();
-    privacy.unmount();
+  });
+});
 
-    await mount(Faq);
-    expect(screen.getByRole('heading', { name: 'რამდენ ხანში მომივა?' })).toBeInTheDocument();
-    expect(screen.getByText('1–3 სამუშაო დღეში.')).toBeInTheDocument();
+describe('delivery time', () => {
+  it.each([
+    ['delivery', DeliveryTerms, `შეკვეთის მიტანას სჭირდება ${SHIPPING.etaDays}.`],
+    ['faq', Faq, `${SHIPPING.etaDays}.`],
+  ])('the %s page states SHIPPING.etaDays, as the cart does', async (_, Page, sentence) => {
+    answer(rules());
+    await mount(Page);
+
+    expect(screen.getByText(sentence, { exact: false })).toBeInTheDocument();
+  });
+});
+
+describe('the privacy page against the code', () => {
+  /** A privacy-page section's text, by its heading. */
+  async function section(heading) {
+    answer(rules());
+    await mount(Privacy);
+    return screen.getByRole('heading', { name: heading }).closest('section').textContent;
+  }
+
+  it('names every field the Telegram notice carries, and no personal data', async () => {
+    // What each `notice.<field>` in message_text() is called on the page
+    const NAMED = {
+      order_number: 'შეკვეთის ნომერი',
+      subtotal: 'პროდუქტების ღირებულება',
+      shipping: 'მიწოდების საფასური',
+      total: 'ჯამი',
+      item_count: 'ნივთების რაოდენობა',
+      order_id: 'ბმული შეკვეთაზე',
+    };
+    const source = readFileSync(
+      join(process.cwd(), '..', 'backend', 'app', 'services', 'telegram.py'),
+      'utf8',
+    );
+    const builder = source.match(/def message_text\([\s\S]*?\n\n\n/)?.[0];
+    expect(builder, 'message_text moved; this test needs updating').toBeTruthy();
+    const fields = [...new Set([...builder.matchAll(/notice\.(\w+)/g)].map((m) => m[1]))].filter(
+      (field) => field !== 'currency',
+    );
+
+    expect(fields.sort()).toEqual(Object.keys(NAMED).sort());
+    const text = await section('ვის ვუზიარებთ');
+
+    expect(text).toContain('პერსონალური მონაცემები არ იგზავნება');
+    for (const field of fields) {
+      expect(NAMED[field], `notice.${field} is sent but the page does not name it`).toBeDefined();
+      expect(text).toContain(NAMED[field]);
+    }
+  });
+
+  it('names every field registration sends', async () => {
+    const NAMED = {
+      firstName: 'სახელი და გვარი',
+      lastName: 'სახელი და გვარი',
+      email: 'ელფოსტა',
+      password: 'პაროლი',
+    };
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ user: { id: 'u1', email: 'a@b.ge' } }),
+    }));
+    await register({
+      firstName: 'ნინო',
+      lastName: 'ბერიძე',
+      email: 'a@b.ge',
+      password: 'secret123',
+      confirmPassword: 'secret123',
+    });
+    const sent = Object.keys(JSON.parse(global.fetch.mock.calls[0][1].body));
+
+    expect(sent.sort()).toEqual(Object.keys(NAMED).sort());
+    const text = (await section('რა მონაცემებს ვაგროვებთ')).split('რეგისტრაციისას:')[1];
+
+    for (const field of sent) {
+      expect(NAMED[field], `registration sends ${field} but the page does not name it`).toBeDefined();
+      expect(text).toContain(NAMED[field]);
+    }
+  });
+
+  it('names everything the storefront keeps in the browser', async () => {
+    const NAMED = {
+      [STORAGE_KEYS.cart]: 'კალათის შიგთავსს',
+      [STORAGE_KEYS.theme]: 'თემის არჩევანს',
+      [STORAGE_KEYS.auth]: 'შესვლის სესიას',
+      [STORAGE_KEYS.recentSearches]: 'ბოლო ძებნებს',
+      'guest-orders:v1': 'შეკვეთის ნომერს და მითითებულ ტელეფონის ნომერს',
+    };
+    // Written only by services/mockApi.js, which the http build does not contain
+    const MOCK_ONLY = [STORAGE_KEYS.users, STORAGE_KEYS.orders, STORAGE_KEYS.addresses];
+
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 201,
+      json: async () => ({ orderNumber: 'VB-20260926-00001' }),
+    }));
+    await createOrder({
+      items: [{ productId: 'p1', qty: 1 }],
+      customer: { phone: '555123456' },
+      paymentMethod: 'cash',
+    });
+    const kept = new Set([
+      ...Object.values(STORAGE_KEYS).filter((key) => !MOCK_ONLY.includes(key)),
+      ...Object.keys(localStorage),
+    ]);
+
+    expect([...kept].sort()).toEqual(Object.keys(NAMED).sort());
+    const text = await section('ბრაუზერში შენახული მონაცემები');
+
+    for (const key of kept) {
+      expect(NAMED[key], `${key} is stored but the page does not name it`).toBeDefined();
+      expect(text).toContain(NAMED[key]);
+    }
   });
 });

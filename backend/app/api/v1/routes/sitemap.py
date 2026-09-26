@@ -38,6 +38,12 @@ router = APIRouter(tags=["seo"])
 FIXED_PAGES = [
     ("/", "daily", "1.0"),
     ("/search", "weekly", "0.3"),
+    # The footer's information pages - INFO_PAGES in the storefront's
+    # src/constants/index.js; tests/test_sitemap.py reads the paths from there.
+    ("/delivery", "monthly", "0.4"),
+    ("/returns", "monthly", "0.4"),
+    ("/privacy", "yearly", "0.2"),
+    ("/faq", "monthly", "0.4"),
 ]
 
 CATEGORY_PRIORITY = "0.8"

@@ -1,11 +1,9 @@
-import { INFO_PAGES, SHOP_FACTS } from '../../constants/index.js';
+import { INFO_PAGES, SHIPPING } from '../../constants/index.js';
 import InfoPage, { InfoSection } from './InfoPage.jsx';
 import DeliveryTable from './DeliveryTable.jsx';
 
 /** მიწოდების პირობები — ქალაქები და ფასები `GET /delivery`-დან. */
 export default function DeliveryTerms() {
-  const { deliveryDays } = SHOP_FACTS;
-
   return (
     <InfoPage
       page={INFO_PAGES.delivery}
@@ -24,8 +22,8 @@ export default function DeliveryTerms() {
 
       <InfoSection title="მიწოდების ვადა">
         <p>
-          {deliveryDays && `შეკვეთა მიიტანება ${deliveryDays} სამუშაო დღეში. `}
-          მიწოდებას ახორციელებს საკურიერო სერვისი.
+          შეკვეთის მიტანას სჭირდება {SHIPPING.etaDays}. მიწოდებას ახორციელებს საკურიერო
+          სერვისი.
         </p>
       </InfoSection>
 

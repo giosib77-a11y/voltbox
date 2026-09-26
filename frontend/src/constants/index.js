@@ -43,8 +43,6 @@ export const INFO_PAGES = {
  * docs/info-pages-todo.md.
  */
 export const SHOP_FACTS = {
-  // „შეკვეთა მიიტანება {deliveryDays} სამუშაო დღეში.“ — მაგ. '1–3'
-  deliveryDays: null,
   // დაბრუნების მე-2 ნაბიჯი, მთლიანი წინადადება
   returnPickup: null,
   // „პროდუქტზე ვრცელდება გარანტია, ვადით {warrantyPeriod}.“ — მაგ. 'ერთი წელი'
@@ -74,7 +72,8 @@ export const STORAGE_KEYS = {
 export const CURRENCY_SYMBOL = '₾';
 
 /**
- * მიწოდების ვადა — მხოლოდ ტექსტი.
+ * მიწოდების ვადა — მხოლოდ ტექსტი. ერთადერთი წყარო: კალათა, პროდუქტის გვერდი,
+ * შეკვეთის დადასტურება და საინფორმაციო გვერდები ყველა ამას კითხულობს.
  *
  * ფასები აქ აღარ არის: ქალაქები, ტარიფები და უფასო მიწოდების ზღვარი
  * backend-ის app/services/delivery.py-შია და `GET /delivery`-ით მოდის
