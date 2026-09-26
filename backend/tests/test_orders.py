@@ -10,8 +10,10 @@ from decimal import Decimal
 
 import httpx
 import pytest
+from app.core.config import settings
 from app.core.rate_limit import LOOKUP_RATE_LIMIT, limiter
 from app.db.models import ROLE_ADMIN, Order, Product, ProductImage
+from pydantic import SecretStr
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -924,4 +926,26 @@ class TestDelivery:
             "cities": [{"name": "თბილისი", "fee": "8.00"}, {"name": "რუსთავი", "fee": "5.00"}],
             "freeFrom": "50.00",
             "currency": "GEL",
+            "features": {"email": False},
         }
+
+    @pytest.mark.parametrize(
+        ("key", "sender", "enabled"),
+        [("re_key", "VoltBox <orders@voltbox.ge>", True), ("re_key", "", False), ("", "x", False)],
+        ids=["configured", "no sender", "no key"],
+    )
+    async def test_it_says_whether_the_shop_can_send_email(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        client: httpx.AsyncClient,
+        key: str,
+        sender: str,
+        enabled: bool,
+    ) -> None:
+        """The storefront hides every promise of an email while this is false."""
+        monkeypatch.setattr(settings, "resend_api_key", SecretStr(key))
+        monkeypatch.setattr(settings, "email_from", sender)
+
+        response = await client.get("/api/v1/delivery")
+
+        assert response.json()["features"] == {"email": enabled}

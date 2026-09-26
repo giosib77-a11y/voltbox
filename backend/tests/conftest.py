@@ -19,10 +19,20 @@ os.environ.setdefault("APP_ENV", "test")
 os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://voltbox:voltbox@localhost:55432/voltbox_test"
 )
-# A developer's `.env` may hold a real Resend key, and some tests check out
-# with an address in them: without this, a test run would email them. The
-# confirmation tests switch it on against a fake transport.
-os.environ["RESEND_API_KEY"] = ""
+# Every credential that reaches a service outside this machine, blanked. A
+# developer's `.env` holds the live ones, and an environment variable beats the
+# file: without this, every checkout in a test run would post to the owner's
+# Telegram and email the address in it, and the rate limiter would count in the
+# production Redis. Tests that need one set it against a fake transport.
+# test_no_outbound.py fails when Settings gains a credential not listed here.
+OUTBOUND_CREDENTIALS = (
+    "TELEGRAM_BOT_TOKEN",
+    "RESEND_API_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "REDIS_URL",
+)
+for _name in OUTBOUND_CREDENTIALS:
+    os.environ[_name] = ""
 
 import httpx
 from alembic import command

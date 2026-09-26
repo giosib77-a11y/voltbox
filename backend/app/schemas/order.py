@@ -125,9 +125,22 @@ class DeliveryCityOut(ApiModel):
     fee: Decimal
 
 
+class ShopFeaturesOut(ApiModel):
+    """What this deployment can do, for the storefront to show or hide."""
+
+    #: Whether the shop can send email at all (RESEND_API_KEY and EMAIL_FROM
+    #: set). Off, a page must not promise one: the guest's confirmation field,
+    #: and later the forgot-password link, are hidden.
+    email: bool
+
+
 class DeliveryRulesOut(ApiModel):
     """services/delivery.py as the storefront reads it."""
 
     cities: list[DeliveryCityOut]
     free_from: Decimal
     currency: str
+    # Here and not on an endpoint of its own: every storefront page already
+    # loads this response once per session (the footer shows the free-delivery
+    # threshold), so a page that needs the signal has it for no extra request.
+    features: ShopFeaturesOut

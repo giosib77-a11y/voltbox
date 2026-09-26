@@ -69,6 +69,8 @@ const DELIVERY = {
   ],
   freeFrom: '50.00',
   currency: 'GEL',
+  // As the API answers while no email provider is configured.
+  features: { email: false },
 };
 
 const reply = (body, status = 200) => ({
@@ -246,14 +248,44 @@ describe('the checkout form', () => {
  */
 describe('the guest email', () => {
   const emailField = () => screen.queryByLabelText(/^ელ\. ფოსტა/);
+  const HINT = /შეკვეთის დადასტურებას ამ მისამართზე გამოგიგზავნით/;
+
+  /** GET /delivery for a deployment that can send email; `rest` answers the others. */
+  const serveWithEmail = (rest = () => Promise.reject(new Error('unexpected request'))) => {
+    global.fetch = vi.fn(async (url) =>
+      isDelivery(url) ? reply({ ...DELIVERY, features: { email: true } }) : rest(url),
+    );
+  };
+
+  beforeEach(() => serveWithEmail());
+
+  it('is not offered while the shop cannot send email, nor its hint', async () => {
+    global.fetch = vi.fn(async (url) => {
+      if (isDelivery(url)) return reply(DELIVERY);
+      throw new Error('this test did not expect a request');
+    });
+    renderPage();
+
+    await screen.findByRole('option', { name: /^თბილისი/ });
+    expect(emailField()).not.toBeInTheDocument();
+    expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+  });
+
+  it('is not offered when the rules cannot be loaded', async () => {
+    global.fetch = vi.fn(async () => reply({}, 500));
+    renderPage();
+
+    await screen.findByText('ქალაქების სია ვერ ჩაიტვირთა.');
+    expect(emailField()).not.toBeInTheDocument();
+  });
 
   it('is asked of a guest, optional, saying the confirmation goes there', async () => {
     renderPage();
 
-    const field = emailField();
+    const field = await screen.findByLabelText(/^ელ\. ფოსტა/);
     expect(field).toBeInTheDocument();
     expect(field).not.toBeRequired();
-    expect(field).toHaveAccessibleDescription(/შეკვეთის დადასტურებას ამ მისამართზე გამოგიგზავნით/);
+    expect(field).toHaveAccessibleDescription(HINT);
   });
 
   it('is sent, trimmed, when filled', async () => {
@@ -289,8 +321,7 @@ describe('the guest email', () => {
       user: { id: 'u1', firstName: 'გიორგი', lastName: 'ბერიძე', phone: '555123456' },
       isAuthenticated: true,
     };
-    global.fetch = vi.fn(async (url) => {
-      if (isDelivery(url)) return reply(DELIVERY);
+    serveWithEmail(async (url) => {
       if (String(url).endsWith('/addresses')) return reply([]);
       throw new Error('this test did not expect a request');
     });

@@ -11,6 +11,7 @@ import ProductImage from '../components/common/ProductImage.jsx';
 import { useCart } from '../hooks/useCart.js';
 import { useAuth } from '../hooks/useAuth.js';
 import { useIdempotencyKey } from '../hooks/useIdempotencyKey.js';
+import { useEmailEnabled } from '../hooks/useEmailEnabled.js';
 import { loadDeliveryRules, useDeliveryRules } from '../hooks/useDeliveryRules.js';
 import { useToast } from '../hooks/useToast.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
@@ -49,6 +50,10 @@ export default function Checkout() {
   const { rules, error: rulesError, reload: reloadRules } = useDeliveryRules();
   const { user, isAuthenticated } = useAuth();
   const toast = useToast();
+  // სტუმრის ელფოსტა მხოლოდ მაშინ იკითხება, როცა დადასტურების გაგზავნა შეიძლება;
+  // შესულის ელფოსტა ანგარიშიდან ვიცით
+  const emailEnabled = useEmailEnabled();
+  const askGuestEmail = !isAuthenticated && emailEnabled;
 
   const [values, setValues] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
@@ -153,7 +158,7 @@ export default function Checkout() {
     event.preventDefault();
     // ღილაკი `loading`-ითაც იბლოკება, მაგრამ Enter-ით გაგზავნა მას გვერდს უვლის
     if (submitting) return;
-    const fields = isAuthenticated ? CHECKOUT_FIELDS : GUEST_CHECKOUT_FIELDS;
+    const fields = askGuestEmail ? GUEST_CHECKOUT_FIELDS : CHECKOUT_FIELDS;
     const nextErrors = validateForm(values, fields);
     setErrors(nextErrors);
     setTouched(Object.fromEntries(fields.map((field) => [field, true])));
@@ -166,8 +171,7 @@ export default function Checkout() {
     }
 
     setSubmitting(true);
-    // შესულის ელფოსტა ანგარიშიდან მოდის — ველი მხოლოდ სტუმარს აქვს
-    const guestEmail = isAuthenticated ? '' : values.guestEmail.trim();
+    const guestEmail = askGuestEmail ? values.guestEmail.trim() : '';
     try {
       const order = await api.createOrder({
         items,
@@ -323,8 +327,7 @@ export default function Checkout() {
                 value={values.comment}
                 onChange={(e) => handleChange('comment', e.target.value)}
               />
-              {/* შესულის ელფოსტა ანგარიშიდან ვიცით */}
-              {!isAuthenticated && (
+              {askGuestEmail && (
                 <Input
                   id="checkout-guestEmail"
                   label="ელ. ფოსტა"

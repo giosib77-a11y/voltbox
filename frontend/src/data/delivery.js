@@ -12,4 +12,6 @@ export const deliveryRules = {
   ],
   freeFrom: 50,
   currency: 'GEL',
+  // mock რეჟიმი წერილს ვერ აგზავნის
+  features: { email: false },
 };

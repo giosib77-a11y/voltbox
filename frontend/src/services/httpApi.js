@@ -108,6 +108,8 @@ export async function getDeliveryRules() {
     cities: (rules?.cities || []).map((city) => ({ name: city.name, fee: Number(city.fee) })),
     freeFrom: Number(rules?.freeFrom),
     currency: rules?.currency,
+    // რას შეუძლია ეს deployment — იხ. hooks/useEmailEnabled.js
+    features: { email: rules?.features?.email === true },
   };
 }
 
