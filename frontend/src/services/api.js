@@ -45,6 +45,8 @@ export const logout = api.logout;
 export const getProfile = api.getProfile;
 export const updateProfile = api.updateProfile;
 export const changePassword = api.changePassword;
+export const requestPasswordReset = api.requestPasswordReset;
+export const resetPassword = api.resetPassword;
 export const getSessionSync = api.getSessionSync;
 
 /* --- მისამართები ---------------------------------------------------------- */
@@ -80,6 +82,8 @@ export default {
   getProfile,
   updateProfile,
   changePassword,
+  requestPasswordReset,
+  resetPassword,
   getSessionSync,
   getAddresses,
   saveAddress,

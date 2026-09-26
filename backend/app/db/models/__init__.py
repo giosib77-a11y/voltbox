@@ -26,6 +26,7 @@ from app.db.models.users import (
     ROLE_CUSTOMER,
     ROLES,
     Address,
+    PasswordResetToken,
     RefreshToken,
     User,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "Order",
     "OrderItem",
     "OrderStatusHistory",
+    "PasswordResetToken",
     "Product",
     "ProductImage",
     "RefreshToken",

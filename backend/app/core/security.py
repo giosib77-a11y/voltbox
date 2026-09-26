@@ -112,4 +112,24 @@ def hash_refresh_token(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+#: How long a password reset link works. Long enough to find the email and
+#: open it, short enough that a link left in a mailbox is soon worth nothing.
+PASSWORD_RESET_TTL = timedelta(minutes=30)
+
+
+def generate_password_reset_token() -> tuple[str, str]:
+    """→ (the raw token, its hash). The raw one goes into the email and nowhere else."""
+    raw = secrets.token_urlsafe(32)
+    return raw, hash_password_reset_token(raw)
+
+
+def hash_password_reset_token(raw: str) -> str:
+    """The same SHA-256 as a refresh token's, for the same reason.
+
+    256 random bits cannot be guessed from a dictionary, so a fast hash is
+    enough, and a leaked table holds nothing that opens a link.
+    """
+    return hash_refresh_token(raw)
+
+
 TokenType = Literal["access", "refresh"]

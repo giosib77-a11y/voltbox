@@ -107,4 +107,5 @@ export const LOGIN_FIELDS = ['email', 'password'];
 export const REGISTER_FIELDS = ['firstName', 'lastName', 'email', 'password', 'confirmPassword'];
 export const PROFILE_FIELDS = ['firstName', 'lastName', 'email', 'phone'];
 export const PASSWORD_FIELDS = ['currentPassword', 'newPassword', 'confirmPassword'];
+export const RESET_PASSWORD_FIELDS = ['newPassword', 'confirmPassword'];
 export const ADDRESS_FIELDS = ['city', 'address'];

@@ -1,11 +1,12 @@
-"""What every order notice sent to a third-party HTTP API has in common.
+"""What every message sent to a third-party HTTP API has in common.
 
 What it does: the retry and timeout policy, the redaction of credentials from
 the `httpx` logger and from our own ERROR line, and the wrapper that keeps a
 background send from ever raising.
-Where it fits: `telegram.py` (the owner's notice) and `order_email.py` (the
-customer's confirmation) both send through here. Each one registers how to
-find its own credential in a line of text; the rest is shared.
+Where it fits: `telegram.py` (the owner's notice), `order_email.py` (the
+customer's confirmation) and `password_reset_email.py` (the reset link) all
+send through here. Each sender registers how to find its own credential in a
+line of text; the rest is shared.
 
 Notes: a send runs as a FastAPI background task after the order is committed
 and the response is sent, so nothing here can fail or slow a checkout. What it
@@ -119,6 +120,19 @@ def reason_from_body(response: httpx.Response, key: str) -> str:
     return str(reason)[:200] if reason else response.reason_phrase
 
 
+async def attempt(send: Callable[[], Awaitable[str | None]]) -> str | None:
+    """Run `send` and never raise. None on success, else why not, unredacted.
+
+    Anything escaping a background task is logged by the server with its
+    traceback, and an httpx traceback can hold the URL. The caller writes the
+    ERROR line, through `redact` and its own scrub.
+    """
+    try:
+        return await send()
+    except Exception as exc:  # see the docstring
+        return f"{type(exc).__name__}: {exc}"
+
+
 async def send_quietly(
     send: Callable[[], Awaitable[str | None]],
     *,
@@ -127,17 +141,12 @@ async def send_quietly(
     order_number: str,
     scrub: Redactor = lambda text: text,
 ) -> None:
-    """Run `send` and never raise; a failure is one ERROR line.
+    """Run `send` and never raise; a failure is one ERROR line naming the order.
 
-    Anything escaping a background task is logged by the server with its
-    traceback, and an httpx traceback can hold the URL. `scrub` takes out what
-    this one message must not log beyond the credentials, a recipient's
-    address for instance.
+    `scrub` takes out what this one message must not log beyond the
+    credentials, a recipient's address for instance.
     """
-    try:
-        failure = await send()
-    except Exception as exc:  # see the docstring
-        failure = f"{type(exc).__name__}: {exc}"
+    failure = await attempt(send)
     if failure is not None:
         logger.error(
             "%s for order %s was not sent: %s. The order is saved; see it in the admin panel.",

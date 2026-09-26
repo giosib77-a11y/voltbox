@@ -22,6 +22,8 @@ const Checkout = lazy(() => import('./pages/Checkout.jsx'));
 const CheckoutSuccess = lazy(() => import('./pages/CheckoutSuccess.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
 const Register = lazy(() => import('./pages/Register.jsx'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword.jsx'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'));
 const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 const AccountLayout = lazy(() => import('./pages/Account/AccountLayout.jsx'));
 const Orders = lazy(() => import('./pages/Account/Orders.jsx'));
@@ -123,6 +125,8 @@ const router = createBrowserRouter(
         { path: 'checkout/success/:id', element: <CheckoutSuccess /> },
         { path: 'login', element: <Login /> },
         { path: 'register', element: <Register /> },
+        { path: 'forgot-password', element: <ForgotPassword /> },
+        { path: 'reset-password', element: <ResetPassword /> },
         {
           path: 'account',
           element: <RequireAuth />,

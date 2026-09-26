@@ -17,6 +17,10 @@ dependencies = [
     "pyjwt>=2.10",
     "argon2-cffi>=25.1",
     "slowapi>=0.1.9",
+    # Imported directly, not only through slowapi: hit_per_address counts in
+    # the limiter's own store for the one limit slowapi cannot key - an email
+    # address, which arrives in the request body.
+    "limits>=5.0",
     # Shared rate-limit counters. The Dockerfile runs two workers, so
     # without a shared store each keeps its own and the configured limit is
     # doubled. limits raises ConfigurationError at startup if a redis://

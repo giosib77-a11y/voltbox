@@ -17,7 +17,7 @@ import { calcDiscountPercent } from '../utils/format.js';
 import { readJSON, writeJSON } from '../utils/storage.js';
 import { DEFAULT_SORT, LOW_STOCK_THRESHOLD, PAGE_SIZE, STORAGE_KEYS } from '../constants/index.js';
 import { calcTotals, deliveryFee, totalWithDelivery } from '../utils/pricing.js';
-import { AuthError, NotFoundError, ValidationError } from './errors.js';
+import { ApiError, AuthError, NotFoundError, ValidationError } from './errors.js';
 
 /* -------------------------------------------------------------------------- */
 /*  დამხმარეები                                                                */
@@ -388,6 +388,21 @@ export async function changePassword({ currentPassword, newPassword }) {
   users[index] = { ...users[index], passwordHash: obfuscate(newPassword) };
   writeJSON(STORAGE_KEYS.users, users);
   return { ok: true };
+}
+
+/**
+ * პაროლის აღდგენა mock რეჟიმში შეუძლებელია — ბმული ელფოსტით მიდის, mock კი
+ * წერილს ვერ აგზავნის (`features.email: false`), ამიტომ შესვლის გვერდი ბმულს
+ * საერთოდ არ აჩვენებს. ფუნქციები ხელმოწერების თანხვედრისთვის არსებობს.
+ */
+export async function requestPasswordReset() {
+  await delay();
+  throw new ApiError('დემო რეჟიმში წერილი არ იგზავნება — პაროლის აღდგენა მიუწვდომელია.', 503);
+}
+
+export async function resetPassword() {
+  await delay();
+  throw new ApiError('დემო რეჟიმში პაროლის აღდგენა მიუწვდომელია.', 503);
 }
 
 /** სესიის აღდგენა გვერდის გადატვირთვისას (ქსელის გარეშე). */

@@ -167,8 +167,9 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_chat_id: str = ""
 
-    # --- ელფოსტა (არასავალდებულო — შეკვეთის დადასტურება მყიდველს) ------------
-    # Either one empty turns the confirmation off; see app/services/order_email.py.
+    # --- ელფოსტა (არასავალდებულო — შეკვეთის დადასტურება, პაროლის აღდგენა) ----
+    # Either one empty turns both off; see app/services/order_email.py and
+    # app/services/password_reset_email.py.
     # The key sends mail as the shop's domain. The sender is an address the
     # customer sees in every confirmation and stays plain, e.g.
     # `VoltBox <orders@voltbox.ge>`.
@@ -229,6 +230,8 @@ class Settings(BaseSettings):
 
     @property
     def order_email_enabled(self) -> bool:
+        """Whether the shop can send email at all: the order confirmation and
+        the password reset link both depend on it."""
         return bool(self.resend_api_key.get_secret_value() and self.email_from.strip())
 
     @property

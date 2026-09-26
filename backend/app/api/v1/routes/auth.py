@@ -10,22 +10,30 @@ month from anywhere.
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Cookie, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Cookie, Request, Response, status
 
 from app.core.config import settings
 from app.core.deps import CurrentUser, Db
-from app.core.errors import UnauthorizedError
-from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
+from app.core.errors import AppError, UnauthorizedError
+from app.core.rate_limit import (
+    AUTH_RATE_LIMIT,
+    RESET_EMAIL_ADDRESS_LIMIT,
+    hit_per_address,
+    limiter,
+)
 from app.schemas.auth import (
     ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     OkOut,
     RegisterRequest,
+    ResetPasswordRequest,
     SessionOut,
     UpdateProfileRequest,
     UserOut,
 )
 from app.services import auth as auth_service
+from app.services import password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -165,6 +173,76 @@ async def change_password(db: Db, user: CurrentUser, payload: ChangePasswordRequ
         user=user,
         current_password=payload.current_password,
         new_password=payload.new_password,
+    )
+    await db.commit()
+    return OkOut()
+
+
+@router.post(
+    "/forgot-password",
+    summary="Email a password reset link",
+    description=(
+        "The same 200 whether or not the address has an account, after the same "
+        "work: the link is emailed after the response. 503 while the shop cannot "
+        "send email - the storefront hides the link then (GET /delivery, "
+        "`features.email`). 429 per IP, and per address whether or not it is "
+        "registered."
+    ),
+    response_model=OkOut,
+)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def forgot_password(
+    request: Request, db: Db, payload: ForgotPasswordRequest, background: BackgroundTasks
+) -> OkOut:
+    # `request` is what slowapi reads the client address from. Unused here.
+    if not settings.order_email_enabled:
+        # A 200 here would promise an email that cannot go. Nothing about the
+        # address has been looked at, so this says nothing about it either.
+        raise AppError(
+            "Password reset is unavailable",
+            code="PASSWORD_RESET_UNAVAILABLE",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    if not hit_per_address(
+        RESET_EMAIL_ADDRESS_LIMIT, scope="password-reset", address=payload.email
+    ):
+        raise AppError(
+            "Too many password reset requests for this address",
+            code="TOO_MANY_RESET_REQUESTS",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
+    issued = await auth_service.issue_password_reset(db, email=payload.email)
+    # Committed whichever the answer - see issue_password_reset.
+    await db.commit()
+    if issued is not None:
+        background.add_task(
+            password_reset_email.send_link,
+            password_reset_email.ResetLink(
+                user_id=issued.user_id,
+                recipient=payload.email.strip().lower(),
+                token=issued.token,
+            ),
+        )
+    return OkOut()
+
+
+@router.post(
+    "/reset-password",
+    summary="Set a new password with a reset link",
+    description=(
+        "Takes the token from the link and a new password under the registration "
+        "rules. A link works once and for 30 minutes; a used, expired or "
+        "replaced one is a 400 INVALID_RESET_TOKEN. Success ends every session "
+        "of the account, on every device."
+    ),
+    response_model=OkOut,
+)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def reset_password(request: Request, db: Db, payload: ResetPasswordRequest) -> OkOut:
+    # `request` is what slowapi reads the client address from. Unused here.
+    await auth_service.reset_password(
+        db, raw_token=payload.token, new_password=payload.new_password
     )
     await db.commit()
     return OkOut()

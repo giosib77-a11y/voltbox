@@ -28,9 +28,13 @@ from types import ModuleType
 
 import httpx
 import pytest
-from app.core.rate_limit import MEMORY_STORAGE, build_limiter, storage_uri_for
+import redis
+from app.core import rate_limit
+from app.core.rate_limit import MEMORY_STORAGE, build_limiter, hit_per_address, storage_uri_for
 from fastapi import FastAPI, Request
 from httpx import ASGITransport
+from limits.storage import MemoryStorage
+from limits.strategies import FixedWindowRateLimiter
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -141,6 +145,53 @@ async def test_two_workers_share_one_counter_through_redis(redis_limiter: Limite
             statuses.append((await client.get("/ping")).status_code)
 
     assert statuses == [200] * (OVER - 1) + [429]
+
+
+class TestCountingPerAddress:
+    """hit_per_address: the count slowapi cannot key, on the same store."""
+
+    ADDRESS = "Nino@Example.ge"
+
+    def test_two_workers_share_one_count_through_redis(
+        self, monkeypatch: pytest.MonkeyPatch, redis_limiter: Limiter
+    ) -> None:
+        other_worker = build_limiter(enabled=True, storage_uri=REDIS_URL)
+        answers = []
+        for worker in (redis_limiter, other_worker, redis_limiter, other_worker):
+            monkeypatch.setattr(rate_limit, "limiter", worker)
+            answers.append(hit_per_address("3/hour", scope="test", address=self.ADDRESS))
+
+        assert answers == [True, True, True, False]
+
+    def test_the_store_never_holds_the_address(
+        self, monkeypatch: pytest.MonkeyPatch, redis_limiter: Limiter
+    ) -> None:
+        monkeypatch.setattr(rate_limit, "limiter", redis_limiter)
+
+        hit_per_address("3/hour", scope="test", address=self.ADDRESS)
+
+        keys = redis.Redis.from_url(REDIS_URL, decode_responses=True).keys("*")
+        assert keys, "nothing was counted"
+        assert not [key for key in keys if "nino" in key.lower()]
+
+    def test_an_unreachable_store_still_counts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Degraded to this process, as the IP limits are - not switched off."""
+        dead = build_limiter(enabled=True, storage_uri="redis://127.0.0.1:1/0")
+        monkeypatch.setattr(rate_limit, "limiter", dead)
+        monkeypatch.setattr(
+            rate_limit, "_address_fallback", FixedWindowRateLimiter(MemoryStorage())
+        )
+
+        answers = [hit_per_address("3/hour", scope="test", address=self.ADDRESS) for _ in range(4)]
+
+        assert answers == [True, True, True, False]
+
+    def test_off_with_the_limiter(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            rate_limit, "limiter", build_limiter(enabled=False, storage_uri=MEMORY_STORAGE)
+        )
+
+        assert all(hit_per_address("1/hour", scope="test", address=self.ADDRESS) for _ in range(3))
 
 
 def load_gunicorn_conf() -> ModuleType:

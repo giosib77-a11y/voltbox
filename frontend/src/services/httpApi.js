@@ -196,6 +196,18 @@ export async function changePassword(payload) {
   return request('/auth/change-password', { method: 'POST', body: payload });
 }
 
+// POST /auth/forgot-password — the same answer whether or not the address has
+// an account; the link, if any, arrives by email.
+export async function requestPasswordReset({ email }) {
+  return request('/auth/forgot-password', { method: 'POST', body: { email } });
+}
+
+// POST /auth/reset-password — works once per link and ends every session of
+// the account, this browser's included.
+export async function resetPassword({ token, newPassword }) {
+  return request('/auth/reset-password', { method: 'POST', body: { token, newPassword } });
+}
+
 /** სესიის სინქრონული აღდგენა — ტოკენი ლოკალურად ინახება. */
 export function getSessionSync() {
   const session = readSession();

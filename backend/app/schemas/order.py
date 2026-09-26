@@ -129,8 +129,8 @@ class ShopFeaturesOut(ApiModel):
     """What this deployment can do, for the storefront to show or hide."""
 
     #: Whether the shop can send email at all (RESEND_API_KEY and EMAIL_FROM
-    #: set). Off, a page must not promise one: the guest's confirmation field,
-    #: and later the forgot-password link, are hidden.
+    #: set). Off, a page must not promise one: the guest's confirmation field
+    #: and the forgot-password link are hidden.
     email: bool
 
 

@@ -44,6 +44,22 @@ class ChangePasswordRequest(ApiRequest):
         return _validate_password(value)
 
 
+class ForgotPasswordRequest(ApiRequest):
+    email: EmailStr
+
+
+class ResetPasswordRequest(ApiRequest):
+    # token_urlsafe(32) is 43 characters; the cap only keeps a huge body from
+    # being hashed.
+    token: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def check_password(cls, value: str) -> str:
+        return _validate_password(value)
+
+
 class UpdateProfileRequest(ApiRequest):
     first_name: str | None = Field(default=None, min_length=2, max_length=100)
     last_name: str | None = Field(default=None, min_length=2, max_length=100)

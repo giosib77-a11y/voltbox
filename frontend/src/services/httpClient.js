@@ -94,6 +94,13 @@ const CODE_MESSAGES = {
   INVALID_IDEMPOTENCY_KEY: 'მოთხოვნა ვერ დამუშავდა. განაახლეთ გვერდი და სცადეთ ხელახლა.',
   IDEMPOTENCY_KEY_REQUIRED: 'მოთხოვნა ვერ დამუშავდა. განაახლეთ გვერდი და სცადეთ ხელახლა.',
   INVALID_REFRESH_TOKEN: 'სესიის ვადა ამოიწურა. გთხოვთ, ხელახლა შეხვიდეთ.',
+
+  // Password reset. None of these may say whether the address has an account:
+  // the server counts every address the same way, and the words follow it.
+  INVALID_RESET_TOKEN:
+    'ბმული არასწორია ან მისი ვადა ამოიწურა. მოითხოვეთ ახალი — იმუშავებს მხოლოდ ბოლო წერილის ბმული.',
+  TOO_MANY_RESET_REQUESTS: 'ამ მისამართისთვის ბევრი მოთხოვნა იყო. სცადეთ ერთ საათში.',
+  PASSWORD_RESET_UNAVAILABLE: 'პაროლის აღდგენა ამჟამად მიუწვდომელია. დაგვიკავშირდით ტელეფონით.',
   ADDRESS_NOT_FOUND: 'ეს მისამართი ვეღარ მოიძებნა.',
   CART_TOO_LARGE: 'კალათაში ძალიან ბევრი პროდუქტია. წაშალეთ რამდენიმე და სცადეთ ხელახლა.',
 

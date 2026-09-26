@@ -317,7 +317,8 @@ def _check_the_site_url_is_named() -> None:
     fails: the sitemap is still valid XML and the Telegram order notice still
     arrives. Every URL in the sitemap and the admin link in each notice then
     point at the machine of whoever follows them - a crawler indexes nothing,
-    and the owner's tap on a new order opens nothing.
+    and the owner's tap on a new order opens nothing. The password reset
+    email is sent as well, and its link opens nothing either.
 
     Set but empty is a different failure, and the refusal says which: the
     sitemap's URLs become bare paths with no domain, which a crawler rejects.

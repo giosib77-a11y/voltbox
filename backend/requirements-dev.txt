@@ -669,6 +669,7 @@ limits==5.8.0 \
     # via
     #   -c requirements.txt
     #   slowapi
+    #   voltbox-backend (pyproject.toml)
 mako==1.4.1 \
     --hash=sha256:a359d9a94a541213958742b2698d0a7757bb83551767bc468a74b9905aba9617 \
     --hash=sha256:d7904710b662996425a21627710c4777c45053146942cf8a7aebf757c92b8c27

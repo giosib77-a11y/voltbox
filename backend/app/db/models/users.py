@@ -151,3 +151,27 @@ class RefreshToken(UUIDPrimaryKey, Base):
         # For scripts/prune_refresh_tokens.py, which deletes by expiry alone.
         Index("ix_refresh_tokens_expires_at", "expires_at"),
     )
+
+
+class PasswordResetToken(Base):
+    """The one outstanding password reset link of an account, as a hash.
+
+    Keyed on the account: a new request replaces the previous link, so only the
+    newest email works and the table never holds more rows than there are
+    accounts. Using a link deletes its row, which is what makes it single-use;
+    `auth.revoke_all` deletes it too, so a password change or a blocked account
+    also ends a link already sent.
+    """
+
+    __tablename__ = "password_reset_tokens"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()"), nullable=False
+    )

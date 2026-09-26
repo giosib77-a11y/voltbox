@@ -6,6 +6,7 @@ import Input from '../components/common/Input.jsx';
 import { useAuth } from '../hooks/useAuth.js';
 import { useToast } from '../hooks/useToast.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
+import { useEmailEnabled } from '../hooks/useEmailEnabled.js';
 import { LOGIN_FIELDS, validateField, validateForm } from '../utils/validate.js';
 import { QUERY_KEYS, SITE_NAME } from '../constants/index.js';
 import { getSafeRedirect } from '../utils/redirect.js';
@@ -26,6 +27,9 @@ export default function Login() {
 
   const { login, pending } = useAuth();
   const toast = useToast();
+  // A link that sends nothing is worse than no link: while the shop cannot
+  // send email, there is no way to recover a password here at all.
+  const canResetPassword = useEmailEnabled();
 
   const [values, setValues] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState({});
@@ -106,6 +110,17 @@ export default function Login() {
                 </button>
               }
             />
+
+            {canResetPassword && (
+              <p className="-mt-1 text-right text-sm">
+                <Link
+                  to="/forgot-password"
+                  className="font-medium text-primary-700 underline-offset-4 hover:underline"
+                >
+                  დაგავიწყდათ პაროლი?
+                </Link>
+              </p>
+            )}
 
             <Button type="submit" size="lg" fullWidth loading={pending}>
               <LogIn className="h-4 w-4" aria-hidden="true" />

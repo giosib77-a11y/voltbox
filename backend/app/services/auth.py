@@ -8,22 +8,27 @@ refresh-ტოკენები rotation-on-use პრინციპით მ
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from math import ceil
 
-from sqlalchemy import func, select, update
+from sqlalchemy import String, delete, func, literal, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.errors import ConflictError, UnauthorizedError, ValidationError
 from app.core.security import (
+    PASSWORD_RESET_TTL,
     create_access_token,
+    generate_password_reset_token,
     generate_refresh_token,
     hash_password,
+    hash_password_reset_token,
     hash_refresh_token,
     verify_password,
 )
-from app.db.models import RefreshToken, User
+from app.db.models import PasswordResetToken, RefreshToken, User
 
 # წარუმატებელი შესვლისას ყოველთვის ერთი და იგივე ტექსტი: არსებული და
 # არარსებული ელ. ფოსტის გარჩევა მომხმარებელთა ბაზის აღრიცხვის საშუალებას მისცემდა
@@ -264,12 +269,21 @@ async def revoke_all(db: AsyncSession, user_id: object) -> None:
     already handed out keep working until they expire, which was up to another
     thirty minutes of the thief still being signed in after the owner changed a
     stolen password. Moving `tokens_valid_from` refuses those too.
+
+    A password reset link already sent goes as well. It is a way in that does
+    not need the password, so a change of password - or a blocked account -
+    that left it working would leave whoever holds that email able to undo it.
     """
     now = datetime.now(UTC)
     await db.execute(
         update(RefreshToken)
         .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
         .values(revoked_at=now)
+    )
+    await db.execute(
+        delete(PasswordResetToken)
+        .where(PasswordResetToken.user_id == user_id)
+        .execution_options(synchronize_session=False)
     )
     await db.execute(
         update(User)
@@ -293,6 +307,98 @@ async def change_password(
             details=[{"field": "currentPassword", "message": "Current password is incorrect"}],
         )
     user.password_hash = hash_password(new_password)
+    await db.flush()
+    await revoke_all(db, user.id)
+
+
+@dataclass(frozen=True)
+class IssuedReset:
+    """A reset token that now exists, for the email that carries it."""
+
+    user_id: uuid.UUID
+    token: str
+
+
+async def issue_password_reset(db: AsyncSession, *, email: str) -> IssuedReset | None:
+    """A reset token for the active account at `email`, or None when there is none.
+
+    One statement whatever the answer, and that is the point. The INSERT takes
+    its row from a SELECT on `users`, so an address with no account runs the
+    same statement and inserts nothing. A lookup followed by a write only when
+    it found someone - the obvious shape - would make a registered address the
+    slower answer, and the timing would say who has an account even though the
+    response does not. It is what `login` does with a dummy Argon2 hash, done
+    here with the query instead: the token is generated either way, the same
+    statement runs either way, and the caller commits either way.
+
+    The upsert on the account replaces an earlier link, so only the newest
+    email's works. A blocked account gets none: it could not sign in with the
+    new password anyway.
+    """
+    raw, token_hash = generate_password_reset_token()
+    candidates = select(
+        User.id,
+        literal(token_hash, String),
+        # The database's clock, the one `reset_password` compares against.
+        func.now() + PASSWORD_RESET_TTL,
+    ).where(User.email == email.strip().lower(), User.is_active.is_(True))
+    insert = pg_insert(PasswordResetToken).from_select(
+        ["user_id", "token_hash", "expires_at"], candidates
+    )
+    upsert = insert.on_conflict_do_update(
+        index_elements=[PasswordResetToken.user_id],
+        set_={
+            "token_hash": insert.excluded.token_hash,
+            "expires_at": insert.excluded.expires_at,
+            "created_at": func.now(),
+        },
+    ).returning(PasswordResetToken.user_id)
+
+    user_id = (await db.execute(upsert)).scalar_one_or_none()
+    return None if user_id is None else IssuedReset(user_id=user_id, token=raw)
+
+
+def invalid_reset_token() -> ValidationError:
+    """One answer for a link that is unknown, used, expired or replaced."""
+    return ValidationError(
+        "The password reset link is invalid or has expired", code="INVALID_RESET_TOKEN"
+    )
+
+
+async def reset_password(db: AsyncSession, *, raw_token: str, new_password: str) -> None:
+    """Set a new password through a reset link, exactly once, and end every session.
+
+    The DELETE is the check, as the UPDATE is in `refresh`: of two submissions
+    of one link, the second waits on the row, finds it gone once the first
+    commits, and is refused. Nothing reads the row first and decides later.
+
+    A failure after the claim - the account blocked in the meantime - raises,
+    and the rollback puts the row back; the link is refused either way.
+    """
+    claimed = (
+        await db.execute(
+            delete(PasswordResetToken)
+            .where(
+                PasswordResetToken.token_hash == hash_password_reset_token(raw_token),
+                PasswordResetToken.expires_at > func.now(),
+            )
+            .returning(PasswordResetToken.user_id)
+            .execution_options(synchronize_session=False)
+        )
+    ).scalar_one_or_none()
+    if claimed is None:
+        raise invalid_reset_token()
+
+    user = await db.scalar(select(User).where(User.id == claimed))
+    if user is None or not user.is_active:
+        raise invalid_reset_token()
+
+    user.password_hash = hash_password(new_password)
+    # Whoever opened the link proved they hold the mailbox, which outranks the
+    # failed guesses that locked the account; left in place, the lock would
+    # refuse the new password for up to login_lock_minutes.
+    user.failed_login_count = 0
+    user.locked_until = None
     await db.flush()
     await revoke_all(db, user.id)
 
