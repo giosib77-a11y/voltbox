@@ -35,7 +35,7 @@ from app.db.models import (
     Product,
     User,
 )
-from app.services import order_status
+from app.services import delivery, order_status
 from app.services.contact import contact_matches
 from app.services.inventory import adjust_stock
 
@@ -54,15 +54,6 @@ def money(value: Decimal) -> Decimal:
     ეს ცენტების დაკარგვას ნიშნავს და frontend-ის Math.round-საც არ ემთხვევა.
     """
     return Decimal(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-
-def calc_shipping(subtotal: Decimal) -> Decimal:
-    """ზღვარი და ტარიფი კონფიგიდან — frontend-ის SHIPPING-ს უნდა ემთხვეოდეს."""
-    if subtotal <= 0:
-        return money(Decimal("0"))
-    if subtotal >= Decimal(settings.shipping_free_threshold):
-        return money(Decimal("0"))
-    return money(Decimal(settings.shipping_flat_fee))
 
 
 async def _next_order_number(db: AsyncSession) -> str:
@@ -258,6 +249,10 @@ async def place_order(
                 details=[{"field": "items", "productId": str(product_id), "max": MAX_QUANTITY}],
             )
 
+    # Before the key is claimed: a city the shop does not deliver to is the
+    # customer's mistake to correct, not an order to half-create and roll back.
+    delivery.require_served(str(customer.get("city", "")))
+
     # The key is claimed here, before any check that can fail or block. A
     # duplicate arriving now waits on the unique index instead of racing us to
     # an IntegrityError or being told the last unit is gone.
@@ -338,7 +333,8 @@ async def place_order(
         )
 
     subtotal = money(subtotal)
-    shipping = calc_shipping(subtotal)
+    # From the city and the goods alone. Nothing the client sent is read here.
+    shipping = delivery.fee_for(str(customer.get("city", "")), subtotal)
 
     order.subtotal = subtotal
     order.shipping = shipping

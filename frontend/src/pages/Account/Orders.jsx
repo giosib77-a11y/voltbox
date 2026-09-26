@@ -9,6 +9,7 @@ import { useAsync } from '../../hooks/useProducts.js';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle.js';
 import * as api from '../../services/api.js';
 import { formatDateTime, formatPrice } from '../../utils/format.js';
+import { orderAmounts } from '../../utils/pricing.js';
 import { ORDER_STATUS_LABELS, TEXT, UNKNOWN_ORDER_STATUS } from '../../constants/index.js';
 
 
@@ -46,6 +47,7 @@ export default function Orders() {
     <ul className="space-y-4">
       {orders.map((order) => {
         const status = ORDER_STATUS_LABELS[order.status] || UNKNOWN_ORDER_STATUS;
+        const amounts = orderAmounts(order.totals);
 
         return (
           <li key={order.orderNumber} className="rounded-card border border-ink-200 bg-surface">
@@ -57,7 +59,7 @@ export default function Orders() {
               <div className="flex items-center gap-3">
                 <Badge tone={status.tone}>{status.label}</Badge>
                 <span className="text-base font-bold text-ink-900">
-                  {formatPrice(order.totals.total)}
+                  {formatPrice(amounts.total)}
                 </span>
               </div>
             </div>
@@ -86,6 +88,13 @@ export default function Orders() {
                 </li>
               ))}
             </ul>
+
+            {amounts.shipping !== null && (
+              <p className="border-t border-ink-100 px-4 py-2.5 text-xs text-ink-600">
+                {TEXT.subtotal}: {formatPrice(amounts.subtotal)} · {TEXT.shipping}:{' '}
+                {amounts.shipping === 0 ? TEXT.free : formatPrice(amounts.shipping)}
+              </p>
+            )}
 
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink-100 p-4 text-xs text-ink-500">
               <span>

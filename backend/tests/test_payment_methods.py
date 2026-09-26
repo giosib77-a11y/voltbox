@@ -7,7 +7,9 @@ whole payment surface is one 32-character column with a CHECK on it.
 What can still go wrong is drift. The list lives in four places, and each one
 fails differently when it disagrees with the others:
 
-  · app/schemas/order.py       - refuses the order outright
+  · app/schemas/order.py       - PAYMENT_METHODS is what an order may carry;
+                                 OFFERED_PAYMENT_METHODS is what a new one may
+                                 choose, and POST /orders refuses the rest
   · the orders.status CHECK    - lets the API accept what the database then
                                  rejects, which is a 500 on a valid checkout
   · src/constants/index.js     - the customer picks from a list that is missing
@@ -17,14 +19,19 @@ fails differently when it disagrees with the others:
 
 That last one is not hypothetical: the admin's detail page had a ternary on
 'cash' and printed the raw value for the other method.
+
+Card to the courier is no longer offered, so the two lists differ: a stored
+order may still carry it and every page must still name it, but the checkout
+must not show it, since the API would refuse the order.
 """
 
 import re
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from app.db.models import Order
-from app.schemas.order import PAYMENT_METHODS
+from app.schemas.order import OFFERED_PAYMENT_METHODS, PAYMENT_METHODS, CreateOrderRequest
 from sqlalchemy import CheckConstraint
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -48,6 +55,14 @@ def _js_methods(path: Path, name: str) -> set[str]:
     from_object = set(re.findall(r"^\s{2}([a-z_]+):", body, re.M))
     from_array = set(re.findall(r"value: '([a-z_]+)'", body))
     return from_object | from_array
+
+
+def _js_offered(path: Path) -> set[str]:
+    """The methods the checkout shows: the entries marked `offered: true`."""
+    source = path.read_text(encoding="utf-8")
+    start = source.index("export const PAYMENT_METHODS")
+    body = source[start : source.index("\n];", start)]
+    return set(re.findall(r"\{ value: '([a-z_]+)',[^}]*offered: true", body))
 
 
 def test_the_schema_and_the_database_agree() -> None:
@@ -94,8 +109,23 @@ def test_neither_side_offers_something_the_api_would_refuse() -> None:
     assert admin == set(PAYMENT_METHODS)
 
 
+def test_a_new_order_may_choose_only_what_is_offered() -> None:
+    """The request's Literal is the list; OFFERED_PAYMENT_METHODS names it."""
+    field = CreateOrderRequest.model_fields["payment_method"]
+
+    assert set(get_args(field.annotation)) == set(OFFERED_PAYMENT_METHODS)
+    assert set(OFFERED_PAYMENT_METHODS) <= set(PAYMENT_METHODS)
+    assert "card_on_delivery" not in OFFERED_PAYMENT_METHODS
+
+
+def test_the_checkout_shows_only_what_the_api_accepts() -> None:
+    """An option the API refuses is a checkout that fails after the customer chose it."""
+    assert _js_offered(FRONTEND / "constants" / "index.js") == set(OFFERED_PAYMENT_METHODS)
+
+
 def test_the_extraction_found_something() -> None:
     """Guards the test: a renamed constant would make everything above pass."""
     assert len(PAYMENT_METHODS) == 2
+    assert _js_offered(FRONTEND / "constants" / "index.js")
     assert _js_methods(FRONTEND / "constants" / "index.js", "PAYMENT_METHODS")
     assert _js_methods(FRONTEND / "admin" / "statuses.jsx", "PAYMENT_METHODS")

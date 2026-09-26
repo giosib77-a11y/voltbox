@@ -11,12 +11,14 @@ import ProductImage from '../components/common/ProductImage.jsx';
 import { useCart } from '../hooks/useCart.js';
 import { useAuth } from '../hooks/useAuth.js';
 import { useIdempotencyKey } from '../hooks/useIdempotencyKey.js';
+import { loadDeliveryRules, useDeliveryRules } from '../hooks/useDeliveryRules.js';
 import { useToast } from '../hooks/useToast.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import * as api from '../services/api.js';
 import { formatPhone, formatPrice } from '../utils/format.js';
+import { amountToFreeDelivery, deliveryFee, totalWithDelivery } from '../utils/pricing.js';
 import { CHECKOUT_FIELDS, digitsOnly, validateField, validateForm } from '../utils/validate.js';
-import { CITIES, PAYMENT_METHODS, TEXT } from '../constants/index.js';
+import { OFFERED_PAYMENT_METHODS, TEXT } from '../constants/index.js';
 
 const EMPTY_FORM = {
   firstName: '',
@@ -25,7 +27,7 @@ const EMPTY_FORM = {
   city: '',
   address: '',
   comment: '',
-  paymentMethod: PAYMENT_METHODS[0].value,
+  paymentMethod: OFFERED_PAYMENT_METHODS[0].value,
 };
 
 /**
@@ -36,7 +38,8 @@ export default function Checkout() {
   useDocumentTitle('შეკვეთის გაფორმება');
 
   const navigate = useNavigate();
-  const { items, itemsCount, subtotal, shipping, total, savings, clear } = useCart();
+  const { items, itemsCount, subtotal, savings, clear } = useCart();
+  const { rules, error: rulesError, reload: reloadRules } = useDeliveryRules();
   const { user, isAuthenticated } = useAuth();
   const toast = useToast();
 
@@ -88,9 +91,9 @@ export default function Checkout() {
   useEffect(() => {
     if (!userId) return undefined;
     let cancelled = false;
-    api
-      .getAddresses()
-      .then((addresses) => {
+    // The rules too: a saved city is filled in only if the shop delivers there.
+    Promise.all([api.getAddresses(), loadDeliveryRules()])
+      .then(([addresses, delivery]) => {
         const saved = Array.isArray(addresses) ? addresses.find((a) => a.isDefault) : null;
         if (cancelled || !saved || deliveryEditedRef.current) return;
         setValues((current) => {
@@ -98,7 +101,7 @@ export default function Checkout() {
           return {
             ...current,
             // სიაში არმყოფ ქალაქს select ვერ აჩვენებს — მაშინ ირჩევს თავად
-            city: CITIES.includes(saved.city) ? saved.city : '',
+            city: delivery.cities.some((c) => c.name === saved.city) ? saved.city : '',
             address: saved.address || '',
           };
         });
@@ -111,7 +114,18 @@ export default function Checkout() {
     };
   }, [userId]);
 
-  const cityOptions = useMemo(() => CITIES.map((city) => ({ value: city, label: city })), []);
+  // Only the cities the shop delivers to, each with its fee, from GET /delivery.
+  const cityOptions = useMemo(
+    () =>
+      (rules?.cities || []).map((city) => ({
+        value: city.name,
+        label: `${city.name} — ${formatPrice(city.fee)}`,
+      })),
+    [rules],
+  );
+  // What this order will be charged, as the server will compute it; null until
+  // a city is chosen (unless the basket is free everywhere).
+  const shipping = deliveryFee(subtotal, rules, values.city);
 
   function handleChange(name, rawValue) {
     const value = name === 'phone' ? formatPhone(rawValue) : rawValue;
@@ -254,12 +268,28 @@ export default function Checkout() {
                 placeholder="აირჩიეთ ქალაქი"
                 options={cityOptions}
                 value={values.city}
-                error={touched.city ? errors.city : ''}
+                hint={rulesError ? '' : 'მიწოდება ამ ეტაპზე მხოლოდ ამ ქალაქებშია'}
+                error={
+                  rulesError
+                    ? 'ქალაქების სია ვერ ჩაიტვირთა.'
+                    : touched.city
+                      ? errors.city
+                      : ''
+                }
                 onChange={(e) => handleChange('city', e.target.value)}
                 onBlur={() => handleBlur('city')}
                 autoComplete="address-level2"
               />
             </div>
+            {rulesError && (
+              <button
+                type="button"
+                onClick={reloadRules}
+                className="mt-2 text-sm font-semibold text-primary-700 underline-offset-4 hover:underline"
+              >
+                {TEXT.retry}
+              </button>
+            )}
 
             <div className="mt-4 grid gap-4">
               <Input
@@ -287,7 +317,7 @@ export default function Checkout() {
           <fieldset className="rounded-card border border-ink-200 bg-surface p-5">
             <legend className="px-1 text-base font-bold text-ink-900">გადახდის მეთოდი</legend>
             <div className="mt-4 space-y-2.5">
-              {PAYMENT_METHODS.map((method) => (
+              {OFFERED_PAYMENT_METHODS.map((method) => (
                 <label
                   key={method.value}
                   className={`flex cursor-pointer items-center gap-3 rounded-control border px-4 py-3 transition-colors ${
@@ -346,7 +376,10 @@ export default function Checkout() {
             <CartSummary
               subtotal={subtotal}
               shipping={shipping}
-              total={total}
+              total={totalWithDelivery(subtotal, shipping)}
+              cities={rules?.cities}
+              remaining={amountToFreeDelivery(subtotal, rules)}
+              freeFrom={rules?.freeFrom}
               itemsCount={itemsCount}
               savings={savings}
               actionLabel="შეკვეთის დადასტურება"

@@ -1,7 +1,8 @@
 """Telling the shop owner on Telegram that an order was placed.
 
-What it does: sends one message - order number, total, item count and a link to
-the order in the admin panel - to TELEGRAM_CHAT_ID through the Bot API.
+What it does: sends one message - order number, goods, delivery fee, total, item
+count and a link to the order in the admin panel - to TELEGRAM_CHAT_ID through
+the Bot API.
 Where it fits: the checkout route schedules `notify_order_placed` as a
 background task after the order has been committed, so the order never waits
 for Telegram and never fails because of it.
@@ -88,6 +89,8 @@ class OrderNotice:
 
     order_id: UUID
     order_number: str
+    subtotal: Decimal
+    shipping: Decimal
     total: Decimal
     currency: str
     item_count: int
@@ -114,6 +117,8 @@ def message_text(notice: OrderNotice) -> str:
     link = f"{settings.site_url.rstrip('/')}/admin/orders/{notice.order_id}"
     return (
         f"ახალი შეკვეთა {notice.order_number}\n"
+        f"პროდუქტები: {notice.subtotal:.2f} {notice.currency}\n"
+        f"მიწოდება: {notice.shipping:.2f} {notice.currency}\n"
         f"ჯამი: {notice.total:.2f} {notice.currency}\n"
         f"ნივთები: {notice.item_count}\n"
         f"{link}"

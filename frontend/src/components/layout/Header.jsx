@@ -8,7 +8,8 @@ import UserMenu from './UserMenu.jsx';
 import CartBadge from '../cart/CartBadge.jsx';
 import SearchBar from '../search/SearchBar.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
-import { CONTACT, QUERY_KEYS, SHIPPING } from '../../constants/index.js';
+import { CONTACT, QUERY_KEYS } from '../../constants/index.js';
+import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { formatPrice } from '../../utils/format.js';
 
 /**
@@ -20,6 +21,8 @@ import { formatPrice } from '../../utils/format.js';
 export default function Header({ categories = [] }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
+  // The threshold comes from GET /delivery, the same table the checkout charges by.
+  const { rules } = useDeliveryRules();
 
   const searchDefault =
     location.pathname === '/search'
@@ -43,7 +46,7 @@ export default function Header({ categories = [] }) {
         <div className="container-page flex h-9 items-center justify-between text-xs text-fg-muted">
           <p className="flex items-center gap-1.5">
             <Truck className="h-3.5 w-3.5 text-primary-700" aria-hidden="true" />
-            უფასო მიწოდება {formatPrice(SHIPPING.freeThreshold)}-ზე მეტ შეკვეთაზე
+            {rules && <>უფასო მიწოდება {formatPrice(rules.freeFrom)}-ზე მეტ შეკვეთაზე</>}
           </p>
           <a href={CONTACT.phoneHref} className="flex items-center gap-1.5 transition-colors hover:text-fg">
             <Phone className="h-3.5 w-3.5" aria-hidden="true" />

@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.core.config import settings
 from app.db.models import Brand, Category, Product
 from app.services import search as search_service
 
@@ -502,12 +501,3 @@ async def home_sections(db: AsyncSession, limit: int = 8) -> dict[str, Any]:
         "latest": latest,
         "popular_categories": await list_categories(db),
     }
-
-
-def shipping_for(subtotal: Decimal) -> Decimal:
-    """მიწოდების ღირებულება — ზღვარი და ტარიფი კონფიგიდან, არა კოდიდან."""
-    if subtotal <= 0:
-        return Decimal("0.00")
-    if subtotal >= Decimal(settings.shipping_free_threshold):
-        return Decimal("0.00")
-    return Decimal(settings.shipping_flat_fee)

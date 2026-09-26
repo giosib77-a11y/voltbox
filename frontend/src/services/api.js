@@ -36,6 +36,7 @@ export const searchProducts = api.searchProducts;
 export const createOrder = api.createOrder;
 export const getOrders = api.getOrders;
 export const getOrderByNumber = api.getOrderByNumber;
+export const getDeliveryRules = api.getDeliveryRules;
 
 /* --- ავტორიზაცია ---------------------------------------------------------- */
 export const login = api.login;
@@ -72,6 +73,7 @@ export default {
   createOrder,
   getOrders,
   getOrderByNumber,
+  getDeliveryRules,
   login,
   register,
   logout,

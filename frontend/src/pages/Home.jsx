@@ -9,12 +9,19 @@ import { Skeleton } from '../components/common/Skeleton.jsx';
 import { useAsync, useCategories } from '../hooks/useProducts.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import * as api from '../services/api.js';
-import { HOME_SECTION_TITLES, SHIPPING, SITE_DESCRIPTION } from '../constants/index.js';
+import { HOME_SECTION_TITLES, SITE_DESCRIPTION } from '../constants/index.js';
+import { useDeliveryRules } from '../hooks/useDeliveryRules.js';
 import { formatPrice } from '../utils/format.js';
 import { rootCategories } from '../utils/categoryTree.js';
 
 const BENEFITS = [
-  { icon: Truck, title: 'უფასო მიწოდება', text: `${formatPrice(SHIPPING.freeThreshold)}-ზე მეტ შეკვეთაზე` },
+  // The threshold is filled in from GET /delivery when the card renders; until
+  // then a no-break space holds the line, so the card does not jump.
+  {
+    icon: Truck,
+    title: 'უფასო მიწოდება',
+    text: (rules) => (rules ? `${formatPrice(rules.freeFrom)}-ზე მეტ შეკვეთაზე` : ' '),
+  },
   { icon: ShieldCheck, title: 'ოფიციალური გარანტია', text: 'ყველა პროდუქტზე' },
   { icon: BadgePercent, title: 'საუკეთესო ფასი', text: 'რეგულარული ფასდაკლებები' },
   { icon: Headphones, title: 'კონსულტაცია', text: 'ორშ.–შაბ. 10:00–20:00' },
@@ -150,6 +157,7 @@ function HeroMark() {
 }
 
 function Benefits() {
+  const { rules } = useDeliveryRules();
   return (
     <section aria-label="ჩვენი უპირატესობები" className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
       {BENEFITS.map((benefit) => (
@@ -162,7 +170,9 @@ function Benefits() {
           </span>
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-fg">{benefit.title}</span>
-            <span className="block text-xs text-fg-muted">{benefit.text}</span>
+            <span className="block text-xs text-fg-muted">
+              {typeof benefit.text === 'function' ? benefit.text(rules) : benefit.text}
+            </span>
           </span>
         </div>
       ))}

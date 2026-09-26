@@ -43,14 +43,14 @@ async def _customer_with_orders(db: AsyncSession) -> tuple[User, Order, Order]:
     kept = await order_service.create_order(
         db,
         items=[(product.id, 2)],
-        customer={"firstName": "შემსყიდველი", "phone": "555111222"},
+        customer={"firstName": "შემსყიდველი", "phone": "555111222", "city": "თბილისი"},
         payment_method="cash",
         user=customer,
     )
     dropped = await order_service.create_order(
         db,
         items=[(product.id, 1)],
-        customer={"firstName": "შემსყიდველი", "phone": "555111222"},
+        customer={"firstName": "შემსყიდველი", "phone": "555111222", "city": "თბილისი"},
         payment_method="cash",
         user=customer,
     )

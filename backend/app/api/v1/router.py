@@ -8,6 +8,7 @@ from app.api.v1.routes import (
     cart,
     catalog_meta,
     client_errors,
+    delivery,
     health,
     orders,
     products,
@@ -22,6 +23,7 @@ api_router.include_router(auth.router)
 api_router.include_router(addresses.router)
 api_router.include_router(cart.router)
 api_router.include_router(orders.router)
+api_router.include_router(delivery.router)
 api_router.include_router(catalog_meta.router)
 api_router.include_router(search.router)
 api_router.include_router(products.router)

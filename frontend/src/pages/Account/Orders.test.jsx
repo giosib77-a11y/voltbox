@@ -72,3 +72,25 @@ describe('the order list', () => {
     expect(screen.queryByText('მიღებულია')).not.toBeInTheDocument();
   });
 });
+
+describe('the amounts in the order list', () => {
+  it('shows the goods and the delivery fee beside the total', async () => {
+    vi.spyOn(api, 'getOrders').mockResolvedValue([
+      { ...order('pending'), totals: { subtotal: '40.00', shipping: '8.00', total: '48.00' } },
+    ]);
+    renderOrders();
+
+    expect(await screen.findByText('48 ₾')).toBeInTheDocument();
+    expect(screen.getByText(/ჯამი: 40 ₾ · მიწოდება:/)).toHaveTextContent(
+      'ჯამი: 40 ₾ · მიწოდება: 8 ₾',
+    );
+  });
+
+  it('still lists an order with no stored fee, by its total', async () => {
+    vi.spyOn(api, 'getOrders').mockResolvedValue([order('delivered')]);
+    renderOrders();
+
+    expect(await screen.findByText('80 ₾')).toBeInTheDocument();
+    expect(screen.queryByText(/მიწოდება:/)).not.toBeInTheDocument();
+  });
+});

@@ -93,3 +93,50 @@ describe('the order page', () => {
     expect(screen.queryByText(/სავარაუდო მიწოდება/)).not.toBeInTheDocument();
   });
 });
+
+describe('the amounts on the order page', () => {
+  const row = (label) => screen.getByText(label).closest('div');
+
+  it('shows the goods, the delivery fee and the total, as the API sends them', async () => {
+    vi.spyOn(api, 'getOrderByNumber').mockResolvedValue({
+      ...order('pending'),
+      totals: { subtotal: '40.00', shipping: '8.00', total: '48.00' },
+    });
+    renderPage();
+
+    await screen.findByText('შეკვეთა მიღებულია!');
+    expect(row('ჯამი')).toHaveTextContent('40 ₾');
+    expect(row('მიწოდება')).toHaveTextContent('8 ₾');
+    expect(row('სულ გადასახდელი')).toHaveTextContent('48 ₾');
+  });
+
+  it('calls a free delivery free, though the API sends "0.00"', async () => {
+    vi.spyOn(api, 'getOrderByNumber').mockResolvedValue({
+      ...order('pending'),
+      totals: { subtotal: '80.00', shipping: '0.00', total: '80.00' },
+    });
+    renderPage();
+
+    await screen.findByText('შეკვეთა მიღებულია!');
+    expect(row('მიწოდება')).toHaveTextContent('უფასო');
+  });
+
+  it('still shows an order that has no stored fee, by its total', async () => {
+    vi.spyOn(api, 'getOrderByNumber').mockResolvedValue({ ...order('delivered'), totals: { total: 80 } });
+    renderPage();
+
+    expect(await screen.findByText('სულ გადასახდელი')).toBeInTheDocument();
+    expect(row('სულ გადასახდელი')).toHaveTextContent('80 ₾');
+    expect(screen.queryByText('მიწოდება')).not.toBeInTheDocument();
+  });
+
+  it('still names card to the courier on an order placed with it', async () => {
+    vi.spyOn(api, 'getOrderByNumber').mockResolvedValue({
+      ...order('delivered'),
+      paymentMethod: 'card_on_delivery',
+    });
+    renderPage();
+
+    expect(await screen.findByText('ბარათით კურიერთან')).toBeInTheDocument();
+  });
+});

@@ -131,6 +131,8 @@ async def create_order(
             telegram.OrderNotice(
                 order_id=order.id,
                 order_number=order.order_number,
+                subtotal=order.subtotal,
+                shipping=order.shipping,
                 total=order.total,
                 currency=order.currency,
                 item_count=sum(item.quantity for item in order.items),

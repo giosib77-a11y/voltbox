@@ -11,8 +11,8 @@ from decimal import Decimal
 import httpx
 import pytest
 from app.core.rate_limit import LOOKUP_RATE_LIMIT, limiter
-from app.db.models import Product, ProductImage
-from sqlalchemy import delete, select, text
+from app.db.models import ROLE_ADMIN, Order, Product, ProductImage
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.factories import auth_header, make_brand, make_category, make_product, make_user
@@ -68,6 +68,10 @@ async def _place(
     )
 
 
+async def _order_count(db: AsyncSession) -> int:
+    return int(await db.scalar(select(func.count()).select_from(Order)) or 0)
+
+
 async def test_guest_checkout_creates_an_order(
     client: httpx.AsyncClient, shop: dict[str, Product]
 ) -> None:
@@ -104,16 +108,16 @@ async def test_the_ten_thousand_and_first_order_of_a_day_gets_a_number_of_its_ow
 async def test_totals_are_computed_from_database_prices(
     client: httpx.AsyncClient, shop: dict[str, Product]
 ) -> None:
-    # 2 × 40.00 = 80.00 → 150-ზე ნაკლებია, მიწოდება 5.00
-    body = (await _place(client, [{"productId": str(shop["cheap"].id), "qty": 2}])).json()
+    # 1 × 40.00 → 50-ზე ნაკლებია, თბილისში მიწოდება 8.00
+    body = (await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}])).json()
 
-    assert body["totals"] == {"subtotal": "80.00", "shipping": "5.00", "total": "85.00"}
+    assert body["totals"] == {"subtotal": "40.00", "shipping": "8.00", "total": "48.00"}
 
 
 async def test_free_shipping_above_the_threshold(
     client: httpx.AsyncClient, shop: dict[str, Product]
 ) -> None:
-    # 1 × 200.00 ≥ 150 → მიწოდება უფასოა
+    # 1 × 200.00 ≥ 50 → მიწოდება უფასოა
     body = (await _place(client, [{"productId": str(shop["pricey"].id), "qty": 1}])).json()
 
     assert body["totals"] == {"subtotal": "200.00", "shipping": "0.00", "total": "200.00"}
@@ -380,7 +384,7 @@ async def test_snapshot_survives_a_later_price_change(
 
     assert stored["items"][0]["snapshot"]["price"] == "40.00"
     assert stored["items"][0]["snapshot"]["name"] == "Cheap Phone"
-    assert stored["totals"]["total"] == "45.00"
+    assert stored["totals"]["total"] == "48.00"
 
 
 async def test_order_number_is_not_readable_without_the_contact(
@@ -635,34 +639,97 @@ async def test_knowing_the_contact_does_not_open_the_signed_in_route(
 
 
 class TestPaymentMethod:
-    """Only the two ways this shop can actually be paid.
+    """Only the ways this shop can actually be paid.
 
-    Both mean "on delivery" - there is no online payment - so nothing here moves
-    money and a made-up value could not steal anything. What it could do is
-    arrive in the admin panel reading "already paid" beside an order that is
-    not, which is a courier handing goods over for nothing.
+    Both stored values mean "on delivery" - there is no online payment - so
+    nothing here moves money and a made-up value could not steal anything. What
+    it could do is arrive in the admin panel reading "already paid" beside an
+    order that is not, which is a courier handing goods over for nothing.
 
     `status` has had an enum since the first migration. This is the same idea
     applied to the other field an operator acts on, and it was free text from
     the request body all the way to the order list.
+
+    Card to the courier is no longer offered. New orders are refused it; orders
+    already stored with it keep it and must still load.
     """
 
-    @pytest.mark.parametrize("method", ["cash", "card_on_delivery"])
-    async def test_the_two_real_methods_are_accepted(
-        self, client: httpx.AsyncClient, shop: dict[str, Product], method: str
+    async def test_cash_is_accepted(
+        self, client: httpx.AsyncClient, shop: dict[str, Product]
     ) -> None:
         response = await client.post(
             "/api/v1/orders",
             json={
                 "items": [{"productId": str(shop["cheap"].id), "qty": 1}],
                 "customer": CUSTOMER,
-                "paymentMethod": method,
+                "paymentMethod": "cash",
             },
             headers={"Idempotency-Key": str(uuid.uuid4())},
         )
 
         assert response.status_code == 201
-        assert response.json()["paymentMethod"] == method
+        assert response.json()["paymentMethod"] == "cash"
+
+    async def test_card_to_the_courier_is_refused_on_a_new_order(
+        self, client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+    ) -> None:
+        response = await client.post(
+            "/api/v1/orders",
+            json={
+                "items": [{"productId": str(shop["cheap"].id), "qty": 1}],
+                "customer": CUSTOMER,
+                "paymentMethod": "card_on_delivery",
+            },
+            headers={"Idempotency-Key": str(uuid.uuid4())},
+        )
+
+        assert response.status_code == 400
+        error = response.json()["error"]
+        assert error["code"] == "VALIDATION_ERROR"
+        assert "paymentMethod" in str(error["details"])
+        assert await _order_count(db) == 0
+
+    async def test_an_old_order_paid_by_card_still_loads(
+        self, client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+    ) -> None:
+        """Stored before the method was withdrawn: the owner and the admin read it."""
+        owner = await make_user(db, email="card@example.ge")
+        admin = await make_user(db, email="admin@example.ge", role=ROLE_ADMIN)
+        order = Order(
+            order_number="VB-20260901-00001",
+            user_id=owner.id,
+            status="delivered",
+            customer={
+                "first_name": "გიორგი",
+                "last_name": "ბერიძე",
+                "phone": "555123456",
+                "city": "ბათუმი",
+                "address": "რუსთაველის ქუჩა 1",
+            },
+            shipping_address={"city": "ბათუმი", "address": "რუსთაველის ქუჩა 1"},
+            subtotal=Decimal("80.00"),
+            shipping=Decimal("5.00"),
+            total=Decimal("85.00"),
+            payment_method="card_on_delivery",
+        )
+        db.add(order)
+        await db.flush()
+
+        listed = await client.get("/api/v1/orders", headers=auth_header(owner))
+        one = await client.get(f"/api/v1/orders/{order.order_number}", headers=auth_header(owner))
+        admin_view = await client.get(
+            f"/api/v1/admin/orders/{order.id}", headers=auth_header(admin)
+        )
+
+        assert listed.status_code == 200, listed.text
+        assert [o["paymentMethod"] for o in listed.json()] == ["card_on_delivery"]
+        assert one.status_code == 200, one.text
+        assert one.json()["paymentMethod"] == "card_on_delivery"
+        # Kept as stored: the old flat fee and a city no longer served.
+        assert one.json()["totals"] == {"subtotal": "80.00", "shipping": "5.00", "total": "85.00"}
+        assert admin_view.status_code == 200, admin_view.text
+        assert admin_view.json()["paymentMethod"] == "card_on_delivery"
+        assert admin_view.json()["shipping"] == "5.00"
 
     @pytest.mark.parametrize(
         "method",
@@ -703,3 +770,158 @@ class TestPaymentMethod:
                 )
             )
         await db.rollback()
+
+
+class TestDelivery:
+    """The fee comes from the city and the goods, and from nothing the client says.
+
+    The owner's rules: Tbilisi 8, Rustavi 5, free from 50 of goods, and no other
+    city. They live in app/services/delivery.py; these tests write the numbers
+    out rather than reading them from there, so a change to the table has to
+    change a test too.
+    """
+
+    @staticmethod
+    async def _checkout(
+        client: httpx.AsyncClient, product: Product, **overrides: object
+    ) -> httpx.Response:
+        body: dict[str, object] = {
+            "items": [{"productId": str(product.id), "qty": 1}],
+            "customer": CUSTOMER,
+            "paymentMethod": "cash",
+        }
+        body.update(overrides)
+        return await client.post(
+            "/api/v1/orders", json=body, headers={"Idempotency-Key": str(uuid.uuid4())}
+        )
+
+    @pytest.mark.parametrize(
+        ("city", "fee", "total"),
+        [("თბილისი", "8.00", "48.00"), ("რუსთავი", "5.00", "45.00")],
+    )
+    async def test_each_city_pays_its_own_fee(
+        self,
+        client: httpx.AsyncClient,
+        db: AsyncSession,
+        shop: dict[str, Product],
+        city: str,
+        fee: str,
+        total: str,
+    ) -> None:
+        response = await self._checkout(client, shop["cheap"], customer={**CUSTOMER, "city": city})
+
+        assert response.status_code == 201, response.text
+        assert response.json()["totals"] == {"subtotal": "40.00", "shipping": fee, "total": total}
+        # Stored apart from the goods, and the total includes it.
+        stored = await db.scalar(
+            select(Order).where(Order.order_number == response.json()["orderNumber"])
+        )
+        assert stored is not None
+        assert (stored.subtotal, stored.shipping, stored.total) == (
+            Decimal("40.00"),
+            Decimal(fee),
+            Decimal(total),
+        )
+
+    @pytest.mark.parametrize("city", ["თბილისი", "რუსთავი"])
+    @pytest.mark.parametrize(
+        ("price", "free"),
+        [("50.00", True), ("49.99", False)],
+        ids=["exactly-50-is-free", "one-tetri-below-is-charged"],
+    )
+    async def test_the_threshold_is_fifty_inclusive(
+        self,
+        client: httpx.AsyncClient,
+        db: AsyncSession,
+        shop: dict[str, Product],
+        city: str,
+        price: str,
+        free: bool,
+    ) -> None:
+        product = await make_product(
+            db,
+            await make_category(db, "edge"),
+            await make_brand(db, "Edge"),
+            slug=f"edge-{price}",
+            name=f"Edge {price}",
+            price=price,
+            stock=1,
+        )
+
+        response = await self._checkout(client, product, customer={**CUSTOMER, "city": city})
+
+        assert response.status_code == 201, response.text
+        shipping = Decimal(response.json()["totals"]["shipping"])
+        fees = {"თბილისი": Decimal("8"), "რუსთავი": Decimal("5")}
+        expected = Decimal("0") if free else fees[city]
+        assert shipping == expected
+        assert Decimal(response.json()["totals"]["total"]) == Decimal(price) + expected
+
+    @pytest.mark.parametrize(
+        "where",
+        [
+            {"shipping": "0.00"},
+            {"deliveryFee": "0.00"},
+            {"totals": {"subtotal": "40.00", "shipping": "0.00", "total": "40.00"}},
+            {"customer": {**CUSTOMER, "shipping": "0.00"}},
+        ],
+        ids=["shipping", "deliveryFee", "totals", "inside-customer"],
+    )
+    async def test_a_client_supplied_fee_never_reaches_the_order(
+        self,
+        client: httpx.AsyncClient,
+        db: AsyncSession,
+        shop: dict[str, Product],
+        where: dict[str, object],
+    ) -> None:
+        """Refused, like a client-supplied price - never used, never stored.
+
+        Refused rather than dropped: `extra="forbid"` makes a contract
+        regression loud. Either way the fee a client names cannot become the
+        fee an order carries, which is the property that matters here.
+        """
+        before = await _order_count(db)
+
+        response = await self._checkout(client, shop["cheap"], **where)
+
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+        assert await _order_count(db) == before
+
+    async def test_the_fee_is_the_servers_even_when_the_client_sends_none(
+        self, client: httpx.AsyncClient, shop: dict[str, Product]
+    ) -> None:
+        """The other half: a body with no fee at all is charged the city's."""
+        response = await self._checkout(client, shop["cheap"])
+
+        assert response.json()["totals"]["shipping"] == "8.00"
+
+    @pytest.mark.parametrize("city", ["ბათუმი", "ქუთაისი", "Tbilisi", "თბილისი, ვაკე"])
+    async def test_a_city_the_shop_does_not_serve_is_refused(
+        self,
+        client: httpx.AsyncClient,
+        db: AsyncSession,
+        shop: dict[str, Product],
+        city: str,
+    ) -> None:
+        before = await _order_count(db)
+
+        response = await self._checkout(client, shop["cheap"], customer={**CUSTOMER, "city": city})
+
+        assert response.status_code == 400
+        error = response.json()["error"]
+        assert error["code"] == "CITY_NOT_SERVED"
+        assert error["details"] == [{"field": "customer.city", "cities": ["თბილისი", "რუსთავი"]}]
+        assert await _order_count(db) == before
+        stock = await db.scalar(select(Product.stock).where(Product.id == shop["cheap"].id))
+        assert stock == 5
+
+    async def test_the_storefront_reads_the_same_rules(self, client: httpx.AsyncClient) -> None:
+        response = await client.get("/api/v1/delivery")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "cities": [{"name": "თბილისი", "fee": "8.00"}, {"name": "რუსთავი", "fee": "5.00"}],
+            "freeFrom": "50.00",
+            "currency": "GEL",
+        }

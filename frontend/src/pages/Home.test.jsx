@@ -15,6 +15,7 @@ import { HOME_SECTION_TITLES } from '../constants/index.js';
 
 import Home from './Home.jsx';
 import * as api from '../services/api.js';
+import { forgetDeliveryRules } from '../hooks/useDeliveryRules.js';
 
 // A product card has an add-to-cart button; the cart itself is not what these check
 vi.mock('../hooks/useCart.js', () => ({ useCart: () => ({ addItem: () => {}, quantities: {} }) }));
@@ -36,6 +37,15 @@ beforeEach(() => {
     popularCategories: POPULAR,
   });
   vi.spyOn(api, 'getCategories').mockResolvedValue(POPULAR);
+  forgetDeliveryRules();
+  vi.spyOn(api, 'getDeliveryRules').mockResolvedValue({
+    cities: [
+      { name: 'თბილისი', fee: 8 },
+      { name: 'რუსთავი', fee: 5 },
+    ],
+    freeFrom: 50,
+    currency: 'GEL',
+  });
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -143,5 +153,17 @@ describe('Home', () => {
     expect(screen.queryByRole('heading', { name: HOME_SECTION_TITLES.latest })).toBeNull();
     expect(document.querySelector('a[href^="/product/"]')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('Home benefits', () => {
+  it('puts the free-delivery threshold from GET /delivery on its card', async () => {
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('50 ₾-ზე მეტ შეკვეთაზე')).toBeInTheDocument();
   });
 });

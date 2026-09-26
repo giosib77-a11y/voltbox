@@ -347,9 +347,9 @@ export function CartProvider({ children }) {
       items: state.items,
       hydrated: state.hydrated,
       itemsCount: totals.itemsCount,
+      // No shipping or total here: the fee depends on the delivery city, which
+      // the cart does not know. Cart and Checkout work it out from the rules.
       subtotal: totals.subtotal,
-      shipping: totals.shipping,
-      total: totals.total,
       savings: totals.savings,
       quantities,
       addItem,

@@ -42,11 +42,17 @@ class CustomerRequest(ApiRequest):
 #: idea, applied to the other field an operator acts on.
 PAYMENT_METHODS = ("cash", "card_on_delivery")
 
+#: What a new order may choose - a subset of the above. Card to the courier is
+#: no longer offered, but orders placed with it are still stored under that
+#: value and must still load, so it stays in PAYMENT_METHODS and in the
+#: column's CHECK; only POST /orders refuses it.
+OFFERED_PAYMENT_METHODS = ("cash",)
+
 
 class CreateOrderRequest(ApiRequest):
     items: list[OrderItemRequest] = Field(min_length=1, max_length=50)
     customer: CustomerRequest
-    payment_method: Literal["cash", "card_on_delivery"] = "cash"
+    payment_method: Literal["cash"] = "cash"
 
 
 class OrderItemSnapshot(ApiModel):
@@ -101,4 +107,17 @@ class OrderOut(ApiModel):
     customer: CustomerOut
     totals: OrderTotals
     payment_method: str
+    currency: str
+
+
+class DeliveryCityOut(ApiModel):
+    name: str
+    fee: Decimal
+
+
+class DeliveryRulesOut(ApiModel):
+    """services/delivery.py as the storefront reads it."""
+
+    cities: list[DeliveryCityOut]
+    free_from: Decimal
     currency: str

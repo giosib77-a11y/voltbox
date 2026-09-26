@@ -13,7 +13,7 @@ import { useToast } from '../../hooks/useToast.js';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle.js';
 import * as api from '../../services/api.js';
 import { ADDRESS_FIELDS, validateField, validateForm } from '../../utils/validate.js';
-import { CITIES } from '../../constants/index.js';
+import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
 
 const EMPTY = { label: '', city: '', address: '', isDefault: false };
 
@@ -21,6 +21,8 @@ export default function Addresses() {
   useDocumentTitle('მისამართები');
 
   const toast = useToast();
+  // The cities checkout delivers to: an address anywhere else could not be used.
+  const { rules } = useDeliveryRules();
   const { data: addresses, loading, error, reload, setData } = useAsync(() => api.getAddresses(), [], {
     initialData: [],
   });
@@ -131,7 +133,7 @@ export default function Addresses() {
             label="ქალაქი"
             required
             placeholder="აირჩიეთ ქალაქი"
-            options={CITIES.map((city) => ({ value: city, label: city }))}
+            options={(rules?.cities || []).map((city) => ({ value: city.name, label: city.name }))}
             value={values.city}
             error={errors.city}
             onChange={(e) => setValues((c) => ({ ...c, city: e.target.value }))}

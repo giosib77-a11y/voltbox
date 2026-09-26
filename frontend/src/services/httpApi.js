@@ -96,6 +96,21 @@ function rememberGuestOrder(orderNumber, contact) {
   writeJSON(GUEST_ORDERS_KEY, { ...store, [orderNumber]: contact });
 }
 
+/**
+ * GET /delivery — ქალაქები, ტარიფები და უფასო მიწოდების ზღვარი.
+ *
+ * API ფულს სტრიქონად აბრუნებს ("8.00"); აქ ერთხელ ხდება რიცხვად, რომ
+ * გვერდებმა შეადარონ და შეკრიბონ.
+ */
+export async function getDeliveryRules() {
+  const rules = await request('/delivery');
+  return {
+    cities: (rules?.cities || []).map((city) => ({ name: city.name, fee: Number(city.fee) })),
+    freeFrom: Number(rules?.freeFrom),
+    currency: rules?.currency,
+  };
+}
+
 // GET /orders
 export async function getOrders() {
   return request('/orders');

@@ -11,6 +11,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import { useToast } from '../hooks/useToast.js';
 import * as api from '../services/api.js';
 import { formatDateTime, formatPrice } from '../utils/format.js';
+import { orderAmounts } from '../utils/pricing.js';
 import {
   ORDER_STATUS_LABELS,
   PAYMENT_METHODS,
@@ -77,6 +78,7 @@ export default function CheckoutSuccess() {
   const cancelled = order.status === 'cancelled';
   const delivered = order.status === 'delivered';
   const status = ORDER_STATUS_LABELS[order.status] || UNKNOWN_ORDER_STATUS;
+  const amounts = orderAmounts(order.totals);
 
   return (
     <div className="container-page max-w-3xl py-8 lg:py-12">
@@ -184,19 +186,23 @@ export default function CheckoutSuccess() {
         </ul>
 
         <dl className="mt-4 space-y-2 border-t border-ink-200 pt-4 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-ink-600">{TEXT.subtotal}</dt>
-            <dd className="font-medium text-ink-900">{formatPrice(order.totals.subtotal)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-ink-600">{TEXT.shipping}</dt>
-            <dd className="font-medium text-ink-900">
-              {order.totals.shipping === 0 ? TEXT.free : formatPrice(order.totals.shipping)}
-            </dd>
-          </div>
+          {amounts.shipping !== null && (
+            <>
+              <div className="flex justify-between">
+                <dt className="text-ink-600">{TEXT.subtotal}</dt>
+                <dd className="font-medium text-ink-900">{formatPrice(amounts.subtotal)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-ink-600">{TEXT.shipping}</dt>
+                <dd className="font-medium text-ink-900">
+                  {amounts.shipping === 0 ? TEXT.free : formatPrice(amounts.shipping)}
+                </dd>
+              </div>
+            </>
+          )}
           <div className="flex justify-between border-t border-ink-100 pt-2">
             <dt className="text-base font-bold text-ink-900">{TEXT.total}</dt>
-            <dd className="text-lg font-bold text-ink-900">{formatPrice(order.totals.total)}</dd>
+            <dd className="text-lg font-bold text-ink-900">{formatPrice(amounts.total)}</dd>
           </div>
         </dl>
 

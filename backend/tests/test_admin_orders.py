@@ -431,7 +431,7 @@ class TestTheSnapshotShapeIsTheOneTheRouteWrites:
                     "firstName": "ნინო",
                     "lastName": "კაპანაძე",
                     "phone": "555987654",
-                    "city": "ბათუმი",
+                    "city": "რუსთავი",
                     "address": "რუსთაველის გამზირი 10",
                 },
                 "paymentMethod": "cash",

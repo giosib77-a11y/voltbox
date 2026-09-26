@@ -19,6 +19,7 @@ import { useCart } from '../hooks/useCart.js';
 import { useToast } from '../hooks/useToast.js';
 import { formatPrice, formatSpecValue } from '../utils/format.js';
 import { DELIVERY_INFO, SHIPPING, SPEC_LABELS, TEXT } from '../constants/index.js';
+import { useDeliveryRules } from '../hooks/useDeliveryRules.js';
 
 const TABS = [
   { id: 'description', label: 'აღწერა' },
@@ -198,6 +199,18 @@ export default function ProductDetails() {
 
 /** Tab-ები: აღწერა | მახასიათებლები | მიწოდება */
 function ProductTabs({ product, tab, onTabChange }) {
+  // Where the shop delivers and for how much, from GET /delivery - the table the
+  // checkout charges by. The static entries after it hold no prices.
+  const { rules } = useDeliveryRules();
+  const deliveryInfo = rules
+    ? [
+        {
+          title: 'კურიერით მიწოდება',
+          text: `${rules.cities.map((c) => `${c.name} — ${formatPrice(c.fee)}`).join(', ')}. ${formatPrice(rules.freeFrom)}-დან მიწოდება უფასოა. სხვა ქალაქებში მიწოდება ჯერ არ ხორციელდება.`,
+        },
+        ...DELIVERY_INFO,
+      ]
+    : DELIVERY_INFO;
   const specEntries = Object.entries(product.specs || {});
 
   return (
@@ -276,7 +289,7 @@ function ProductTabs({ product, tab, onTabChange }) {
 
         {tab === 'delivery' && (
           <div role="tabpanel" id="panel-delivery" aria-labelledby="tab-delivery" className="grid gap-5 sm:grid-cols-2">
-            {DELIVERY_INFO.map((info) => (
+            {deliveryInfo.map((info) => (
               <div key={info.title}>
                 {/* h2, not h3: the page has one h1 (the product name) and nothing
                     between, and a reader navigating by heading level should not

@@ -10,12 +10,13 @@
 import { products as rawProducts } from '../data/products.js';
 import { categories, categoryLabels, getCategoryBySlug } from '../data/categories.js';
 import { brandsByName } from '../data/brands.js';
+import { deliveryRules } from '../data/delivery.js';
 import { searchProducts as runSearch } from '../utils/search.js';
 import { applyFilters, computeFacets, paginate, sortProducts } from '../utils/filter.js';
 import { calcDiscountPercent } from '../utils/format.js';
 import { readJSON, writeJSON } from '../utils/storage.js';
 import { DEFAULT_SORT, LOW_STOCK_THRESHOLD, PAGE_SIZE, STORAGE_KEYS } from '../constants/index.js';
-import { calcTotals } from '../utils/pricing.js';
+import { calcTotals, deliveryFee, totalWithDelivery } from '../utils/pricing.js';
 import { AuthError, NotFoundError, ValidationError } from './errors.js';
 
 /* -------------------------------------------------------------------------- */
@@ -229,7 +230,13 @@ export async function createOrder(payload) {
   if (!items.length) throw new ValidationError('კალათა ცარიელია');
   if (!payload?.customer?.phone) throw new ValidationError('ტელეფონის ნომერი სავალდებულოა');
 
-  const totals = calcTotals(items.map((i) => ({ price: i.snapshot.price, qty: i.qty })));
+  // As the server does: the fee from the city and the goods, and a city outside
+  // the list refused - never a fee the page worked out.
+  const { subtotal } = calcTotals(items.map((i) => ({ price: i.snapshot.price, qty: i.qty })));
+  const shipping = deliveryFee(subtotal, deliveryRules, payload.customer.city);
+  if (shipping === null) {
+    throw new ValidationError('ამ ქალაქში მიწოდება ჯერ არ ხორციელდება. აირჩიეთ ქალაქი სიიდან.');
+  }
   const session = readJSON(STORAGE_KEYS.auth, null);
 
   const order = {
@@ -240,11 +247,17 @@ export async function createOrder(payload) {
     items,
     customer: payload.customer,
     paymentMethod: payload.paymentMethod || 'cash',
-    totals: { subtotal: totals.subtotal, shipping: totals.shipping, total: totals.total },
+    totals: { subtotal, shipping, total: totalWithDelivery(subtotal, shipping) },
   };
 
   writeJSON(STORAGE_KEYS.orders, [order, ...readOrders()]);
   return order;
+}
+
+/** GET /delivery-ის mock — იხ. data/delivery.js. */
+export async function getDeliveryRules() {
+  await delay();
+  return deliveryRules;
 }
 
 export async function getOrders() {

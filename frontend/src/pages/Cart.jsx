@@ -8,6 +8,8 @@ import CartSummary from '../components/cart/CartSummary.jsx';
 import { useCart } from '../hooks/useCart.js';
 import { useToast } from '../hooks/useToast.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
+import { useDeliveryRules } from '../hooks/useDeliveryRules.js';
+import { amountToFreeDelivery, deliveryFee, totalWithDelivery } from '../utils/pricing.js';
 import { TEXT } from '../constants/index.js';
 
 /**
@@ -16,8 +18,11 @@ import { TEXT } from '../constants/index.js';
 export default function Cart() {
   useDocumentTitle('კალათა');
 
-  const { items, itemsCount, subtotal, shipping, total, savings, setQty, removeItem, restoreItem, clear } =
-    useCart();
+  const { items, itemsCount, subtotal, savings, setQty, removeItem, restoreItem, clear } = useCart();
+  // The cart does not know the city yet: the fee is known only once the basket
+  // is free everywhere, and otherwise each city's fee is listed.
+  const { rules } = useDeliveryRules();
+  const shipping = deliveryFee(subtotal, rules);
   const toast = useToast();
   const lastRemoved = useRef(null);
 
@@ -87,7 +92,10 @@ export default function Cart() {
             <CartSummary
               subtotal={subtotal}
               shipping={shipping}
-              total={total}
+              total={totalWithDelivery(subtotal, shipping)}
+              cities={rules?.cities}
+              remaining={amountToFreeDelivery(subtotal, rules)}
+              freeFrom={rules?.freeFrom}
               itemsCount={itemsCount}
               savings={savings}
               actionLabel={TEXT.checkout}

@@ -145,9 +145,9 @@ class Settings(BaseSettings):
     # process; see app/core/rate_limit.py for what happens when Redis is down.
     redis_url: SecretStr = SecretStr("")
 
-    # --- business rules (frontend-თან სინქრონში) ------------------------------
-    shipping_free_threshold: int = 150
-    shipping_flat_fee: int = 5
+    # --- business rules --------------------------------------------------------
+    # Delivery fees are not here: they are per city, and live in
+    # app/services/delivery.py, which the storefront reads through GET /delivery.
     low_stock_threshold: int = 3
     default_page_size: int = 12
     max_page_size: int = 100

@@ -21,6 +21,7 @@ vi.mock('virtual:api-impl', () => import('../services/httpApi.js'));
 
 import Checkout from './Checkout.jsx';
 import * as api from '../services/api.js';
+import { forgetDeliveryRules } from '../hooks/useDeliveryRules.js';
 import { ToastProvider } from '../context/ToastContext.jsx';
 import ToastViewport from '../components/common/Toast.jsx';
 
@@ -52,15 +53,31 @@ const ITEMS = [
   },
 ];
 
-const cart = (items) => ({
+const cart = (items, subtotal = 80) => ({
   items,
   itemsCount: items.reduce((sum, item) => sum + item.qty, 0),
-  subtotal: 80,
-  shipping: 0,
-  total: 80,
+  subtotal,
   savings: 0,
   clear: vi.fn(),
 });
+
+/** GET /delivery as the API sends it: money as strings. */
+const DELIVERY = {
+  cities: [
+    { name: 'თბილისი', fee: '8.00' },
+    { name: 'რუსთავი', fee: '5.00' },
+  ],
+  freeFrom: '50.00',
+  currency: 'GEL',
+};
+
+const reply = (body, status = 200) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  json: async () => body,
+});
+
+const isDelivery = (url) => String(url).endsWith('/delivery');
 
 // ToastProvider only queues messages; the viewport is what puts them on screen.
 const renderPage = () =>
@@ -75,8 +92,12 @@ const renderPage = () =>
 
 const submitButton = () => screen.getByRole('button', { name: 'შეკვეთის დადასტურება' });
 
-/** Fills every required field, with the padding and spacing a person actually types. */
-function fillValidForm() {
+/**
+ * Fills every required field, with the padding and spacing a person actually
+ * types. Waits for the city list first: it arrives from GET /delivery.
+ */
+async function fillValidForm() {
+  await screen.findByRole('option', { name: /^თბილისი/ });
   fireEvent.change(screen.getByLabelText(/^სახელი/), { target: { value: '  გიორგი ' } });
   fireEvent.change(screen.getByLabelText(/^გვარი/), { target: { value: ' ბერიძე  ' } });
   fireEvent.change(screen.getByLabelText(/^ტელეფონი/), { target: { value: '555 12 34 56' } });
@@ -89,10 +110,13 @@ beforeEach(() => {
   // The key hook keeps its attempt in sessionStorage; one test's key must not
   // become the next test's "retry".
   sessionStorage.clear();
+  // Each test answers GET /delivery itself; a cached answer would leak across.
+  forgetDeliveryRules();
   navigate = vi.fn();
   cartValue = cart(ITEMS);
   authValue = GUEST;
-  global.fetch = vi.fn(async () => {
+  global.fetch = vi.fn(async (url) => {
+    if (isDelivery(url)) return reply(DELIVERY);
     throw new Error('this test did not expect a request');
   });
 });
@@ -131,7 +155,7 @@ describe('the checkout form', () => {
       .mockResolvedValue({ orderNumber: 'VB-20260918-1000' });
     renderPage();
 
-    fillValidForm();
+    await fillValidForm();
     fireEvent.click(submitButton());
 
     await waitFor(() => expect(navigate).toHaveBeenCalled());
@@ -156,7 +180,7 @@ describe('the checkout form', () => {
     vi.spyOn(api, 'createOrder').mockResolvedValue({ orderNumber: 'VB-20260918-1000' });
     renderPage();
 
-    fillValidForm();
+    await fillValidForm();
     fireEvent.click(submitButton());
 
     await waitFor(() =>
@@ -174,7 +198,7 @@ describe('the checkout form', () => {
       .mockResolvedValueOnce({ orderNumber: 'VB-20260918-1000' });
     renderPage();
 
-    fillValidForm();
+    await fillValidForm();
     fireEvent.click(submitButton());
 
     expect(await screen.findByText('სერვერთან კავშირი ვერ დამყარდა')).toBeInTheDocument();
@@ -202,7 +226,7 @@ describe('the checkout form', () => {
     );
     renderPage();
 
-    fillValidForm();
+    await fillValidForm();
     fireEvent.click(submitButton());
     await waitFor(() => expect(submitButton()).toBeDisabled());
 
@@ -241,12 +265,6 @@ describe('prefilling the saved address', () => {
     ...overrides,
   });
 
-  const reply = (body, status = 200) => ({
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  });
-
   /**
    * Routes the two calls checkout makes. `addresses` is a function so a test
    * can hold the answer back; `orders` answers each POST in turn.
@@ -254,6 +272,7 @@ describe('prefilling the saved address', () => {
   function serve({ addresses, orders = [] }) {
     const orderReplies = [...orders];
     global.fetch = vi.fn(async (url, options = {}) => {
+      if (isDelivery(url)) return reply(DELIVERY);
       if (String(url).endsWith('/addresses') && (options.method ?? 'GET') === 'GET') {
         return addresses();
       }
@@ -336,7 +355,7 @@ describe('prefilling the saved address', () => {
     renderPage();
     await waitFor(() => expect(addressRequests()).toHaveLength(1));
 
-    fillValidForm();
+    await fillValidForm();
     fireEvent.click(submitButton());
     await waitFor(() => expect(orderRequests()).toHaveLength(1));
     await waitFor(() => expect(submitButton()).toBeEnabled());
@@ -363,20 +382,113 @@ describe('prefilling the saved address', () => {
     await settle();
 
     expect(screen.getByLabelText(/^მისამართი/)).toHaveValue('');
-    fillValidForm();
+    await fillValidForm();
     fireEvent.click(submitButton());
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/checkout/success/VB-20260924-1000', { replace: true }));
     expect(orderRequests()).toHaveLength(1);
   });
 
-  it('asks nothing for a guest', async () => {
+  it('asks a guest for no addresses', async () => {
     authValue = GUEST;
     serve({ addresses: () => reply([saved({ isDefault: true })]) });
     renderPage();
     await settle();
 
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(addressRequests()).toHaveLength(0);
     expect(screen.getByLabelText(/^მისამართი/)).toHaveValue('');
+  });
+});
+
+/**
+ * What the customer is told delivery costs, before the order is placed.
+ *
+ * Every number comes from GET /delivery (DELIVERY above, as the API sends it):
+ * the page has no copy of its own, so these are the numbers the server will
+ * charge by.
+ */
+describe('the delivery fee before ordering', () => {
+  const summaryRow = (label) => screen.getByText(label).closest('div');
+
+  it('offers only the cities the shop delivers to, each with its fee', async () => {
+    renderPage();
+
+    await screen.findByRole('option', { name: /^თბილისი/ });
+    const cities = screen
+      .getAllByRole('option')
+      .filter((option) => option.value)
+      .map((option) => option.textContent);
+    expect(cities).toEqual(['თბილისი — 8 ₾', 'რუსთავი — 5 ₾']);
+  });
+
+  it.each([
+    ['თბილისი', '8 ₾', '48 ₾'],
+    ['რუსთავი', '5 ₾', '45 ₾'],
+  ])('charges %s its fee below the threshold', async (city, fee, total) => {
+    cartValue = cart(ITEMS, 40);
+    renderPage();
+    await screen.findByRole('option', { name: new RegExp(`^${city}`) });
+
+    // Before a city is chosen: each city's fee, and the total without delivery.
+    expect(summaryRow('მიწოდება')).toHaveTextContent('თბილისი 8 ₾ · რუსთავი 5 ₾');
+    expect(screen.getByText('ჯამი მიწოდების გარეშე')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/^ქალაქი/), { target: { value: city } });
+
+    expect(summaryRow('მიწოდება')).toHaveTextContent(fee);
+    expect(summaryRow('სულ გადასახდელი')).toHaveTextContent(total);
+  });
+
+  it('says how much more makes delivery free', async () => {
+    cartValue = cart(ITEMS, 40);
+    renderPage();
+
+    const nudge = await screen.findByText(/და მიწოდება უფასო იქნება/);
+    expect(nudge).toHaveTextContent('დაამატე კიდევ 10 ₾ და მიწოდება უფასო იქნება (ზღვარი — 50 ₾).');
+  });
+
+  it('delivers free from exactly 50, whatever the city', async () => {
+    cartValue = cart(ITEMS, 50);
+    renderPage();
+    await screen.findByRole('option', { name: /^რუსთავი/ });
+
+    expect(summaryRow('მიწოდება')).toHaveTextContent('უფასო');
+    expect(summaryRow('სულ გადასახდელი')).toHaveTextContent('50 ₾');
+    expect(screen.queryByText(/და მიწოდება უფასო იქნება/)).not.toBeInTheDocument();
+  });
+
+  it('shows no fee of its own when the rules cannot be loaded', async () => {
+    cartValue = cart(ITEMS, 40);
+    global.fetch = vi.fn(async () => reply({ error: { code: 'INTERNAL_ERROR' } }, 500));
+    renderPage();
+
+    expect(await screen.findByText('ქალაქების სია ვერ ჩაიტვირთა.')).toBeInTheDocument();
+    expect(summaryRow('მიწოდება')).toHaveTextContent('—');
+    expect(screen.queryByText(/₾ და მიწოდება/)).not.toBeInTheDocument();
+  });
+
+  it('does not fill in a saved city the shop no longer delivers to', async () => {
+    authValue = {
+      user: { id: 'u1', firstName: 'გიორგი', lastName: 'ბერიძე', phone: '555123456' },
+      isAuthenticated: true,
+    };
+    global.fetch = vi.fn(async (url) => {
+      if (isDelivery(url)) return reply(DELIVERY);
+      return reply([{ id: 'a1', city: 'ბათუმი', address: 'რუსთაველის 1', isDefault: true }]);
+    });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByLabelText(/^მისამართი/)).toHaveValue('რუსთაველის 1'));
+    expect(screen.getByLabelText(/^ქალაქი/)).toHaveValue('');
+  });
+});
+
+describe('payment', () => {
+  it('offers cash on delivery and not card to the courier', async () => {
+    renderPage();
+
+    expect(screen.getByRole('radio', { name: 'ნაღდი ანგარიშსწორება მიღებისას' })).toBeChecked();
+    expect(screen.queryByRole('radio', { name: 'ბარათით კურიერთან' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('radio')).toHaveLength(1);
   });
 });

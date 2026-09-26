@@ -7,12 +7,14 @@
  * what these check, so they are stubbed.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RouterProvider, createMemoryRouter } from 'react-router';
 
 import Header from './Header.jsx';
+import * as api from '../../services/api.js';
+import { forgetDeliveryRules } from '../../hooks/useDeliveryRules.js';
 
 vi.mock('./UserMenu.jsx', () => ({ default: () => null }));
 vi.mock('./MobileMenu.jsx', () => ({ default: () => null }));
@@ -118,5 +120,33 @@ describe('Header category button', () => {
     await user.click(document.body);
 
     expect(menuButton()).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+describe('Header free-delivery strip', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    forgetDeliveryRules();
+  });
+
+  it('names the threshold GET /delivery sends, not a number of its own', async () => {
+    vi.spyOn(api, 'getDeliveryRules').mockResolvedValue({
+      cities: [
+        { name: 'თბილისი', fee: 8 },
+        { name: 'რუსთავი', fee: 5 },
+      ],
+      freeFrom: 50,
+      currency: 'GEL',
+    });
+    mountAt('/');
+
+    expect(await screen.findByText('უფასო მიწოდება 50 ₾-ზე მეტ შეკვეთაზე')).toBeInTheDocument();
+  });
+
+  it('says no amount at all until the rules arrive', () => {
+    vi.spyOn(api, 'getDeliveryRules').mockReturnValue(new Promise(() => {}));
+    mountAt('/');
+
+    expect(screen.queryByText(/უფასო მიწოდება/)).toBeNull();
   });
 });

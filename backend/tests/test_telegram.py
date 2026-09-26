@@ -178,10 +178,39 @@ class TestAPlacedOrder:
         assert sent["chat_id"] == CHAT_ID
         assert sent["text"].splitlines() == [
             f"ახალი შეკვეთა {body['orderNumber']}",
-            # 2 x 40.00 + 99.99; over 150, so shipping is free
+            # 2 x 40.00 + 99.99; 50 or more, so delivery is free
+            "პროდუქტები: 179.99 GEL",
+            "მიწოდება: 0.00 GEL",
             "ჯამი: 179.99 GEL",
             "ნივთები: 3",
             f"{settings.site_url}/admin/orders/{order.id}",
+        ]
+
+    async def test_the_delivery_fee_is_its_own_line(
+        self,
+        client: httpx.AsyncClient,
+        fake_telegram: FakeTelegram,
+        products: tuple[Product, Product],
+    ) -> None:
+        """The owner reads what the courier collects, and what of it is delivery."""
+        one, _ = products
+        response = await client.post(
+            "/api/v1/orders",
+            json={
+                **_checkout_body(products),
+                "items": [{"productId": str(one.id), "qty": 1}],
+            },
+            headers={"Idempotency-Key": str(uuid.uuid4())},
+        )
+        assert response.status_code == 201, response.text
+
+        [request] = fake_telegram.requests
+        lines = json.loads(request.content)["text"].splitlines()
+        # 40.00 of goods to Tbilisi: below 50, so its 8.00 fee is charged.
+        assert lines[1:4] == [
+            "პროდუქტები: 40.00 GEL",
+            "მიწოდება: 8.00 GEL",
+            "ჯამი: 48.00 GEL",
         ]
 
     async def test_the_message_carries_no_customer_details(

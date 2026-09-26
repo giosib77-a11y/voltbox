@@ -1,17 +1,23 @@
 import { Truck } from 'lucide-react';
 import Button from '../common/Button.jsx';
 import { formatPrice } from '../../utils/format.js';
-import { amountToFreeShipping } from '../../utils/pricing.js';
 import { SHIPPING, TEXT } from '../../constants/index.js';
 
 /**
- * შეკვეთის შეჯამება. მიწოდების ლოგიკა მოდის `utils/pricing.js`-იდან —
- * აქ არცერთი ციფრი არ არის hardcoded.
+ * შეკვეთის შეჯამება. ციფრები გვერდიდან მოდის (utils/pricing.js + `GET /delivery`) —
+ * აქ არცერთი არ არის hardcoded.
+ *
+ * `shipping === null` ნიშნავს „ჯერ უცნობია“: ქალაქი არ არის არჩეული და კალათა
+ * ზღვარს ქვემოთაა. მაშინ ჩანს თითო ქალაქის ტარიფი (`cities`) და ჯამი
+ * მიწოდების გარეშე — გამოცნობილი ციფრი არა.
  */
 export default function CartSummary({
   subtotal = 0,
-  shipping = 0,
-  total = 0,
+  shipping = null,
+  total = null,
+  cities = [],
+  remaining = 0,
+  freeFrom = null,
   itemsCount = 0,
   savings = 0,
   actionLabel = TEXT.checkout,
@@ -22,7 +28,7 @@ export default function CartSummary({
   children = null,
   className = '',
 }) {
-  const remaining = amountToFreeShipping(subtotal);
+  const known = shipping !== null && total !== null;
 
   return (
     <div className={`rounded-card border border-ink-200 bg-surface p-5 ${className}`}>
@@ -39,9 +45,17 @@ export default function CartSummary({
 
         <div className="flex items-baseline justify-between gap-4">
           <dt className="text-ink-600">{TEXT.shipping}</dt>
-          <dd className={shipping === 0 ? 'font-semibold text-success-700' : 'font-semibold text-ink-900'}>
-            {shipping === 0 ? TEXT.free : formatPrice(shipping)}
-          </dd>
+          {known ? (
+            <dd className={shipping === 0 ? 'font-semibold text-success-700' : 'font-semibold text-ink-900'}>
+              {shipping === 0 ? TEXT.free : formatPrice(shipping)}
+            </dd>
+          ) : (
+            <dd className="text-right font-semibold text-ink-900">
+              {cities.length > 0
+                ? cities.map((city) => `${city.name} ${formatPrice(city.fee)}`).join(' · ')
+                : '—'}
+            </dd>
+          )}
         </div>
 
         {savings > 0 && (
@@ -53,8 +67,10 @@ export default function CartSummary({
 
         <div className="border-t border-ink-200 pt-3">
           <div className="flex items-baseline justify-between gap-4">
-            <dt className="text-base font-bold text-ink-900">{TEXT.total}</dt>
-            <dd className="text-xl font-bold text-ink-900">{formatPrice(total)}</dd>
+            <dt className="text-base font-bold text-ink-900">
+              {known ? TEXT.total : 'ჯამი მიწოდების გარეშე'}
+            </dt>
+            <dd className="text-xl font-bold text-ink-900">{formatPrice(known ? total : subtotal)}</dd>
           </div>
         </div>
       </dl>
@@ -64,7 +80,7 @@ export default function CartSummary({
           <Truck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <p>
             დაამატე კიდევ <strong>{formatPrice(remaining)}</strong> და მიწოდება უფასო იქნება
-            (ზღვარი — {formatPrice(SHIPPING.freeThreshold)}).
+            (ზღვარი — {formatPrice(freeFrom)}).
           </p>
         </div>
       )}

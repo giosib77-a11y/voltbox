@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import { Clock, Mail, MapPin, Phone, Zap } from 'lucide-react';
-import { CONTACT, SHIPPING, SITE_DESCRIPTION, SITE_NAME } from '../../constants/index.js';
+import { CONTACT, SITE_DESCRIPTION, SITE_NAME } from '../../constants/index.js';
+import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { formatPrice } from '../../utils/format.js';
 import { rootCategories } from '../../utils/categoryTree.js';
 
@@ -15,6 +16,7 @@ const INFO_LINKS = [
 
 export default function Footer({ categories = [] }) {
   const year = new Date().getFullYear();
+  const { rules } = useDeliveryRules();
 
   return (
     <footer className="mt-auto border-t border-ink-200 bg-surface">
@@ -27,9 +29,11 @@ export default function Footer({ categories = [] }) {
             <span className="text-lg font-bold tracking-tight text-ink-900">{SITE_NAME}</span>
           </div>
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-ink-600">{SITE_DESCRIPTION}</p>
-          <p className="mt-4 rounded-control bg-primary-50 px-3 py-2 text-xs font-medium text-primary-800">
-            უფასო მიწოდება {formatPrice(SHIPPING.freeThreshold)}-დან
-          </p>
+          {rules && (
+            <p className="mt-4 rounded-control bg-primary-50 px-3 py-2 text-xs font-medium text-primary-800">
+              უფასო მიწოდება {formatPrice(rules.freeFrom)}-დან
+            </p>
+          )}
         </div>
 
         <nav aria-label="კატეგორიები (ქვედა მენიუ)">
