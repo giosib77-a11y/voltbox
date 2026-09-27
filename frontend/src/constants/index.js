@@ -11,7 +11,7 @@
 export const SITE_NAME = 'VoltBox';
 export const SITE_TAGLINE = 'ელექტრონიკა და აქსესუარები';
 export const SITE_DESCRIPTION =
-  'ტელეფონები, კაბელები, დამტენები, Power Bank-ები და ყურსასმენები — ერთ სივრცეში.';
+  'კაბელები, დამტენები, Power Bank-ები, ყურსასმენები და აქსესუარები — ერთ სივრცეში.';
 
 export const CONTACT = {
   phone: '+995 322 00 11 22',

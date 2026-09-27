@@ -52,7 +52,7 @@ export default function Home() {
             className="rounded-card border border-line bg-surface"
           />
         </aside>
-        <Hero />
+        <Hero categories={categories || []} />
       </div>
       <Benefits />
 
@@ -90,7 +90,16 @@ export default function Home() {
   );
 }
 
-function Hero() {
+/**
+ * The hero's two buttons are the first two top-level categories, in the order
+ * the owner sets in the admin. They used to be the slugs `phones` and
+ * `headphones` written into this file: the owner deleted Phones, and the main
+ * button on the home page led to "category not found". Taken from the list the
+ * API returns, a deleted category simply is not there, and the next one moves
+ * up. No category, no button; while the list loads, the row keeps its height.
+ */
+function Hero({ categories }) {
+  const [first, second] = rootCategories(categories);
   return (
     <section className="relative overflow-hidden rounded-card border border-line bg-surface px-6 py-12 sm:px-10 sm:py-16 lg:px-14 lg:py-20">
       <div aria-hidden="true" className="bg-tech-grid absolute inset-0" />
@@ -121,14 +130,18 @@ function Hero() {
           {SITE_DESCRIPTION} ორიგინალი პროდუქცია ოფიციალური გარანტიით და მიწოდებით მთელ საქართველოში.
         </p>
 
-        <div className="mt-7 flex flex-wrap gap-3">
-          <Button to="/category/phones" variant="primary" size="lg" className="shadow-glow">
-            ტელეფონების ნახვა
-            <ArrowRight className="h-4 w-4" aria-hidden="true" />
-          </Button>
-          <Button to="/category/headphones" size="lg" variant="outline">
-            ყურსასმენები
-          </Button>
+        <div className="mt-7 flex min-h-12 flex-wrap gap-3">
+          {first && (
+            <Button to={`/category/${first.slug}`} variant="primary" size="lg" className="shadow-glow">
+              {first.name}
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          )}
+          {second && (
+            <Button to={`/category/${second.slug}`} size="lg" variant="outline">
+              {second.name}
+            </Button>
+          )}
         </div>
       </div>
     </section>
