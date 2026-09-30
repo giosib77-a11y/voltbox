@@ -36,6 +36,8 @@ import argparse
 import asyncio
 import sys
 import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
@@ -67,6 +69,21 @@ class RefusedError(Exception):
     """A condition under which nothing may be deleted."""
 
 
+@dataclass(frozen=True)
+class Plan:
+    """Everything one run would remove, read before anything is."""
+
+    product: Product
+    images: Sequence[ProductImage]
+    movements: Sequence[InventoryMovement]
+    orders: Sequence[Order]
+    items: Sequence[OrderItem]
+    history: int
+    category: Category
+    category_note: str
+    keys: list[str]
+
+
 def _storage_keys_listed(product_id: uuid.UUID) -> list[str]:
     """Every object under products/<id>/ in the bucket. Listing changes nothing."""
     if not (
@@ -86,7 +103,9 @@ def _storage_keys_listed(product_id: uuid.UUID) -> list[str]:
     return [f"{prefix}/{obj['name']}" for obj in response.json() if obj.get("id")]
 
 
-async def plan(db: AsyncSession, product_id: uuid.UUID, expect_name: str, with_category: bool):
+async def plan(
+    db: AsyncSession, product_id: uuid.UUID, expect_name: str, with_category: bool
+) -> Plan:
     """What would be removed, or RefusedError. Reads only."""
     product = await db.get(Product, product_id)
     if product is None:
@@ -150,16 +169,22 @@ async def plan(db: AsyncSession, product_id: uuid.UUID, expect_name: str, with_c
         else []
     )
     history = (
-        await db.scalar(
-            select(func.count())
-            .select_from(OrderStatusHistory)
-            .where(OrderStatusHistory.order_id.in_(order_ids))
-        )
+        (
+            await db.execute(
+                select(func.count())
+                .select_from(OrderStatusHistory)
+                .where(OrderStatusHistory.order_id.in_(order_ids))
+            )
+        ).scalar_one()
         if order_ids
         else 0
     )
 
-    category = await db.get(Category, product.category_id)
+    # scalar_one, not get: category_id is a NOT NULL foreign key, so the row
+    # exists, and a missing one is a broken database to stop on, not a case.
+    category = (
+        await db.execute(select(Category).where(Category.id == product.category_id))
+    ).scalar_one()
     category_note = "kept (run with --with-category to delete it)"
     if with_category:
         neighbours = await db.scalar(
@@ -181,55 +206,55 @@ async def plan(db: AsyncSession, product_id: uuid.UUID, expect_name: str, with_c
     keys |= {k for k in (_key_from_url(i.url) for i in images) if k}
     keys |= {k for k in (_key_from_url(i.image_url) for i in items if i.image_url) if k}
 
-    return {
-        "product": product,
-        "images": images,
-        "movements": movements,
-        "orders": orders,
-        "items": items,
-        "history": history,
-        "category": category,
-        "category_note": category_note,
-        "keys": sorted(keys),
-    }
+    return Plan(
+        product=product,
+        images=images,
+        movements=movements,
+        orders=orders,
+        items=items,
+        history=history,
+        category=category,
+        category_note=category_note,
+        keys=sorted(keys),
+    )
 
 
-def report(p: dict) -> None:
-    product, category = p["product"], p["category"]
+def report(p: Plan) -> None:
+    product, category = p.product, p.category
     print(f"database : {engine.url.host}/{engine.url.database}")
     print(
         f"product  : {product.id}  {product.name!r}  slug={product.slug}"
         f"  sku={product.sku}  stock={product.stock}"
     )
-    print(f"category : {category.id}  {category.name}  ({category.slug}) -> {p['category_note']}")
-    print(f"\norders to delete ({len(p['orders'])}), with their items and status history:")
-    for order in p["orders"]:
+    print(f"category : {category.id}  {category.name}  ({category.slug}) -> {p.category_note}")
+    print(f"\norders to delete ({len(p.orders)}), with their items and status history:")
+    for order in p.orders:
         print(
             f"  {order.id}  {order.order_number}  {order.status}"
             f"  total={order.total}  created={order.created_at:%Y-%m-%d}"
         )
-    print(f"order_items to delete ({len(p['items'])}):")
-    for item in p["items"]:
+    print(f"order_items to delete ({len(p.items)}):")
+    for item in p.items:
         print(f"  {item.id}  {item.product_name!r} x{item.quantity} @ {item.unit_price}")
-    print(f"order_status_history rows to delete: {p['history']}")
-    print(f"product_images to delete ({len(p['images'])}):")
-    for image in p["images"]:
+    print(f"order_status_history rows to delete: {p.history}")
+    print(f"product_images to delete ({len(p.images)}):")
+    for image in p.images:
         print(f"  {image.id}  {image.url}")
-    print(f"inventory_movements to delete ({len(p['movements'])}), this product's ledger only:")
-    for m in p["movements"]:
+    print(f"inventory_movements to delete ({len(p.movements)}), this product's ledger only:")
+    for m in p.movements:
         print(
             f"  {m.created_at:%Y-%m-%d %H:%M}  {m.reason:<18} {m.change:+d}"
             f"  {m.previous_stock} -> {m.new_stock}"
         )
-    print(f"storage objects to delete after the commit ({len(p['keys'])}):")
-    for key in p["keys"]:
+    print(f"storage objects to delete after the commit ({len(p.keys)}):")
+    for key in p.keys:
         print(f"  {key}")
     print("audit log: kept; one row added per deleted order, the product and the category")
 
 
-async def execute(db: AsyncSession, p: dict, with_category: bool) -> None:
-    product, category = p["product"], p["category"]
-    for order in p["orders"]:
+async def execute(db: AsyncSession, p: Plan, with_category: bool) -> None:
+    product, category = p.product, p.category
+    for order in p.orders:
         await audit.record(
             db,
             actor_id=None,
@@ -238,8 +263,8 @@ async def execute(db: AsyncSession, p: dict, with_category: bool) -> None:
             entity_id=str(order.id),
             changes={"orderNumber": order.order_number, "total": order.total, "via": ACTOR},
         )
-    if p["orders"]:
-        await db.execute(delete(Order).where(Order.id.in_([o.id for o in p["orders"]])))
+    if p.orders:
+        await db.execute(delete(Order).where(Order.id.in_([o.id for o in p.orders])))
     await audit.record(
         db,
         actor_id=None,
@@ -290,7 +315,7 @@ async def main(args: argparse.Namespace) -> int:
         print("\ndatabase: committed")
 
     storage = get_storage()
-    for key in p["keys"]:
+    for key in p.keys:
         await storage.delete(key)
         print(f"storage : deleted {key}")
     return 0

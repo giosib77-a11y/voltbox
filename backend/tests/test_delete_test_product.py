@@ -13,8 +13,9 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
+from app.db.base import Base
 from app.db.models import AdminAuditLog, Category, InventoryMovement, Order, OrderItem, Product
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.factories import load_script, make_brand, make_category, make_product
@@ -79,11 +80,11 @@ async def _ledger(db: AsyncSession, product: Product) -> list[tuple[int, int, in
     return [tuple(row) for row in rows]
 
 
-async def _count(db: AsyncSession, model, *where) -> int:
-    return await db.scalar(select(func.count()).select_from(model).where(*where))
+async def _count(db: AsyncSession, model: type[Base], *where: ColumnElement[bool]) -> int:
+    return (await db.execute(select(func.count()).select_from(model).where(*where))).scalar_one()
 
 
-async def _catalogue(db: AsyncSession):
+async def _catalogue(db: AsyncSession) -> tuple[Category, Product, Product]:
     headphones = await make_category(db, "headphones")
     cables = await make_category(db, "cables")
     brand = await make_brand(db, "Apple")
@@ -113,6 +114,7 @@ async def test_it_removes_the_order_the_product_and_its_ledger_only(db: AsyncSes
 
     # Everything about the other product is as it was
     remaining = await db.get(Product, ids["other"])
+    assert remaining is not None
     assert remaining.stock == other_stock
     assert await _ledger(db, remaining) == other_ledger
     assert await _count(db, Order, Order.order_number == "VB-2") == 1
