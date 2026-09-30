@@ -23,10 +23,10 @@ from app.core.security import (
     create_access_token,
     generate_password_reset_token,
     generate_refresh_token,
-    hash_password,
+    hash_password_async,
     hash_password_reset_token,
     hash_refresh_token,
-    verify_password,
+    verify_password_async,
 )
 from app.db.models import PasswordResetToken, RefreshToken, User
 
@@ -79,6 +79,9 @@ async def _issue_session(
 async def register(
     db: AsyncSession, *, first_name: str, last_name: str, email: str, password: str
 ) -> dict[str, object]:
+    # Hashed before the database is touched, so no connection is held while
+    # the hash waits its turn and runs - see `login`.
+    password_hash = await hash_password_async(password)
     normalized = email.strip().lower()
     existing = await db.scalar(select(User).where(User.email == normalized))
     if existing is not None:
@@ -86,7 +89,7 @@ async def register(
 
     user = User(
         email=normalized,
-        password_hash=hash_password(password),
+        password_hash=password_hash,
         first_name=first_name.strip(),
         last_name=last_name.strip(),
     )
@@ -190,9 +193,16 @@ async def _clear_failures(db: AsyncSession, user: User) -> bool:
 
 async def login(db: AsyncSession, *, email: str, password: str) -> dict[str, object]:
     user = await db.scalar(select(User).where(User.email == email.strip().lower()))
+    # The hash runs in a thread, one at a time per worker, so under a burst it
+    # waits its turn as well as taking its ~120 ms. Holding the read's
+    # transaction meanwhile would hold its pooled connection, and a burst of
+    # sign-ins would empty the pool: the stall the thread exists to remove,
+    # moved from the event loop to the database. Nothing is written yet, and
+    # everything after the hash is decided on the row as it is then anyway.
+    await db.commit()
 
     if user is None:
-        verify_password(password, _DUMMY_HASH)  # დროის გათანაბრება
+        await verify_password_async(password, _DUMMY_HASH)  # დროის გათანაბრება
         raise UnauthorizedError(INVALID_CREDENTIALS, code="INVALID_CREDENTIALS")
 
     # Before the hash, deliberately. Argon2 is expensive on purpose, and that
@@ -208,7 +218,7 @@ async def login(db: AsyncSession, *, email: str, password: str) -> dict[str, obj
         raise _too_many_attempts(user.locked_until)
 
     # The check that decides is in the statement that records the outcome.
-    if not verify_password(password, user.password_hash):
+    if not await verify_password_async(password, user.password_hash):
         if not await _record_failure(db, user):
             raise await _locked_meanwhile(db, user)
         raise UnauthorizedError(INVALID_CREDENTIALS, code="INVALID_CREDENTIALS")
@@ -366,13 +376,16 @@ async def revoke_all(db: AsyncSession, user_id: object) -> None:
 async def change_password(
     db: AsyncSession, *, user: User, current_password: str, new_password: str
 ) -> None:
-    if not verify_password(current_password, user.password_hash):
+    # Ends the transaction that loaded `user`, so its connection is not held
+    # through two hashes - see `login`.
+    await db.commit()
+    if not await verify_password_async(current_password, user.password_hash):
         raise ValidationError(
             "Current password is incorrect",
             code="INVALID_CURRENT_PASSWORD",
             details=[{"field": "currentPassword", "message": "Current password is incorrect"}],
         )
-    user.password_hash = hash_password(new_password)
+    user.password_hash = await hash_password_async(new_password)
     await db.flush()
     await revoke_all(db, user.id)
 
@@ -440,7 +453,12 @@ async def reset_password(db: AsyncSession, *, raw_token: str, new_password: str)
 
     A failure after the claim - the account blocked in the meantime - raises,
     and the rollback puts the row back; the link is refused either way.
+
+    The new password is hashed first, before any statement, so no connection
+    is held while the hash waits its turn and runs - see `login`. A link that
+    turns out to be invalid has then cost a hash, as a wrong password does.
     """
+    password_hash = await hash_password_async(new_password)
     claimed = (
         await db.execute(
             delete(PasswordResetToken)
@@ -463,15 +481,15 @@ async def reset_password(db: AsyncSession, *, raw_token: str, new_password: str)
         update(User)
         .where(User.id == user.id)
         .values(
-            password_hash=hash_password(new_password),
+            password_hash=password_hash,
             # Whoever opened the link proved they hold the mailbox, which
             # outranks the failed guesses that locked the account; left in
             # place, the lock would refuse the new password for up to
             # login_lock_minutes.
             #
             # A statement, not attributes on `user`: the ORM leaves out a
-            # column it believes unchanged, and `user` was read before the
-            # hash. A guess that locked the account in between kept its lock
+            # column it believes unchanged, and `user` was read before this
+            # write. A guess that locked the account in between kept its lock
             # through the reset, because `locked_until` was None when read.
             failed_login_count=0,
             locked_until=None,

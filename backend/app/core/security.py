@@ -10,6 +10,7 @@ refresh-ტოკენი ბაზაში მხოლოდ SHA-256 hash-�
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import secrets
 import uuid
@@ -58,6 +59,32 @@ def verify_password(password: str, password_hash: str) -> bool:
         return _hasher.verify(password_hash, password)
     except (VerifyMismatchError, InvalidHashError, ValueError):
         return False
+
+
+#: One Argon2 run at a time per worker, as when it ran on the event loop.
+#:
+#: Each run takes 64 MiB (argon2-cffi's default memory_cost) for its ~120 ms.
+#: The event loop used to bound that to one by stalling everything else; a
+#: thread pool bounds it to the pool's size - dozens - which is gigabytes the
+#: free plan does not have. One keeps the memory ceiling where it was, and more
+#: would not finish more hashes a second on the fraction of a CPU it gets.
+_HASHING = asyncio.Semaphore(1)
+
+
+async def hash_password_async(password: str) -> str:
+    """`hash_password` in a thread, so the event loop serves other requests meanwhile.
+
+    The GIL is no obstacle: argon2-cffi runs the hash in C through cffi, which
+    releases it for the call.
+    """
+    async with _HASHING:
+        return await asyncio.to_thread(hash_password, password)
+
+
+async def verify_password_async(password: str, password_hash: str) -> bool:
+    """`verify_password` in a thread, for the same reason as `hash_password_async`."""
+    async with _HASHING:
+        return await asyncio.to_thread(verify_password, password, password_hash)
 
 
 def is_common_password(password: str) -> bool:
