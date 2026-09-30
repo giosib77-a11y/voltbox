@@ -8,7 +8,7 @@
 import asyncio
 import uuid
 from collections import Counter
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -547,3 +547,51 @@ async def test_a_reset_lifts_a_lock_that_lands_while_it_runs(lockable: User) -> 
     state = await _lock_state(lockable)
     assert state.locked_until is None
     assert state.failed_login_count == 0
+
+
+async def _reset_in(session: AsyncSession, user: User) -> None:
+    async with SessionLocal() as setup:
+        issued = await auth_service.issue_password_reset(setup, email=user.email)
+        await setup.commit()
+    assert issued is not None
+    await auth_service.reset_password(session, raw_token=issued.token, new_password=NEW_PASSWORD)
+
+
+async def _change_in(session: AsyncSession, user: User) -> None:
+    loaded = await session.scalar(select(User).where(User.id == user.id))
+    assert loaded is not None
+    await auth_service.change_password(
+        session, user=loaded, current_password=PASSWORD, new_password=NEW_PASSWORD
+    )
+
+
+NEW_PASSWORD = "a-brand-new-one-1"
+
+
+@pytest.mark.parametrize("change", [_reset_in, _change_in], ids=["reset", "change"])
+async def test_a_sign_in_with_the_old_password_does_not_outlive_the_change(
+    lockable: User, change: Callable[[AsyncSession, User], Awaitable[None]]
+) -> None:
+    """The old password, checked in the instant it was replaced.
+
+    The sign-in read the old hash, verified against it, and wrote its refresh
+    token after `revoke_all` had run: whoever the change was meant to shut out
+    kept a session, and each refresh of it carried on past the change.
+    """
+    async with SessionLocal() as changing:
+        # The change made - new hash written, every session revoked - and not
+        # yet committed.
+        await change(changing, lockable)
+        signing_in = asyncio.create_task(_login(lockable.email, PASSWORD))
+        await _until_queued_behind(changing)
+        await changing.commit()
+    answer = await signing_in
+
+    async with SessionLocal() as check:
+        live = await check.scalar(
+            select(func.count())
+            .select_from(RefreshToken)
+            .where(RefreshToken.user_id == lockable.id, RefreshToken.revoked_at.is_(None))
+        )
+    assert live == 0, "a session opened with the old password survived the change"
+    assert answer == ("rejected", "INVALID_CREDENTIALS")

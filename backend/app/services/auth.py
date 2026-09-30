@@ -113,10 +113,17 @@ def _unlocked(now: datetime) -> ColumnElement[bool]:
     return or_(User.locked_until.is_(None), User.locked_until <= now)
 
 
-async def _locked_meanwhile(db: AsyncSession, user: User) -> UnauthorizedError:
-    """The refusal for an attempt another one locked out while it was hashing."""
+async def _refused_meanwhile(db: AsyncSession, user: User) -> UnauthorizedError:
+    """The refusal for an attempt the row changed under while it was hashing.
+
+    Locked by another attempt: refused as locked, whatever this one guessed.
+    Otherwise the password it was checked against has been replaced, so it is
+    a wrong password now.
+    """
     locked_until = await db.scalar(select(User.locked_until).where(User.id == user.id))
-    return _too_many_attempts(locked_until)
+    if locked_until is not None and locked_until > datetime.now(UTC):
+        return _too_many_attempts(locked_until)
+    return UnauthorizedError(INVALID_CREDENTIALS, code="INVALID_CREDENTIALS")
 
 
 async def _record_failure(db: AsyncSession, user: User) -> bool:
@@ -164,7 +171,7 @@ async def _record_failure(db: AsyncSession, user: User) -> bool:
 
 
 async def _clear_failures(db: AsyncSession, user: User) -> bool:
-    """Wipe the slate after the right password - unless the account is locked by now.
+    """Wipe the slate after the right password - unless the row has moved on since.
 
     Getting in is the proof the attempts before it were the same person
     forgetting. But the lock was checked on the row as `login` read it, before
@@ -177,13 +184,27 @@ async def _clear_failures(db: AsyncSession, user: User) -> bool:
     guessed; were the right one let in, or even told something different, a
     burst would learn which of its guesses was right despite the lock.
 
+    Nor if the password has changed since `login` read it. A reset or a
+    password change ends every session with `revoke_all`, and a sign-in with
+    the old password checked in the same instant used to write its refresh
+    token after that had run: it kept a session the change was made to end.
+    Both write this row before revoking - `reset_password`'s UPDATE, the flush
+    in `change_password` - so its row lock orders them against this UPDATE.
+    If this one comes first, its token is committed before `revoke_all` can
+    look and is revoked with the rest. If the change comes first, this waits
+    for it, finds another hash, and the sign-in is refused as a wrong password.
+
     It writes on every sign-in, clean or not: an UPDATE that matched nothing
     could not say whether the row was clean or locked.
     """
     now = datetime.now(UTC)
     cleared = await db.execute(
         update(User)
-        .where(User.id == user.id, _unlocked(now))
+        .where(
+            User.id == user.id,
+            _unlocked(now),
+            User.password_hash == user.password_hash,
+        )
         .values(failed_login_count=0, locked_until=None)
         .returning(User.id)
         .execution_options(synchronize_session="fetch")
@@ -220,12 +241,12 @@ async def login(db: AsyncSession, *, email: str, password: str) -> dict[str, obj
     # The check that decides is in the statement that records the outcome.
     if not await verify_password_async(password, user.password_hash):
         if not await _record_failure(db, user):
-            raise await _locked_meanwhile(db, user)
+            raise await _refused_meanwhile(db, user)
         raise UnauthorizedError(INVALID_CREDENTIALS, code="INVALID_CREDENTIALS")
     if not user.is_active:
         raise UnauthorizedError("Account is disabled", code="ACCOUNT_DISABLED")
     if not await _clear_failures(db, user):
-        raise await _locked_meanwhile(db, user)
+        raise await _refused_meanwhile(db, user)
 
     return await _issue_session(db, user)
 
