@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from math import ceil
 
-from sqlalchemy import String, delete, func, literal, select, update
+from sqlalchemy import ColumnElement, String, case, delete, func, literal, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -95,27 +95,97 @@ async def register(
     return await _issue_session(db, user)
 
 
-def _locked_for(user: User) -> int:
-    """Seconds left on the lock, or 0. Rounded up so it never reads as "0 left"."""
-    if user.locked_until is None:
-        return 0
-    remaining = (user.locked_until - datetime.now(UTC)).total_seconds()
-    return max(0, ceil(remaining))
+def _too_many_attempts(locked_until: datetime | None) -> UnauthorizedError:
+    """The refusal of a locked account. Seconds rounded up so it never reads as "0 left"."""
+    remaining = 0.0 if locked_until is None else (locked_until - datetime.now(UTC)).total_seconds()
+    return UnauthorizedError(
+        "Too many failed sign-in attempts",
+        code="TOO_MANY_LOGIN_ATTEMPTS",
+        details={"retryAfterSeconds": max(0, ceil(remaining))},
+    )
 
 
-async def _record_failure(db: AsyncSession, user: User) -> None:
+def _unlocked(now: datetime) -> ColumnElement[bool]:
+    """No lock on the row, judged on the row as the statement finds it."""
+    return or_(User.locked_until.is_(None), User.locked_until <= now)
+
+
+async def _locked_meanwhile(db: AsyncSession, user: User) -> UnauthorizedError:
+    """The refusal for an attempt another one locked out while it was hashing."""
+    locked_until = await db.scalar(select(User.locked_until).where(User.id == user.id))
+    return _too_many_attempts(locked_until)
+
+
+async def _record_failure(db: AsyncSession, user: User) -> bool:
     """Count a wrong password, and lock the account once there are too many.
 
     The count is on the account, not on the caller's address: the limiter in
     front of this endpoint is per IP, and a thousand rented proxies is a
     thousand times the allowance against one email. Every attempt against an
     account has the account in common, and nothing else.
+
+    The database does the arithmetic. Adding one in Python to the count `login`
+    had read let every guess of a parallel burst - the thousand proxies above -
+    read the same count and write the same count plus one, so the burst moved
+    it by one and the lock never came. `failed_login_count + 1` is evaluated on
+    the row as the UPDATE finds it: a second guess waits on the first one's row
+    lock and adds its one to what that one committed. Both CASEs read the row
+    from before this statement, so the guess that reaches the threshold is the
+    one that sets the lock, and the count restarts from zero in the same write.
+
+    No row lock is held across the hash. Taking one at the read would queue
+    every attempt on the account behind the one before it, each holding a
+    pooled connection for an Argon2 run, and a burst against one email would
+    take the pool - and the shop - with it.
+
+    False, with nothing counted, when the account was locked after `login` read
+    it: one at a time, this guess would have been refused before the hash.
     """
-    user.failed_login_count += 1
-    if user.failed_login_count >= settings.max_failed_logins:
-        user.locked_until = datetime.now(UTC) + timedelta(minutes=settings.login_lock_minutes)
-        user.failed_login_count = 0
-    await db.flush()
+    now = datetime.now(UTC)
+    counted = User.failed_login_count + 1
+    reached = counted >= settings.max_failed_logins
+    lock_until = literal(
+        now + timedelta(minutes=settings.login_lock_minutes), User.locked_until.type
+    )
+    recorded = await db.execute(
+        update(User)
+        .where(User.id == user.id, _unlocked(now))
+        .values(
+            failed_login_count=case((reached, 0), else_=counted),
+            locked_until=case((reached, lock_until), else_=User.locked_until),
+        )
+        .returning(User.id)
+        .execution_options(synchronize_session="fetch")
+    )
+    return recorded.first() is not None
+
+
+async def _clear_failures(db: AsyncSession, user: User) -> bool:
+    """Wipe the slate after the right password - unless the account is locked by now.
+
+    Getting in is the proof the attempts before it were the same person
+    forgetting. But the lock was checked on the row as `login` read it, before
+    the hash, and a guess can have reached the threshold since: a plain write
+    of zero from that read erased the lock and the count it had just reached.
+    So the write is conditional on the row as it is now, and False when locked.
+
+    Refused, not honoured, because the answer must not depend on the password.
+    Every other attempt that lands after the lock is refused whatever it
+    guessed; were the right one let in, or even told something different, a
+    burst would learn which of its guesses was right despite the lock.
+
+    It writes on every sign-in, clean or not: an UPDATE that matched nothing
+    could not say whether the row was clean or locked.
+    """
+    now = datetime.now(UTC)
+    cleared = await db.execute(
+        update(User)
+        .where(User.id == user.id, _unlocked(now))
+        .values(failed_login_count=0, locked_until=None)
+        .returning(User.id)
+        .execution_options(synchronize_session="fetch")
+    )
+    return cleared.first() is not None
 
 
 async def login(db: AsyncSession, *, email: str, password: str) -> dict[str, object]:
@@ -127,29 +197,25 @@ async def login(db: AsyncSession, *, email: str, password: str) -> dict[str, obj
 
     # Before the hash, deliberately. Argon2 is expensive on purpose, and that
     # cost belongs to people signing in rather than to whoever is guessing.
+    # It is not the check that decides - a parallel burst passes it together,
+    # on the row as it was read - but it spares the hash once a lock is in.
     #
     # This answer does say the account exists, which the generic one above
     # avoids. Registration already answers that question - EMAIL_ALREADY_EXISTS
     # - so hiding it here buys nothing, and a shopper locked out deserves to be
     # told why rather than being left to retype a password that is correct.
-    if (locked := _locked_for(user)) > 0:
-        raise UnauthorizedError(
-            "Too many failed sign-in attempts",
-            code="TOO_MANY_LOGIN_ATTEMPTS",
-            details={"retryAfterSeconds": locked},
-        )
+    if user.locked_until is not None and user.locked_until > datetime.now(UTC):
+        raise _too_many_attempts(user.locked_until)
 
+    # The check that decides is in the statement that records the outcome.
     if not verify_password(password, user.password_hash):
-        await _record_failure(db, user)
+        if not await _record_failure(db, user):
+            raise await _locked_meanwhile(db, user)
         raise UnauthorizedError(INVALID_CREDENTIALS, code="INVALID_CREDENTIALS")
     if not user.is_active:
         raise UnauthorizedError("Account is disabled", code="ACCOUNT_DISABLED")
-
-    if user.failed_login_count or user.locked_until:
-        # Getting in is the proof the attempts before it were the same person
-        # forgetting, so the slate is wiped rather than carried forward.
-        user.failed_login_count = 0
-        user.locked_until = None
+    if not await _clear_failures(db, user):
+        raise await _locked_meanwhile(db, user)
 
     return await _issue_session(db, user)
 
@@ -393,13 +459,25 @@ async def reset_password(db: AsyncSession, *, raw_token: str, new_password: str)
     if user is None or not user.is_active:
         raise invalid_reset_token()
 
-    user.password_hash = hash_password(new_password)
-    # Whoever opened the link proved they hold the mailbox, which outranks the
-    # failed guesses that locked the account; left in place, the lock would
-    # refuse the new password for up to login_lock_minutes.
-    user.failed_login_count = 0
-    user.locked_until = None
-    await db.flush()
+    await db.execute(
+        update(User)
+        .where(User.id == user.id)
+        .values(
+            password_hash=hash_password(new_password),
+            # Whoever opened the link proved they hold the mailbox, which
+            # outranks the failed guesses that locked the account; left in
+            # place, the lock would refuse the new password for up to
+            # login_lock_minutes.
+            #
+            # A statement, not attributes on `user`: the ORM leaves out a
+            # column it believes unchanged, and `user` was read before the
+            # hash. A guess that locked the account in between kept its lock
+            # through the reset, because `locked_until` was None when read.
+            failed_login_count=0,
+            locked_until=None,
+        )
+        .execution_options(synchronize_session="fetch")
+    )
     await revoke_all(db, user.id)
 
 

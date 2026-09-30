@@ -7,10 +7,13 @@
 
 import asyncio
 import uuid
+from collections import Counter
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from app.core.config import settings
 from app.core.errors import ConflictError, UnauthorizedError
 from app.db.models import (
     REASON_ORDER_CANCELLED,
@@ -19,6 +22,7 @@ from app.db.models import (
     InventoryMovement,
     Order,
     OrderItem,
+    PasswordResetToken,
     Product,
     ProductImage,
     RefreshToken,
@@ -27,7 +31,7 @@ from app.db.models import (
 from app.db.session import SessionLocal
 from app.services import auth as auth_service
 from app.services import order as order_service
-from sqlalchemy import delete, func, select
+from sqlalchemy import Row, delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.factories import make_user
@@ -343,3 +347,203 @@ async def test_one_refresh_token_can_only_be_spent_once(db: AsyncSession) -> Non
 
     # Exactly the one that was presented; the winner's new token is untouched.
     assert spent == 1
+
+
+PASSWORD = "supersecret1"
+WRONG = "not-the-password"
+
+
+@pytest.fixture
+async def lockable() -> AsyncGenerator[User]:
+    """An account to guess at, written on its own connection."""
+    async with SessionLocal() as setup:
+        user = await make_user(setup, email="guessed@voltbox.ge", password=PASSWORD)
+        await setup.commit()
+
+    yield user
+
+    async with SessionLocal() as cleanup:
+        await cleanup.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
+        await cleanup.execute(
+            delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id)
+        )
+        await cleanup.execute(delete(User).where(User.id == user.id))
+        await cleanup.commit()
+
+
+async def _login(email: str, password: str) -> tuple[str, str]:
+    """One sign-in on its own connection, committed as the route commits it."""
+    async with SessionLocal() as session:
+        try:
+            await auth_service.login(session, email=email, password=password)
+        except UnauthorizedError as exc:
+            # The route commits a refusal too: the count has to outlive it.
+            await session.commit()
+            return "rejected", exc.code
+        except Exception as exc:
+            # Broad on purpose and hiding nothing: the caller asserts on the
+            # outcomes, so anything caught here fails the test by name.
+            await session.rollback()
+            return "error", type(exc).__name__
+        await session.commit()
+        return "ok", "signed in"
+
+
+async def _reset(raw_token: str) -> tuple[str, str]:
+    """One password reset on its own connection."""
+    async with SessionLocal() as session:
+        try:
+            await auth_service.reset_password(
+                session, raw_token=raw_token, new_password="a-brand-new-one-1"
+            )
+            await session.commit()
+        except Exception as exc:
+            # Broad on purpose, as in _login.
+            await session.rollback()
+            return "error", type(exc).__name__
+        return "ok", "reset"
+
+
+async def _set_failures(user: User, count: int, *, locked_until: datetime | None = None) -> None:
+    async with SessionLocal() as session:
+        await session.execute(
+            update(User)
+            .where(User.id == user.id)
+            .values(failed_login_count=count, locked_until=locked_until)
+        )
+        await session.commit()
+
+
+async def _lock_state(user: User) -> Row[tuple[int, datetime | None]]:
+    async with SessionLocal() as check:
+        return (
+            await check.execute(
+                select(User.failed_login_count, User.locked_until).where(User.id == user.id)
+            )
+        ).one()
+
+
+async def _until_queued_behind(holder: AsyncSession) -> None:
+    """Return once another connection waits on a lock `holder`'s transaction holds.
+
+    The interleaving the tests below are about: the other attempt has read the
+    row and hashed, and its write is queued behind this one. Committing any
+    earlier would let it read the result, and the test would prove nothing.
+    """
+    pid = await holder.scalar(text("SELECT pg_backend_pid()"))
+    async with SessionLocal() as probe:
+        for _ in range(500):
+            if await probe.scalar(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_locks"
+                    " WHERE NOT granted AND :holder = ANY(pg_blocking_pids(pid)))"
+                ),
+                {"holder": pid},
+            ):
+                return
+            await asyncio.sleep(0.01)
+    raise AssertionError("nothing ever queued behind the held row")
+
+
+async def test_a_burst_of_wrong_passwords_locks_the_account(lockable: User) -> None:
+    """More guesses than the threshold, all at once, each on its own connection.
+
+    The count was read into Python, raised by one and written back, so every
+    guess of a burst read the same count and wrote the same count plus one:
+    the burst moved it by one. Parallel guesses from many addresses are what
+    the count exists for, and that was the case in which the lock never came.
+    """
+    burst = settings.max_failed_logins + 5
+
+    results = await asyncio.gather(*(_login(lockable.email, WRONG) for _ in range(burst)))
+
+    state = await _lock_state(lockable)
+    assert state.locked_until is not None, f"not locked after {burst} parallel guesses"
+    assert state.locked_until > datetime.now(UTC)
+    # Exactly the threshold's worth were judged. Every guess that reached its
+    # answer after the lock was refused as locked, whatever it guessed, and
+    # was not counted towards the next lock.
+    assert Counter(results) == {
+        ("rejected", "INVALID_CREDENTIALS"): settings.max_failed_logins,
+        ("rejected", "TOO_MANY_LOGIN_ATTEMPTS"): burst - settings.max_failed_logins,
+    }
+    assert state.failed_login_count == 0
+
+
+async def test_the_right_password_in_flight_does_not_undo_a_lock(lockable: User) -> None:
+    """A guess reaches the threshold while the owner's sign-in is hashing.
+
+    The sign-in had read the row before the lock and wiped it from that read,
+    so the account came out unlocked and the count that locked it was gone.
+
+    The account was locked once before and the lock has lapsed: the timestamp
+    stays until someone signs in, and it is the state in which that wipe
+    reached `locked_until` - from None, the ORM would not have written it.
+    """
+    await _set_failures(
+        lockable,
+        settings.max_failed_logins - 1,
+        locked_until=datetime.now(UTC) - timedelta(minutes=1),
+    )
+
+    async with SessionLocal() as guess:
+        # The guess that reaches the threshold: its lock written, not committed.
+        with pytest.raises(UnauthorizedError):
+            await auth_service.login(guess, email=lockable.email, password=WRONG)
+        owner = asyncio.create_task(_login(lockable.email, PASSWORD))
+        await _until_queued_behind(guess)
+        await guess.commit()
+    answer = await owner
+
+    state = await _lock_state(lockable)
+    assert state.locked_until is not None
+    assert state.locked_until > datetime.now(UTC), "the lock was undone"
+    # Refused as every attempt landing after the lock is, so the answer says
+    # nothing about which password was right.
+    assert answer == ("rejected", "TOO_MANY_LOGIN_ATTEMPTS")
+
+
+async def test_a_guess_in_flight_does_not_lock_out_the_right_password(lockable: User) -> None:
+    """The owner signs in while a guess, read one short of the threshold, is hashing.
+
+    The guess added its one to the count it had read, and locked the account
+    the owner had just cleared by signing in.
+    """
+    await _set_failures(lockable, settings.max_failed_logins - 1)
+
+    async with SessionLocal() as owner:
+        await auth_service.login(owner, email=lockable.email, password=PASSWORD)
+        guess = asyncio.create_task(_login(lockable.email, WRONG))
+        await _until_queued_behind(owner)
+        await owner.commit()
+
+    assert await guess == ("rejected", "INVALID_CREDENTIALS")
+    state = await _lock_state(lockable)
+    assert state.locked_until is None
+    # Counted, from the zero the sign-in left.
+    assert state.failed_login_count == 1
+
+
+async def test_a_reset_lifts_a_lock_that_lands_while_it_runs(lockable: User) -> None:
+    """A guess reaches the threshold while a reset link is being used.
+
+    The reset set `locked_until = None` on the account it had read, and that
+    was None already, so the write left the column out and the lock stayed.
+    """
+    await _set_failures(lockable, settings.max_failed_logins - 1)
+    async with SessionLocal() as setup:
+        issued = await auth_service.issue_password_reset(setup, email=lockable.email)
+        await setup.commit()
+    assert issued is not None
+
+    async with SessionLocal() as guess:
+        with pytest.raises(UnauthorizedError):
+            await auth_service.login(guess, email=lockable.email, password=WRONG)
+        reset = asyncio.create_task(_reset(issued.token))
+        await _until_queued_behind(guess)
+        await guess.commit()
+
+    assert await reset == ("ok", "reset")
+    state = await _lock_state(lockable)
+    assert state.locked_until is None
+    assert state.failed_login_count == 0
