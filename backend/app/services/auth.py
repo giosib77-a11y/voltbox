@@ -308,8 +308,38 @@ async def refresh(db: AsyncSession, *, raw_token: str) -> dict[str, object]:
     One conditional UPDATE closes it: the second caller's statement waits on
     the row, re-evaluates the WHERE clause once the first commits, matches
     nothing, and gets a 401.
+
+    The account's row is locked first, before the token's. A reset, a password
+    change and a block all end every session with `revoke_all`, and a rotation
+    in the same instant used to write its new token after that had looked: it
+    claimed the old token, `revoke_all` waited on that row and then skipped
+    it as already revoked, and the new token, inserted after `revoke_all`'s
+    statement began, was never seen - a live session the change was made to
+    end. All three write this row before revoking, so the lock orders them
+    against the rotation. If the rotation comes first, its new token is
+    committed before `revoke_all` looks, and is revoked with the rest; if the
+    change comes first, the rotation waits for it and finds its token revoked.
+    Account row, then tokens, in that order everywhere: the other order beside
+    this one could deadlock, which is why `revoke_all` bumps the version first.
     """
     token_hash = hash_refresh_token(raw_token)
+
+    owner = await db.scalar(
+        select(RefreshToken.user_id).where(RefreshToken.token_hash == token_hash)
+    )
+    user = (
+        None
+        if owner is None
+        else await db.scalar(
+            select(User)
+            .where(User.id == owner)
+            # FOR NO KEY UPDATE: excludes the writers above without blocking
+            # the inserts elsewhere that only reference the row.
+            .with_for_update(key_share=True)
+            # A fresh row, not one this session may already hold.
+            .execution_options(populate_existing=True)
+        )
+    )
 
     claimed = (
         await db.execute(
@@ -331,7 +361,6 @@ async def refresh(db: AsyncSession, *, raw_token: str) -> dict[str, object]:
         await _handle_possible_reuse(db, token_hash)
         raise invalid_refresh_token()
 
-    user = await db.scalar(select(User).where(User.id == claimed.user_id))
     if user is None or not user.is_active:
         # The revocation rolls back with the transaction, so a suspended
         # account that is re-enabled keeps the sessions it had.
@@ -370,7 +399,23 @@ async def revoke_all(db: AsyncSession, user_id: object) -> None:
     A password reset link already sent goes as well. It is a way in that does
     not need the password, so a change of password - or a blocked account -
     that left it working would leave whoever holds that email able to undo it.
+
+    The account's row is written first, before any token: `refresh` and
+    `login` take that row before writing a token, and the lock is what keeps
+    them from slipping a new one in after the revocation has looked. Tokens
+    first would also take the two locks in the opposite order to `refresh`,
+    and the two could deadlock.
     """
+    await db.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(token_version=User.token_version + 1)
+        # The row is usually already loaded in this session - `change_password`
+        # is holding it - and the sessions here are created with
+        # `expire_on_commit=False`, so without this the instance would keep the
+        # old value and a read on the same session would be answered from it.
+        .execution_options(synchronize_session="fetch")
+    )
     now = datetime.now(UTC)
     await db.execute(
         update(RefreshToken)
@@ -381,16 +426,6 @@ async def revoke_all(db: AsyncSession, user_id: object) -> None:
         delete(PasswordResetToken)
         .where(PasswordResetToken.user_id == user_id)
         .execution_options(synchronize_session=False)
-    )
-    await db.execute(
-        update(User)
-        .where(User.id == user_id)
-        .values(token_version=User.token_version + 1)
-        # The row is usually already loaded in this session - `change_password`
-        # is holding it - and the sessions here are created with
-        # `expire_on_commit=False`, so without this the instance would keep the
-        # old value and a read on the same session would be answered from it.
-        .execution_options(synchronize_session="fetch")
     )
 
 

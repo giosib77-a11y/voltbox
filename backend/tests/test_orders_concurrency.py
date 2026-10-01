@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.errors import ConflictError, UnauthorizedError
 from app.db.models import (
     REASON_ORDER_CANCELLED,
+    ROLE_ADMIN,
     Brand,
     Category,
     InventoryMovement,
@@ -29,6 +30,7 @@ from app.db.models import (
     User,
 )
 from app.db.session import SessionLocal
+from app.services import admin_customers
 from app.services import auth as auth_service
 from app.services import order as order_service
 from sqlalchemy import Row, delete, func, select, text, update
@@ -595,3 +597,60 @@ async def test_a_sign_in_with_the_old_password_does_not_outlive_the_change(
         )
     assert live == 0, "a session opened with the old password survived the change"
     assert answer == ("rejected", "INVALID_CREDENTIALS")
+
+
+async def _block_in(session: AsyncSession, user: User) -> None:
+    # Only compared by id against the account being blocked.
+    actor = User(id=uuid.uuid4(), role=ROLE_ADMIN)
+    await admin_customers.set_active(session, user.id, False, actor=actor)
+
+
+async def _run_held(
+    change: Callable[[AsyncSession, User], Awaitable[None]], user: User
+) -> tuple[str, str]:
+    """`change` on its own connection, committed - for running as a task."""
+    async with SessionLocal() as session:
+        try:
+            await change(session, user)
+            await session.commit()
+        except Exception as exc:
+            # Broad on purpose, as in _login.
+            await session.rollback()
+            return "error", type(exc).__name__
+        return "ok", "changed"
+
+
+@pytest.mark.parametrize(
+    "change", [_reset_in, _change_in, _block_in], ids=["reset", "change", "block"]
+)
+async def test_a_rotation_in_flight_does_not_outlive_the_change(
+    lockable: User, change: Callable[[AsyncSession, User], Awaitable[None]]
+) -> None:
+    """A refresh already rotating when every session is ended.
+
+    The rotation claimed the old token and wrote the new one; `revoke_all`
+    waited on the old one, skipped it once it was revoked, and never saw the
+    new one, which had not been committed when its statement began. Whoever
+    the change was meant to shut out kept a token that renews itself.
+    """
+    async with SessionLocal() as setup:
+        loaded = await setup.scalar(select(User).where(User.id == lockable.id))
+        assert loaded is not None
+        issued = await auth_service._issue_session(setup, loaded)
+        await setup.commit()
+
+    async with SessionLocal() as rotating:
+        # Rotated - old token claimed, new one written - and not committed.
+        await auth_service.refresh(rotating, raw_token=str(issued["refresh_token"]))
+        changing = asyncio.create_task(_run_held(change, lockable))
+        await _until_queued_behind(rotating)
+        await rotating.commit()
+    assert await changing == ("ok", "changed")
+
+    async with SessionLocal() as check:
+        live = await check.scalar(
+            select(func.count())
+            .select_from(RefreshToken)
+            .where(RefreshToken.user_id == lockable.id, RefreshToken.revoked_at.is_(None))
+        )
+    assert live == 0, "a token rotated in the same instant survived the change"
