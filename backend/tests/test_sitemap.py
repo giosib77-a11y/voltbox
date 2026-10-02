@@ -168,15 +168,26 @@ XMLNS = {
 
 
 def _parsed(body: str) -> dict[str, dict[str, str]]:
-    """Each <loc> and the hreflang alternates its entry names."""
+    """Each <loc> and the hreflang alternates its entry names.
+
+    A <url> without its <loc>, or an alternate without hreflang or href, fails
+    here by name: a crawler drops such an entry without a word.
+    """
     # The API's own output, from a test: nothing untrusted to defuse.
     root = ElementTree.fromstring(body)  # noqa: S314
-    return {
-        url.findtext("s:loc", namespaces=XMLNS): {
-            link.get("hreflang"): link.get("href") for link in url.findall("xhtml:link", XMLNS)
-        }
-        for url in root.findall("s:url", XMLNS)
-    }
+    entries: dict[str, dict[str, str]] = {}
+    for url in root.findall("s:url", XMLNS):
+        loc = url.findtext("s:loc", namespaces=XMLNS)
+        assert loc is not None, "a <url> without its <loc>"
+        alternates: dict[str, str] = {}
+        for link in url.findall("xhtml:link", XMLNS):
+            hreflang = link.get("hreflang")
+            href = link.get("href")
+            assert hreflang is not None, f"an alternate of {loc} without hreflang"
+            assert href is not None, f"the {hreflang} alternate of {loc} without href"
+            alternates[hreflang] = href
+        entries[loc] = alternates
+    return entries
 
 
 async def test_every_page_is_listed_in_english_too(
