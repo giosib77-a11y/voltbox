@@ -4,6 +4,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Header, Request, status
+from pydantic import ValidationError as BodyInvalid
 
 from app.core.config import settings
 from app.core.deps import CurrentUser, Db, OptionalUser
@@ -18,6 +19,7 @@ from app.schemas.order import (
     OrderLookupRequest,
     OrderOut,
     OrderTotals,
+    PlacedOrderOut,
 )
 from app.services import order as order_service
 from app.services import order_email, telegram
@@ -92,7 +94,7 @@ def _to_out(order: Order) -> OrderOut:
         "checkout return the original order instead of placing a second one."
     ),
     status_code=status.HTTP_201_CREATED,
-    response_model=OrderOut,
+    response_model=PlacedOrderOut,
 )
 async def create_order(
     db: Db,
@@ -108,7 +110,7 @@ async def create_order(
         str | None,
         Header(alias="Idempotency-Key", description="Required. A UUID identifying this checkout."),
     ] = None,
-) -> OrderOut:
+) -> PlacedOrderOut:
     # ქართული ახსნა: მთელი ლოგიკა სერვისშია ერთ ტრანზაქციაში — router მხოლოდ
     # (productId, qty) წყვილებს გადასცემს. ფასი კლიენტისგან არსად არ მოდის.
     order, created = await order_service.place_order(
@@ -119,13 +121,15 @@ async def create_order(
         user=user,
         idempotency_key=_required_key(idempotency_key),
     )
+    # A replay gets a fresh one too - see issue_lookup_token.
+    lookup_token = order_service.issue_lookup_token(order)
     await db.commit()
     await db.refresh(order)
 
     # A replay was announced the first time.
     if created:
         _announce(background, order, user)
-    return _to_out(order)
+    return PlacedOrderOut(**_to_out(order).model_dump(), lookup_token=lookup_token)
 
 
 def _announce(background: BackgroundTasks, order: Order, user: User | None) -> None:
@@ -188,23 +192,32 @@ async def list_orders(db: Db, user: CurrentUser) -> list[OrderOut]:
     "/lookup",
     summary="Find a guest order",
     description=(
-        "For an order placed without an account. The email or phone used at "
-        "checkout goes in the body, never in the URL, because a query string "
-        "is written to every access log between here and the browser. "
-        "An unknown order number and a contact that does not match give the "
-        "same 404: order numbers are sequential, so a different answer would "
-        "make them enumerable."
+        "For an order placed without an account: the order number and the "
+        "`lookupToken` POST /orders returned with it, in the body - never in the "
+        "URL, because a query string is written to every access log between "
+        "here and the browser. A wrong token, an unknown order number and a "
+        "body that is not a valid request all get the same 404: order numbers "
+        "are sequential, so any difference would make them enumerable."
     ),
     response_model=OrderOut,
+    # The body is read by hand (below), so FastAPI would not document it.
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {"application/json": {"schema": OrderLookupRequest.model_json_schema()}},
+        }
+    },
 )
 @limiter.limit(LOOKUP_RATE_LIMIT)
-async def lookup_order(
-    request: Request, db: Db, user: OptionalUser, payload: OrderLookupRequest
-) -> OrderOut:
-    # `request` is what slowapi reads the client address from. Unused here.
-    order = await order_service.get_by_number(
-        db, payload.order_number, user=user, contact=payload.contact
-    )
+async def lookup_order(request: Request, db: Db) -> OrderOut:
+    # Validated here and not by FastAPI, whose answer to a bad body is a 400
+    # naming the field. That would tell a malformed request from a wrong token,
+    # and the token from the order number. Nothing of the body is logged.
+    try:
+        payload = OrderLookupRequest.model_validate_json(await request.body())
+    except BodyInvalid:
+        raise order_service.order_not_found() from None
+    order = await order_service.get_guest_order(db, payload.order_number, payload.token)
     return _to_out(order)
 
 
@@ -212,8 +225,9 @@ async def lookup_order(
     "/{order_number}",
     summary="Get one of your own orders",
     description=(
-        "Signed-in callers only. A guest uses POST /orders/lookup — order "
-        "numbers are guessable, so the number alone is never enough."
+        "Signed-in callers only. A guest uses POST /orders/lookup with the "
+        "token issued at checkout — order numbers are guessable, so the "
+        "number alone is never enough."
     ),
     response_model=OrderOut,
 )

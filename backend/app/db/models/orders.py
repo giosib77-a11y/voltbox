@@ -57,6 +57,11 @@ class Order(UUIDPrimaryKey, Timestamps, Base):
     # ორმაგი გაგზავნისგან დაცვა: იგივე გასაღები → იგივე შეკვეთა და არა მეორე
     idempotency_key: Mapped[str | None] = mapped_column(String(128), unique=True)
 
+    # SHA-256 of the token a guest reads this order with (POST /orders/lookup).
+    # NULL on a signed-in customer's order, which is read through the account,
+    # and on guest orders placed before migration 0013.
+    lookup_token_hash: Mapped[str | None] = mapped_column(String(64))
+
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan", lazy="selectin"
     )

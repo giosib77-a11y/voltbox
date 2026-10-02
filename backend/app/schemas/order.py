@@ -89,15 +89,17 @@ class OrderTotals(ApiModel):
 
 
 class OrderLookupRequest(ApiRequest):
-    """A guest reading their own order.
+    """A guest reading their own order, with the token issued when it was placed.
 
-    The contact travels in the body, never in the URL: a query string is
-    written to the access log of every hop, to proxy logs and to browser
-    history, and this field is a customer's phone number or email.
+    Both travel in the body, never in the URL: a query string is written to the
+    access log of every hop, to proxy logs and to browser history.
+
+    The route validates this itself rather than letting FastAPI do it, so that
+    a body that fails here is answered with the same 404 as a wrong token.
     """
 
     order_number: str = Field(min_length=3, max_length=32)
-    contact: str = Field(min_length=3, max_length=255, description="Email or phone from checkout")
+    token: str = Field(min_length=1, max_length=128)
 
 
 class CustomerOut(ApiModel):
@@ -118,6 +120,14 @@ class OrderOut(ApiModel):
     totals: OrderTotals
     payment_method: str
     currency: str
+
+
+class PlacedOrderOut(OrderOut):
+    """The answer to POST /orders: the order, and for a guest the way back to it."""
+
+    #: What POST /orders/lookup takes. Issued for a guest order only, and only
+    #: here - the server keeps its hash, so it cannot be shown again.
+    lookup_token: str | None = None
 
 
 class DeliveryCityOut(ApiModel):

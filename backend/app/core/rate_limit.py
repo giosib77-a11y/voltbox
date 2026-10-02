@@ -59,13 +59,11 @@ AUTH_RATE_LIMIT = "5/minute"
 RESET_EMAIL_ADDRESS_LIMIT = "3/hour"
 
 #: Guest order lookup. Order numbers are VB-YYYYMMDD-NNNNN from one sequence, so
-#: the number is guessable and the contact is the only secret - and a phone
-#: number is not much of one. At the global 60/minute, ten thousand consecutive
-#: numbers fall in about three hours, and what they open is a name, an address
-#: and a purchase history.
-#: Ten a minute leaves a real shopper untouched and makes that a day's work per
-#: address. It is not a complete answer: a distributed attempt still gets
-#: through, and only per-order-number attempt counting would close that.
+#: the number is guessable; the secret is the 256-bit token issued with the
+#: order, which no rate makes guessable. This limit was the only defence while
+#: the secret was the shopper's phone, and stays as a cap on what any one
+#: address can make the endpoint do. Ten a minute leaves a real shopper
+#: untouched.
 LOOKUP_RATE_LIMIT = "10/minute"
 
 #: Crash reports from the browser. Unauthenticated by necessity - a crash

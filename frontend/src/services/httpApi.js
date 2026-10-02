@@ -7,12 +7,15 @@
  * თითოეულ ფუნქციასთან მითითებულია მისი endpoint.
  */
 
-import { readJSON, writeJSON } from '../utils/storage.js';
+import { readJSON, removeKey, writeJSON } from '../utils/storage.js';
 import { request } from './httpClient.js';
 import { clearSession, readSession, writeSession } from './session.js';
 
-/** სტუმრის შეკვეთების კონტაქტები — შეკვეთის დადასტურების გვერდისთვის. */
-const GUEST_ORDERS_KEY = 'guest-orders:v1';
+/** სტუმრის შეკვეთების lookup token-ები — შეკვეთის დადასტურების გვერდისთვის. */
+const GUEST_ORDERS_KEY = 'guest-orders:v2';
+
+/** Held the phone given at checkout; dropped wherever the token store is touched. */
+const LEGACY_GUEST_ORDERS_KEY = 'guest-orders:v1';
 
 /* -------------------------------------------------------------------------- */
 /*  კატალოგი                                                                   */
@@ -80,20 +83,23 @@ export async function createOrder(payload) {
       paymentMethod: payload.paymentMethod,
     },
   });
-  rememberGuestOrder(order.orderNumber, payload.customer?.phone);
+  rememberGuestOrder(order.orderNumber, order.lookupToken);
   return order;
 }
 
 /**
- * სტუმრის შეკვეთის კონტაქტს ლოკალურად ვინახავთ.
+ * სტუმრის შეკვეთის lookup token-ს ლოკალურად ვინახავთ.
  *
- * შეკვეთის ნომერი თანმიმდევრობითია და გამოცნობადი, ამიტომ სერვერი მარტო ნომრით
- * არ გასცემს შეკვეთას — სტუმარმა კონტაქტი უნდა დაამთხვიოს.
+ * შეკვეთის ნომერი თანმიმდევრობითია და გამოცნობადი, ტელეფონი კი სხვებმაც იციან,
+ * ამიტომ სერვერი შეკვეთას მხოლოდ იმ შემთხვევით token-ზე გასცემს, რომელიც
+ * შეკვეთისას ერთხელ დააბრუნა. A signed-in order gets none and stores nothing:
+ * it is read through the account.
  */
-function rememberGuestOrder(orderNumber, contact) {
-  if (!orderNumber || !contact) return;
+function rememberGuestOrder(orderNumber, token) {
+  removeKey(LEGACY_GUEST_ORDERS_KEY);
+  if (!orderNumber || !token) return;
   const store = readJSON(GUEST_ORDERS_KEY, {});
-  writeJSON(GUEST_ORDERS_KEY, { ...store, [orderNumber]: contact });
+  writeJSON(GUEST_ORDERS_KEY, { ...store, [orderNumber]: token });
 }
 
 /**
@@ -121,18 +127,18 @@ export async function getOrders() {
 /**
  * One order, by number.
  *
- * A signed-in caller reads their own with GET. A guest has to prove the order
- * is theirs with the contact they gave at checkout, and that goes in a POST
- * body: it used to travel as `?email=` while actually carrying a phone number,
- * which wrote a customer's phone into every access log, proxy log and history
- * entry between here and the server.
+ * A signed-in caller reads their own with GET. A guest proves the order is
+ * theirs with the token POST /orders returned, and that goes in a POST body,
+ * never in the URL, where every access log, proxy log and history entry
+ * between here and the server would keep it.
  */
 export async function getOrderByNumber(orderNumber) {
-  const contact = readJSON(GUEST_ORDERS_KEY, {})[orderNumber];
-  if (contact) {
+  removeKey(LEGACY_GUEST_ORDERS_KEY);
+  const token = readJSON(GUEST_ORDERS_KEY, {})[orderNumber];
+  if (token) {
     return request('/orders/lookup', {
       method: 'POST',
-      body: { orderNumber, contact },
+      body: { orderNumber, token },
     });
   }
   return request(`/orders/${encodeURIComponent(orderNumber)}`);

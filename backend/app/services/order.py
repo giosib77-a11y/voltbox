@@ -28,6 +28,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.security import generate_order_lookup_token, hash_order_lookup_token
 from app.db.models import (
     REASON_ORDER_PLACED,
     Order,
@@ -374,37 +375,64 @@ async def list_for_user(db: AsyncSession, user_id: UUID) -> list[Order]:
     return list((await db.scalars(stmt)).unique().all())
 
 
-async def get_by_number(
-    db: AsyncSession, order_number: str, *, user: User | None, contact: str | None = None
-) -> Order:
-    """შეკვეთის წაკითხვა ნომრით.
+async def get_by_number(db: AsyncSession, order_number: str, *, user: User) -> Order:
+    """შეკვეთის წაკითხვა ნომრით — მხოლოდ საკუთარი, ავტორიზებულისთვის.
 
     შეკვეთის ნომერი თანმიმდევრობითია და გამოცნობადი, ამიტომ მარტო ნომრით
-    წვდომა დაუშვებელია. ავტორიზებული თავისას ხედავს; სტუმარმა ელ. ფოსტა ან
-    ტელეფონი უნდა დაამთხვიოს. ორივე შემთხვევაში უარი 404-ია და არა 403.
-
-    `contact` is whichever of the two the guest gave at checkout; it is
-    compared through services/contact.py, the same helper that decides whether
-    a repeated Idempotency-Key belongs to the caller. The two answers have to
-    agree - an order a guest can read is one they could have replayed.
-
-    ⚠️ The value must never reach a URL. It used to arrive as `?email=` while
-    actually carrying a phone number, which put a customer's phone in every
-    access log, proxy log and browser history entry.
+    წვდომა დაუშვებელია. სხვისი შეკვეთა 404-ია და არა 403. A guest reads theirs
+    with `get_guest_order`.
     """
     order = await db.scalar(select(Order).where(Order.order_number == order_number))
+    if order is None or order.user_id != user.id:
+        raise order_not_found()
+    return order
+
+
+def order_not_found() -> NotFoundError:
+    """The one refusal of a lookup, whatever went wrong.
+
+    Order numbers are sequential, so an answer that told "no such order" from
+    "not yours" would turn them into a list of real orders.
+    """
+    return NotFoundError("Order not found", code="ORDER_NOT_FOUND")
+
+
+def issue_lookup_token(order: Order) -> str | None:
+    """Give a guest order a new lookup token; return the raw one, or None.
+
+    Only the hash is kept, so the raw token exists once - in this response - and
+    the caller has to commit for it to work. A signed-in customer's order gets
+    none: it is read through the account.
+
+    Called on a replayed checkout too, which replaces the token. The replay is
+    a retry whose first answer never arrived, so the browser holds no token
+    yet, and the stored hash cannot be turned back into one. Whoever replays
+    has already proved more than a token would: the Idempotency-Key, a UUID
+    that never left their browser, and the contact (`owns_order`).
+    """
+    if order.user_id is not None:
+        return None
+    raw, order.lookup_token_hash = generate_order_lookup_token()
+    return raw
+
+
+async def get_guest_order(db: AsyncSession, order_number: str, token: str) -> Order:
+    """A guest order, for the holder of the token it was issued with.
+
+    One query for both conditions, so an unknown number and a wrong token run
+    the same statement and fail at the same place. The phone is no part of it:
+    a phone number is known to the shopper's friends, family and every shop
+    they have given it to, and the order number is a counter.
+    """
+    order = await db.scalar(
+        select(Order).where(
+            Order.order_number == order_number,
+            Order.lookup_token_hash == hash_order_lookup_token(token),
+        )
+    )
     if order is None:
-        raise NotFoundError("Order not found", code="ORDER_NOT_FOUND")
-
-    if user is not None and order.user_id == user.id:
-        return order
-
-    if contact_matches(contact, email=order.guest_email, phone=order.guest_phone):
-        return order
-
-    # Deliberately the same answer as "no such order": a different one would
-    # turn the sequential order numbers into a way to enumerate real orders.
-    raise NotFoundError("Order not found", code="ORDER_NOT_FOUND")
+        raise order_not_found()
+    return order
 
 
 async def cancel(db: AsyncSession, order: Order, *, actor_id: UUID | None = None) -> Order:

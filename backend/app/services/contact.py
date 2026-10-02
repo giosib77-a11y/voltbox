@@ -1,11 +1,11 @@
-"""Normalising the contact details an order is looked up by.
+"""Normalising the contact details that identify a guest order's owner.
 
 What it does: turns an email or a phone number into one canonical form, so that
 two spellings of the same contact compare equal.
 Where it fits: `services/order.py` uses it to decide whether a repeated
-Idempotency-Key belongs to the same person, and `get_by_number` uses it to
-decide whether a guest may read an order. Both answers have to agree - an order
-a guest can read must be one they could have replayed, and the other way round.
+Idempotency-Key belongs to the same person. It no longer opens the guest
+lookup: a phone number is known to others, so that takes a random token
+(`order.get_guest_order`).
 
 Notes: normalisation happens at comparison time, on both sides, so the values
 already stored keep working without a data migration. Nothing here is written
@@ -69,8 +69,7 @@ def normalize_phone(value: str | None) -> str | None:
 def normalize_contact(value: str | None) -> str | None:
     """Normalise a value that may be either an email or a phone number.
 
-    The guest lookup takes one field, because asking a shopper which of the two
-    they used is a worse experience than working it out here.
+    A replayed checkout may match on either, so either is accepted here.
     """
     if not value:
         return None

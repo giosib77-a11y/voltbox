@@ -5,12 +5,17 @@
 მარაგი ბრუნდება · ჯამები ცენტამდე ემთხვევა.
 """
 
+import hashlib
+import json
+import logging
 import uuid
+from collections.abc import Generator
 from decimal import Decimal
 
 import httpx
 import pytest
 from app.core.config import settings
+from app.core.logging import JsonFormatter
 from app.core.rate_limit import LOOKUP_RATE_LIMIT, limiter
 from app.db.models import ROLE_ADMIN, Order, Product, ProductImage
 from pydantic import SecretStr
@@ -235,8 +240,11 @@ async def test_idempotency_key_prevents_a_duplicate_order(
     second = await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}], headers=headers)
 
     assert first.json()["orderNumber"] == second.json()["orderNumber"]
-    # A replay looks exactly like the original, so the client needs no branch.
-    assert second.json() == first.json()
+    # A replay looks exactly like the original, so the client needs no branch -
+    # but for a new lookup token (test_a_replayed_checkout_gets_a_token_that_works).
+    replayed, original = second.json(), first.json()
+    assert replayed.pop("lookupToken") != original.pop("lookupToken")
+    assert replayed == original
     stock = await db.scalar(select(Product.stock).where(Product.id == shop["cheap"].id))
     assert stock == 4  # ერთხელ ჩამოიწერა და არა ორჯერ
 
@@ -382,78 +390,205 @@ async def test_snapshot_survives_a_later_price_change(
     shop["cheap"].name = "Renamed"
     await db.flush()
 
-    stored = (await _lookup(client, number, CUSTOMER["phone"])).json()
+    stored = (await _lookup(client, number, body["lookupToken"])).json()
 
     assert stored["items"][0]["snapshot"]["price"] == "40.00"
     assert stored["items"][0]["snapshot"]["name"] == "Cheap Phone"
     assert stored["totals"]["total"] == "48.00"
 
 
-async def test_order_number_is_not_readable_without_the_contact(
+async def _lookup(client: httpx.AsyncClient, number: str, token: str) -> httpx.Response:
+    return await client.post("/api/v1/orders/lookup", json={"orderNumber": number, "token": token})
+
+
+async def _place_as_guest(client: httpx.AsyncClient, shop: dict[str, Product]) -> tuple[str, str]:
+    """→ (order number, lookup token) of a fresh guest order."""
+    body = (await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}])).json()
+    return body["orderNumber"], body["lookupToken"]
+
+
+async def test_order_number_is_not_readable_without_the_token(
     client: httpx.AsyncClient, shop: dict[str, Product]
 ) -> None:
     """ნომერი თანმიმდევრობითია და გამოცნობადი — მარტო ნომრით წვდომა დაუშვებელია."""
-    number = (await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}])).json()[
-        "orderNumber"
-    ]
+    number, _ = await _place_as_guest(client, shop)
 
     anonymous = await client.get(f"/api/v1/orders/{number}")
-    wrong_contact = await _lookup(client, number, "555999999")
+    wrong_token = await _lookup(client, number, "not-the-token")
 
     # GET is for signed-in callers only now, so a guest gets 401 there.
     assert anonymous.status_code == 401
-    assert wrong_contact.status_code == 404
+    assert wrong_token.status_code == 404
 
 
-async def _lookup(client: httpx.AsyncClient, number: str, contact: str) -> httpx.Response:
-    return await client.post(
-        "/api/v1/orders/lookup", json={"orderNumber": number, "contact": contact}
-    )
-
-
-async def test_a_guest_reads_their_order_with_the_contact_in_the_body(
+async def test_a_guest_reads_their_order_with_the_token(
     client: httpx.AsyncClient, shop: dict[str, Product]
 ) -> None:
-    number = (await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}])).json()[
-        "orderNumber"
-    ]
+    number, token = await _place_as_guest(client, shop)
 
-    response = await _lookup(client, number, CUSTOMER["phone"])
+    response = await _lookup(client, number, token)
 
     assert response.status_code == 200
     assert response.json()["orderNumber"] == number
+    # Issued once, with the order; a lookup does not hand it out again.
+    assert "lookupToken" not in response.json()
 
 
-async def test_the_contact_is_matched_however_it_is_written(
-    client: httpx.AsyncClient, shop: dict[str, Product]
+@pytest.mark.parametrize("phone", ["555123456", "555 12 34 56", "+995555123456"])
+async def test_the_phone_alone_no_longer_opens_an_order(
+    client: httpx.AsyncClient, shop: dict[str, Product], phone: str
 ) -> None:
-    """A shopper typing their own number back rarely reproduces the digits exactly.
+    """The phone was the whole secret, and a phone number is known to others.
 
-    This is the case the shared normaliser exists for: the checkout schema
-    constrains the phone, the lookup cannot.
+    Whoever held one could walk a day's sequential order numbers and read the
+    name and delivery address on each. Neither the old request nor the phone in
+    the token's place opens the order now.
     """
-    number = (await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}])).json()[
-        "orderNumber"
-    ]
+    number, _ = await _place_as_guest(client, shop)
 
-    for written in ["555 12 34 56", "+995555123456", "(555) 12-34-56", "0555123456"]:
-        response = await _lookup(client, number, written)
-        assert response.status_code == 200, written
+    old_request = await client.post(
+        "/api/v1/orders/lookup", json={"orderNumber": number, "contact": phone}
+    )
+    phone_as_token = await _lookup(client, number, phone)
+
+    assert old_request.status_code == 404
+    assert phone_as_token.status_code == 404
 
 
-async def test_an_unknown_number_and_a_wrong_contact_are_indistinguishable(
+#: Bodies that are not a valid lookup, each sent as application/json.
+MALFORMED_LOOKUPS: dict[str, bytes] = {
+    "empty": b"",
+    "not json": b'{"orderNumber": ',
+    "a list": b"[]",
+    "no token": json.dumps({"orderNumber": "VB-20260101-00001"}).encode(),
+    "token not a string": json.dumps({"orderNumber": "VB-20260101-00001", "token": 7}).encode(),
+    "token too long": json.dumps({"orderNumber": "VB-20260101-00001", "token": "x" * 129}).encode(),
+    "number too long": json.dumps({"orderNumber": "V" * 33, "token": "x"}).encode(),
+    "unknown field": json.dumps(
+        {"orderNumber": "VB-20260101-00001", "token": "x", "contact": "555123456"}
+    ).encode(),
+}
+
+
+async def test_a_wrong_token_an_unknown_order_and_a_malformed_request_look_the_same(
     client: httpx.AsyncClient, shop: dict[str, Product]
 ) -> None:
-    """Order numbers are sequential. A different answer would make them enumerable."""
-    number = (await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}])).json()[
-        "orderNumber"
-    ]
+    """Order numbers are sequential. Any difference would make them enumerable.
 
-    wrong_contact = await _lookup(client, number, "599000000")
-    no_such_order = await _lookup(client, "VB-20200101-0001", CUSTOMER["phone"])
+    A validation error that named the failing field would also say which half
+    of a request was wrong, so a malformed body gets the same 404 as the rest.
+    """
+    number, token = await _place_as_guest(client, shop)
+    other_number, _ = await _place_as_guest(client, shop)
 
-    assert wrong_contact.status_code == no_such_order.status_code == 404
-    assert wrong_contact.json() == no_such_order.json()
+    answers = {
+        "wrong token": await _lookup(client, number, "x" * len(token)),
+        "another order's token": await _lookup(client, other_number, token),
+        "unknown order": await _lookup(client, "VB-20200101-00001", token),
+    }
+    for name, body in MALFORMED_LOOKUPS.items():
+        answers[name] = await client.post(
+            "/api/v1/orders/lookup", content=body, headers={"Content-Type": "application/json"}
+        )
+
+    seen = {
+        name: (response.status_code, response.headers["content-type"], response.content)
+        for name, response in answers.items()
+    }
+    assert set(seen.values()) == {seen["wrong token"]}, seen
+    assert answers["wrong token"].status_code == 404
+    assert answers["wrong token"].json()["error"]["code"] == "ORDER_NOT_FOUND"
+
+
+async def test_only_the_tokens_hash_is_stored(
+    client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+) -> None:
+    number, token = await _place_as_guest(client, shop)
+
+    stored = await db.scalar(select(Order.lookup_token_hash).where(Order.order_number == number))
+
+    assert stored == hashlib.sha256(token.encode()).hexdigest()
+
+
+async def test_a_signed_in_order_gets_no_token(
+    client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+) -> None:
+    """It is read through the account; a token would be a second way in."""
+    user = await make_user(db, email="no-token@voltbox.ge")
+    placed = await _place(
+        client, [{"productId": str(shop["cheap"].id), "qty": 1}], headers=auth_header(user)
+    )
+    body = placed.json()
+
+    stored = await db.scalar(
+        select(Order.lookup_token_hash).where(Order.order_number == body["orderNumber"])
+    )
+
+    assert body["lookupToken"] is None
+    assert stored is None
+
+
+async def test_a_replayed_checkout_gets_a_token_that_works(
+    client: httpx.AsyncClient, shop: dict[str, Product]
+) -> None:
+    """The retry is there because the first answer never arrived.
+
+    So the browser holds no token, and the server keeps only a hash it cannot
+    give back. The replay issues a new one, which replaces the first.
+    """
+    items = [{"productId": str(shop["cheap"].id), "qty": 1}]
+    first = (await _place(client, items, headers={"Idempotency-Key": KEY})).json()
+    retry = (await _place(client, items, headers={"Idempotency-Key": KEY})).json()
+    number = first["orderNumber"]
+
+    assert retry["orderNumber"] == number
+    assert (await _lookup(client, number, retry["lookupToken"])).status_code == 200
+    assert (await _lookup(client, number, first["lookupToken"])).status_code == 404
+
+
+@pytest.fixture
+def captured_logs() -> Generator[list[logging.LogRecord]]:
+    """Every record at every level, from the root logger - as in test_password_reset.py."""
+    records: list[logging.LogRecord] = []
+
+    class Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    handler = Collector(level=logging.DEBUG)
+    root = logging.getLogger()
+    previous_level = root.level
+    root.addHandler(handler)
+    root.setLevel(logging.DEBUG)
+    try:
+        yield records
+    finally:
+        root.removeHandler(handler)
+        root.setLevel(previous_level)
+
+
+async def test_the_lookup_token_is_in_no_log(
+    client: httpx.AsyncClient, shop: dict[str, Product], captured_logs: list[logging.LogRecord]
+) -> None:
+    number, token = await _place_as_guest(client, shop)
+
+    found = await _lookup(client, number, token)
+    await _lookup(client, "VB-20200101-00001", token)
+    # Malformed, with the token in it - what a validation error would quote.
+    await client.post(
+        "/api/v1/orders/lookup",
+        content=f'{{"orderNumber": "{number}", "token": "{token}", "x": 1'.encode(),
+        headers={"Content-Type": "application/json"},
+    )
+
+    # Formatted as production writes them, so extra fields are searched too.
+    lines = [JsonFormatter().format(record) for record in captured_logs]
+    # A prefix, so a token cut short is caught as well as a whole one.
+    assert [line for line in lines if token[:16] in line] == []
+    assert found.status_code == 200
+    # Not vacuous: the checkout and the three lookups were all logged.
+    assert sum('"path": "/api/v1/orders/lookup"' in line for line in lines) == 3
+    assert any('"path": "/api/v1/orders"' in line for line in lines)
 
 
 async def test_the_contact_never_reaches_a_url(client: httpx.AsyncClient) -> None:
@@ -467,6 +602,9 @@ async def test_the_contact_never_reaches_a_url(client: httpx.AsyncClient) -> Non
 
     lookup = schema["paths"]["/api/v1/orders/lookup"]["post"]
     assert "parameters" not in lookup or lookup["parameters"] == []
+    # The body is read by hand, so the documented one is declared by hand.
+    body = lookup["requestBody"]["content"]["application/json"]["schema"]
+    assert set(body["properties"]) == {"orderNumber", "token"}
 
     read_one = schema["paths"]["/api/v1/orders/{order_number}"]["get"]
     query_params = [p for p in read_one.get("parameters", []) if p["in"] == "query"]
@@ -502,11 +640,10 @@ async def test_authenticated_user_sees_only_their_own_orders(
 async def test_the_guest_lookup_is_rate_limited(
     client: httpx.AsyncClient, shop: dict[str, Product]
 ) -> None:
-    """Order numbers are guessable, so the contact is the only thing in the way.
+    """Order numbers are guessable, so each attempt is counted.
 
-    At the global 60/minute a single attacker holding a phone number walks a
-    whole day of order numbers in about three hours and reads names, addresses
-    and purchase histories. The endpoint carries its own limit.
+    The token is what stands in the way now, and 256 random bits are not
+    guessed at any rate. The limit stays, as the cost of every attempt.
 
     The limiter is off for the suite - a 5/minute auth limit would reject the
     third login any test performs - so it is switched on for this one test and
@@ -520,14 +657,14 @@ async def test_the_guest_lookup_is_rate_limited(
     limiter.reset()
     try:
         statuses = [
-            (await _lookup(client, number, "599000000")).status_code
+            (await _lookup(client, number, "not-the-token")).status_code
             for _ in range(int(LOOKUP_RATE_LIMIT.split("/")[0]) + 1)
         ]
     finally:
         limiter.reset()
         limiter.enabled = False
 
-    # Every attempt is a wrong contact, so a 404 each until the limit bites.
+    # Every attempt is a wrong token, so a 404 each until the limit bites.
     assert statuses[:-1] == [404] * (len(statuses) - 1)
     assert statuses[-1] == 429
 

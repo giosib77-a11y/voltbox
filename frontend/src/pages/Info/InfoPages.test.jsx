@@ -313,7 +313,7 @@ describe('the privacy page against the code', () => {
       [STORAGE_KEYS.theme]: 'თემის არჩევანს',
       [STORAGE_KEYS.auth]: 'შესვლის სესიას',
       [STORAGE_KEYS.recentSearches]: 'ბოლო ძებნებს',
-      'guest-orders:v1': 'შეკვეთის ნომერს და მითითებულ ტელეფონის ნომერს',
+      'guest-orders:v2': 'შეკვეთის ნომერს და შემთხვევით კოდს',
     };
     // Written only by services/mockApi.js, which the http build does not contain
     const MOCK_ONLY = [STORAGE_KEYS.users, STORAGE_KEYS.orders, STORAGE_KEYS.addresses];
@@ -321,8 +321,10 @@ describe('the privacy page against the code', () => {
     global.fetch = vi.fn(async () => ({
       ok: true,
       status: 201,
-      json: async () => ({ orderNumber: 'VB-20260926-00001' }),
+      json: async () => ({ orderNumber: 'VB-20260926-00001', lookupToken: 'token-abc' }),
     }));
+    // A browser that ordered before the token kept the phone here.
+    localStorage.setItem('guest-orders:v1', JSON.stringify({ 'VB-20260925-00001': '555123456' }));
     await createOrder({
       items: [{ productId: 'p1', qty: 1 }],
       customer: { phone: '555123456' },

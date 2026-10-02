@@ -159,4 +159,20 @@ def hash_password_reset_token(raw: str) -> str:
     return hash_refresh_token(raw)
 
 
+def generate_order_lookup_token() -> tuple[str, str]:
+    """→ (the raw token, its hash). The raw one goes to the guest's browser, once.
+
+    What lets a guest read their order. The order number is sequential and the
+    phone is known to anyone the shopper has given it to, so neither can be the
+    secret; 256 random bits can.
+    """
+    raw = secrets.token_urlsafe(32)
+    return raw, hash_order_lookup_token(raw)
+
+
+def hash_order_lookup_token(raw: str) -> str:
+    """The same SHA-256 as a password reset token's, for the same reason."""
+    return hash_refresh_token(raw)
+
+
 TokenType = Literal["access", "refresh"]

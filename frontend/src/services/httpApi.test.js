@@ -416,27 +416,57 @@ describe('register payload', () => {
 });
 
 describe('guest order lookup', () => {
-  it('sends the contact in the body, never in the URL', async () => {
-    // The regression: the phone travelled as `?email=`, which wrote it into
-    // every access log, proxy log and browser history entry on the way.
+  const placeOrder = (answer) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply(answer, 201)));
+    return httpApi.createOrder({
+      items: [{ productId: 'p1', qty: 1 }],
+      customer: { phone: '555123456' },
+      paymentMethod: 'cash',
+      idempotencyKey: 'key-1',
+    });
+  };
+
+  it('keeps the token the order came back with, not the phone', async () => {
+    await placeOrder({ orderNumber: 'VB-20260101-00001', lookupToken: 'tok-1' });
+
+    const stored = localStorage.getItem('guest-orders:v2');
+    expect(JSON.parse(stored)).toEqual({ 'VB-20260101-00001': 'tok-1' });
+    expect(JSON.stringify({ ...localStorage })).not.toContain('555123456');
+  });
+
+  it('keeps nothing for a signed-in order, which has no token', async () => {
+    await placeOrder({ orderNumber: 'VB-20260101-00002', lookupToken: null });
+
+    expect(localStorage.getItem('guest-orders:v2')).toBeNull();
+  });
+
+  it('drops the phones an older version kept', async () => {
     localStorage.setItem('guest-orders:v1', JSON.stringify({ 'VB-20260101-0001': '555123456' }));
-    const fetchMock = vi.fn().mockResolvedValue(reply({ orderNumber: 'VB-20260101-0001' }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ orderNumber: 'VB-20260101-0001' })));
+
+    await httpApi.getOrderByNumber('VB-20260101-0001').catch(() => {});
+
+    expect(localStorage.getItem('guest-orders:v1')).toBeNull();
+  });
+
+  it('sends the token in the body, never in the URL', async () => {
+    // A query string is written into every access log, proxy log and browser
+    // history entry on the way; the phone once travelled there as `?email=`.
+    await placeOrder({ orderNumber: 'VB-20260101-00001', lookupToken: 'tok-1' });
+    const fetchMock = vi.fn().mockResolvedValue(reply({ orderNumber: 'VB-20260101-00001' }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await httpApi.getOrderByNumber('VB-20260101-0001');
+    await httpApi.getOrderByNumber('VB-20260101-00001');
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/v1/orders/lookup');
-    expect(url).not.toContain('555123456');
+    expect(url).not.toContain('tok-1');
     expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body)).toEqual({
-      orderNumber: 'VB-20260101-0001',
-      contact: '555123456',
-    });
+    expect(JSON.parse(init.body)).toEqual({ orderNumber: 'VB-20260101-00001', token: 'tok-1' });
   });
 
-  it('reads a signed-in order with a plain GET and no contact', async () => {
-    localStorage.removeItem('guest-orders:v1');
+  it('reads a signed-in order with a plain GET and no token', async () => {
+    localStorage.removeItem('guest-orders:v2');
     const fetchMock = vi.fn().mockResolvedValue(reply({ orderNumber: 'VB-20260101-0002' }));
     vi.stubGlobal('fetch', fetchMock);
 
