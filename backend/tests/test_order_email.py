@@ -44,7 +44,9 @@ API_KEY = "re_SeCrEtKeY_4f2a9c1e8b7d6a5f"
 SENDER = "VoltBox <orders@voltbox.ge>"
 GUEST_EMAIL = "nino@example.ge"
 
-FRONTEND_CONSTANTS = Path(__file__).resolve().parents[2] / "frontend" / "src" / "constants"
+FRONTEND_SRC = Path(__file__).resolve().parents[2] / "frontend" / "src"
+FRONTEND_CONSTANTS = FRONTEND_SRC / "constants"
+FRONTEND_GEORGIAN = FRONTEND_SRC / "i18n" / "ka.json"
 
 CUSTOMER = {
     "firstName": "ნინო",
@@ -494,28 +496,54 @@ class TestTheGuestEmailField:
 
 def _frontend_object(name: str) -> str:
     source = (FRONTEND_CONSTANTS / "index.js").read_text(encoding="utf-8")
+    assert f"export const {name}" in source, f"{name} moved out of the frontend constants"
     start = source.index(f"export const {name}")
     return source[start : source.index("\n}", start)]
+
+
+def _frontend_georgian(section: str) -> dict[str, Any]:
+    """A section of the storefront's Georgian words - the site the email matches."""
+    assert FRONTEND_GEORGIAN.exists(), FRONTEND_GEORGIAN
+    words = json.loads(FRONTEND_GEORGIAN.read_text(encoding="utf-8")).get(section)
+    assert isinstance(words, dict) and words, f"{section} is not in {FRONTEND_GEORGIAN.name}"
+    return words
 
 
 class TestTheEmailNamesThingsAsTheShopDoes:
     """The backend image does not carry the frontend, so the email keeps its
     own copies; these fail when a copy drifts from what the footer and the
-    checkout show."""
+    checkout show.
+
+    The footer's contacts are split since the site has two languages: the
+    phone and email are CONTACT in the constants, the address and the hours
+    are words, `contact.*` in i18n/ka.json. The checkout names a payment
+    method `payment.<value>` there too. The email is Georgian, so it is held
+    to the Georgian file."""
 
     def test_the_contacts_are_the_footers(self) -> None:
-        body = _frontend_object("CONTACT")
-        footer = dict(re.findall(r"^\s{2}(\w+): '([^']*)'", body, re.M))
+        constants = dict(re.findall(r"^\s{2}(\w+): '([^']*)'", _frontend_object("CONTACT"), re.M))
+        words = _frontend_georgian("contact")
 
-        assert footer, "CONTACT was not found in the frontend constants"
+        assert constants, "CONTACT was found but holds no values"
+        footer = {**constants, **words}
         for key, value in order_email.SHOP_CONTACT.items():
-            assert footer.get(key) == value, key
+            assert key in footer, (
+                f"{key} is in neither CONTACT nor contact.* - the footer no longer shows it"
+            )
+            assert footer[key] == value, key
 
     def test_the_payment_methods_are_named_as_at_checkout(self) -> None:
         source = (FRONTEND_CONSTANTS / "index.js").read_text(encoding="utf-8")
+        assert "export const PAYMENT_METHODS" in source, (
+            "PAYMENT_METHODS moved out of the frontend constants"
+        )
         start = source.index("export const PAYMENT_METHODS")
         body = source[start : source.index("\n];", start)]
-        labels = dict(re.findall(r"value: '([a-z_]+)', label: '([^']*)'", body))
+        methods = re.findall(r"value: '([a-z_]+)'", body)
+        labels = _frontend_georgian("payment")
 
-        assert labels, "PAYMENT_METHODS was not found in the frontend constants"
+        assert methods, "PAYMENT_METHODS was found but lists no method"
+        # Every method the site can name has its words, and no word names a
+        # method the site does not know.
+        assert set(labels) == set(methods), (methods, sorted(labels))
         assert labels == order_email.PAYMENT_METHOD_LABELS

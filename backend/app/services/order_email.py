@@ -15,9 +15,10 @@ customer, so every value goes into the HTML through `escape`. The plain-text
 part is not markup and takes them as they are. A failure is logged at ERROR
 with the order number and without the recipient's address.
 
-SHOP_CONTACT and PAYMENT_METHOD_LABELS are copies of what the storefront shows
-(`frontend/src/constants/index.js`): the backend image does not carry the
-frontend. tests/test_order_email.py fails when the two disagree.
+SHOP_CONTACT and PAYMENT_METHOD_LABELS are copies of what the Georgian
+storefront shows - the phone and email from `frontend/src/constants/index.js`,
+the address, hours and payment labels from `frontend/src/i18n/ka.json`: the
+backend image does not carry the frontend. tests/test_order_email.py fails when the two disagree.
 """
 
 from __future__ import annotations
