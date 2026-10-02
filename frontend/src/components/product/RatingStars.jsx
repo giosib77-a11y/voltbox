@@ -1,5 +1,6 @@
 import { Star } from 'lucide-react';
-import { formatNumber, formatRating, formatReviews } from '../../utils/format.js';
+import { formatCount, formatRating, formatReviews } from '../../utils/format.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * ვარსკვლავები ნახევრების მხარდაჭერით.
@@ -40,8 +41,12 @@ export default function RatingStars({
 
   const label =
     reviewsCount === null
-      ? `შეფასება ${formatRating(clamped)} ხუთიდან`
-      : `შეფასება ${formatRating(clamped)} ხუთიდან, ${formatNumber(reviewsCount)} შეფასების საფუძველზე`;
+      ? t('rating.label', { rating: formatRating(clamped) })
+      : t('rating.labelWithCount', {
+          rating: formatRating(clamped),
+          count: reviewsCount,
+          n: formatCount(reviewsCount),
+        });
 
   return (
     <div className={`flex items-center gap-1.5 ${className}`}>
@@ -69,7 +74,7 @@ export default function RatingStars({
       )}
       {reviewsCount !== null && (
         <span className={`text-ink-500 ${dims.text}`}>
-          {showReviewsLabel ? formatReviews(reviewsCount) : `(${formatNumber(reviewsCount)})`}
+          {showReviewsLabel ? formatReviews(reviewsCount) : `(${formatCount(reviewsCount)})`}
         </span>
       )}
     </div>

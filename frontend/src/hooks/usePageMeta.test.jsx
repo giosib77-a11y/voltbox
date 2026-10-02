@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 
 import usePageMeta, { productStructuredData } from './usePageMeta.js';
-import { SITE_DESCRIPTION } from '../constants/index.js';
+import { i18n, t } from '../i18n/index.js';
 
 const PRODUCT = {
   id: 'p1',
@@ -60,7 +60,7 @@ describe('usePageMeta', () => {
   it('falls back to the site description rather than leaving none', () => {
     render(<Page meta={{}} />);
 
-    expect(description()).toBe(SITE_DESCRIPTION);
+    expect(description()).toBe(t('site.description'));
   });
 
   it('restores the previous description when the page goes away', () => {
@@ -79,6 +79,15 @@ describe('usePageMeta', () => {
     render(<Page meta={{ canonical: '/product/galaxy-a55' }} />);
 
     expect(canonical()).toMatch(/\/product\/galaxy-a55$/);
+  });
+
+  it('names the English page as the English page', () => {
+    i18n.changeLanguage('en');
+    render(<Page meta={{ canonical: '/product/galaxy-a55' }} />);
+
+    // Not the Georgian address: a canonical that pointed there would tell a
+    // search engine the English page is a copy, and its hreflang would be void.
+    expect(canonical()).toMatch(/\/en\/product\/galaxy-a55$/);
   });
 
   it('never leaves one page canonical pointing at another', () => {

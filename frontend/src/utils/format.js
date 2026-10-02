@@ -1,24 +1,14 @@
 import { CURRENCY_SYMBOL, LOW_STOCK_THRESHOLD } from '../constants/index.js';
+import { DEFAULT_LANGUAGE, currentLanguage, t } from '../i18n/index.js';
 
 /**
  * ფორმატირების ერთადერთი წყარო — ფასები, თარიღები, რიცხვები.
  * კომპონენტებში პირდაპირი toLocaleString / string-concat აკრძალულია.
+ *
+ * Prices read the same in both languages - "2 499 ₾". Dates and counts follow
+ * the language: the month names and the order of a date come from the
+ * translation files, a count takes the English plural and grouping.
  */
-
-const KA_MONTHS = [
-  'იანვარი',
-  'თებერვალი',
-  'მარტი',
-  'აპრილი',
-  'მაისი',
-  'ივნისი',
-  'ივლისი',
-  'აგვისტო',
-  'სექტემბერი',
-  'ოქტომბერი',
-  'ნოემბერი',
-  'დეკემბერი',
-];
 
 /** ათასეულების გამყოფი: 2499 → "2 499" */
 export function formatNumber(value) {
@@ -30,7 +20,18 @@ export function formatNumber(value) {
   return frac ? `${sign}${grouped}.${frac}` : `${sign}${grouped}`;
 }
 
-/** 2499 → "2 499 ₾" */
+/**
+ * A count, grouped as the language groups it: 2499 → "2 499" in Georgian,
+ * "2,499" in English. Georgian keeps formatNumber's plain space, as it always
+ * has - Intl's Georgian uses a no-break space, which would change the text.
+ */
+export function formatCount(value) {
+  if (currentLanguage() === DEFAULT_LANGUAGE) return formatNumber(value);
+  const n = Number(value);
+  return new Intl.NumberFormat(currentLanguage()).format(Number.isFinite(n) ? n : 0);
+}
+
+/** 2499 → "2 499 ₾" — the same in both languages. */
 export function formatPrice(value) {
   return `${formatNumber(value)} ${CURRENCY_SYMBOL}`;
 }
@@ -61,11 +62,12 @@ export function formatDiscount(percent) {
   return `-${Math.abs(Math.round(percent))}%`;
 }
 
-/** "2026-01-14T10:00:00Z" → "14 იანვარი, 2026" */
+/** "2026-01-14T10:00:00Z" → "14 იანვარი, 2026" / "14 January 2026" */
 export function formatDate(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return `${d.getDate()} ${KA_MONTHS[d.getMonth()]}, ${d.getFullYear()}`;
+  const months = t('dates.months', { returnObjects: true });
+  return t('dates.long', { day: d.getDate(), month: months[d.getMonth()], year: d.getFullYear() });
 }
 
 /** "2026-01-14T10:00:00Z" → "14 იანვარი, 2026 · 14:00" */
@@ -94,28 +96,28 @@ export function formatRating(value) {
   return n.toFixed(1);
 }
 
-/** "128 შეფასება" — ქართულში მრავლობითი ფორმა არ იცვლება. */
+/** "128 შეფასება" — ქართულში მრავლობითი ფორმა არ იცვლება; "128 reviews". */
 export function formatReviews(count) {
-  return `${formatNumber(count)} შეფასება`;
+  return t('format.reviews', { count: Number(count) || 0, n: formatCount(count) });
 }
 
 export function formatItemsCount(count) {
-  return `${formatNumber(count)} პროდუქტი`;
+  return t('format.items', { count: Number(count) || 0, n: formatCount(count) });
 }
 
 /** specs-ის მნიშვნელობა → ადამიანური ტექსტი (boolean-ების ჩათვლით). */
 export function formatSpecValue(value) {
-  if (value === true) return 'დიახ';
-  if (value === false) return 'არა';
+  if (value === true) return t('common.yes');
+  if (value === false) return t('common.no');
   if (value === null || value === undefined || value === '') return '—';
   return String(value);
 }
 
 /** მარაგის ტექსტური სტატუსი. */
 export function stockLabel(stock) {
-  if (!stock || stock <= 0) return 'მარაგში არ არის';
-  if (stock <= LOW_STOCK_THRESHOLD) return `ბოლო ${stock} ცალი`;
-  return 'მარაგშია';
+  if (!stock || stock <= 0) return t('common.outOfStock');
+  if (stock <= LOW_STOCK_THRESHOLD) return t('format.lastUnits', { count: stock });
+  return t('common.inStock');
 }
 
 /** გრძელი ტექსტის მოკვეცა. */

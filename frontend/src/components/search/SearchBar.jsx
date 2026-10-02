@@ -5,7 +5,8 @@ import SearchSuggestions from './SearchSuggestions.jsx';
 import { useDebounce } from '../../hooks/useDebounce.js';
 import { useRecentSearches } from '../../hooks/useRecentSearches.js';
 import * as api from '../../services/api.js';
-import { QUERY_KEYS, TEXT } from '../../constants/index.js';
+import { QUERY_KEYS } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * ძებნის ველი autocomplete-ით.
@@ -150,7 +151,7 @@ export default function SearchBar({ defaultValue = '', autoFocus = false, onSubm
         }}
       >
         <label htmlFor={`${listId}-input`} className="sr-only">
-          {TEXT.search}
+          {t('common.search')}
         </label>
         <Search
           className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500"
@@ -162,7 +163,7 @@ export default function SearchBar({ defaultValue = '', autoFocus = false, onSubm
           type="search"
           value={value}
           autoFocus={autoFocus}
-          placeholder={TEXT.searchPlaceholder}
+          placeholder={t('common.searchPlaceholder')}
           role="combobox"
           aria-expanded={showDropdown}
           aria-controls={listId}
@@ -191,7 +192,7 @@ export default function SearchBar({ defaultValue = '', autoFocus = false, onSubm
               setActiveIndex(-1);
               inputRef.current?.focus();
             }}
-            aria-label="ძებნის გასუფთავება"
+            aria-label={t('search.clear')}
             className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-700"
           >
             <X className="h-4 w-4" aria-hidden="true" />

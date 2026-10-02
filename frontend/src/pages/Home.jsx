@@ -9,22 +9,25 @@ import { Skeleton } from '../components/common/Skeleton.jsx';
 import { useAsync, useCategories } from '../hooks/useProducts.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import * as api from '../services/api.js';
-import { HOME_SECTION_TITLES, SITE_DESCRIPTION } from '../constants/index.js';
 import { useDeliveryRules } from '../hooks/useDeliveryRules.js';
-import { formatPrice } from '../utils/format.js';
+import { formatItemsCount, formatPrice } from '../utils/format.js';
 import { rootCategories } from '../utils/categoryTree.js';
+import { t } from '../i18n/index.js';
+import Rich from '../i18n/Rich.jsx';
 
+// `title` and `text` are translation keys; the hours are the footer's.
 const BENEFITS = [
   // The threshold is filled in from GET /delivery when the card renders; until
   // then a no-break space holds the line, so the card does not jump.
   {
     icon: Truck,
-    title: 'უფასო მიწოდება',
-    text: (rules) => (rules ? `${formatPrice(rules.freeFrom)}-ზე მეტ შეკვეთაზე` : ' '),
+    title: 'home.benefits.freeDelivery',
+    text: (rules) =>
+      rules ? t('home.benefits.freeDeliveryText', { price: formatPrice(rules.freeFrom) }) : ' ',
   },
-  { icon: ShieldCheck, title: 'ოფიციალური გარანტია', text: 'ყველა პროდუქტზე' },
-  { icon: BadgePercent, title: 'საუკეთესო ფასი', text: 'რეგულარული ფასდაკლებები' },
-  { icon: Headphones, title: 'კონსულტაცია', text: 'ორშ.–შაბ. 10:00–20:00' },
+  { icon: ShieldCheck, title: 'home.benefits.warranty', text: 'home.benefits.warrantyText' },
+  { icon: BadgePercent, title: 'home.benefits.price', text: 'home.benefits.priceText' },
+  { icon: Headphones, title: 'home.benefits.advice', text: 'contact.workHours' },
 ];
 
 export default function Home() {
@@ -65,24 +68,24 @@ export default function Home() {
       ) : (
         <>
           <ProductCarousel
-            title={HOME_SECTION_TITLES.newArrivals}
+            title={t('home.newArrivals')}
             products={sections.newArrivals || []}
             loading={loading}
           />
           <ProductCarousel
-            title={HOME_SECTION_TITLES.discounted}
+            title={t('home.discounted')}
             products={sections.discounted || []}
             loading={loading}
           />
           <ProductCarousel
-            title={HOME_SECTION_TITLES.featured}
+            title={t('home.featured')}
             products={sections.featured || []}
             loading={loading}
           />
           {/* API-ს სავსე მხოლოდ მაშინ, როცა სამივე ზემოთა ცარიელია. ჩატვირთვისას
               skeleton-ს არ ვაჩვენებთ — თორემ მეოთხე ზოლი ყოველ ჯერზე გაქრებოდა */}
           {!loading && (
-            <ProductCarousel title={HOME_SECTION_TITLES.latest} products={sections.latest || []} />
+            <ProductCarousel title={t('home.latest')} products={sections.latest || []} />
           )}
         </>
       )}
@@ -116,18 +119,23 @@ function Hero({ categories }) {
       <div className="relative max-w-2xl">
         <p className="inline-flex items-center gap-2 rounded-pill bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-800 ring-1 ring-inset ring-primary-200">
           <BadgePercent className="h-3.5 w-3.5" aria-hidden="true" />
-          სეზონური ფასდაკლებები — 30%-მდე
+          {t('home.heroBadge')}
         </p>
 
         <h1 className="mt-5 text-3xl font-bold leading-tight tracking-tight text-fg sm:text-4xl lg:text-5xl">
-          ტექნიკა, რომელიც{' '}
-          <span className="bg-gradient-to-r from-primary-700 to-primary-500 bg-clip-text text-transparent">
-            ყოველდღე
-          </span>{' '}
-          გჭირდება
+          <Rich
+            k="home.heroTitle"
+            values={{
+              highlight: (
+                <span className="bg-gradient-to-r from-primary-700 to-primary-500 bg-clip-text text-transparent">
+                  {t('home.heroHighlight')}
+                </span>
+              ),
+            }}
+          />
         </h1>
         <p className="mt-4 max-w-lg text-sm leading-relaxed text-ink-600 sm:text-base">
-          {SITE_DESCRIPTION} ორიგინალი პროდუქცია ოფიციალური გარანტიით და მიწოდებით მთელ საქართველოში.
+          {t('site.description')} {t('home.heroText')}
         </p>
 
         <div className="mt-7 flex min-h-12 flex-wrap gap-3">
@@ -172,7 +180,7 @@ function HeroMark() {
 function Benefits() {
   const { rules } = useDeliveryRules();
   return (
-    <section aria-label="ჩვენი უპირატესობები" className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <section aria-label={t('home.benefits.label')} className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
       {BENEFITS.map((benefit) => (
         <div
           key={benefit.title}
@@ -182,9 +190,9 @@ function Benefits() {
             <benefit.icon className="h-5 w-5" aria-hidden="true" />
           </span>
           <span className="min-w-0">
-            <span className="block text-sm font-semibold text-fg">{benefit.title}</span>
+            <span className="block text-sm font-semibold text-fg">{t(benefit.title)}</span>
             <span className="block text-xs text-fg-muted">
-              {typeof benefit.text === 'function' ? benefit.text(rules) : benefit.text}
+              {typeof benefit.text === 'function' ? benefit.text(rules) : t(benefit.text)}
             </span>
           </span>
         </div>
@@ -201,7 +209,7 @@ function PopularCategories({ categories, loading }) {
   return (
     <section className="pt-10 sm:pt-12">
       <h2 className="mb-4 text-xl font-bold tracking-tight text-fg sm:mb-5 sm:text-2xl">
-        {HOME_SECTION_TITLES.popularCategories}
+        {t('home.popularCategories')}
       </h2>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -219,7 +227,7 @@ function PopularCategories({ categories, loading }) {
                   <CategoryIcon name={category.icon} className="h-6 w-6" />
                 </span>
                 <span className="text-sm font-semibold leading-tight text-fg">{category.name}</span>
-                <span className="text-xs text-fg-muted">{category.productsCount} პროდუქტი</span>
+                <span className="text-xs text-fg-muted">{formatItemsCount(category.productsCount)}</span>
               </Link>
             ))}
       </div>

@@ -1,5 +1,6 @@
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from '../../hooks/useTheme.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * ღია/მუქი თემის გადამრთველი header-ში.
@@ -9,7 +10,7 @@ import { useTheme } from '../../hooks/useTheme.js';
 export default function ThemeToggle({ className = '' }) {
   const [theme, setTheme] = useTheme();
   const next = theme === 'dark' ? 'light' : 'dark';
-  const label = next === 'dark' ? 'მუქ თემაზე გადართვა' : 'ღია თემაზე გადართვა';
+  const label = next === 'dark' ? t('theme.toDark') : t('theme.toLight');
   const Icon = next === 'dark' ? Moon : Sun;
 
   return (

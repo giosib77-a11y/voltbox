@@ -1,12 +1,13 @@
 import { PackageSearch } from 'lucide-react';
 import Button from './Button.jsx';
+import { t } from '../../i18n/index.js';
 
 /**
  * ცარიელი მდგომარეობა — ყოველთვის ქმედების ღილაკით.
  */
 export default function EmptyState({
   icon: Icon = PackageSearch,
-  title = 'შედეგები ვერ მოიძებნა',
+  title = t('common.emptyTitle'),
   description = '',
   actionLabel = '',
   onAction = null,

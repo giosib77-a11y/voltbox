@@ -1,6 +1,7 @@
 import { Fragment } from 'react';
 import { Link } from 'react-router';
 import { ChevronLeft, Home } from 'lucide-react';
+import { t } from '../../i18n/index.js';
 
 /**
  * ნავიგაციის ბილიკი.
@@ -8,7 +9,7 @@ import { ChevronLeft, Home } from 'lucide-react';
  */
 export default function Breadcrumbs({ items = [], className = '' }) {
   return (
-    <nav aria-label="ნავიგაციის ბილიკი" className={`text-sm ${className}`}>
+    <nav aria-label={t('breadcrumbs.label')} className={`text-sm ${className}`}>
       <ol className="flex flex-wrap items-center gap-1 text-ink-500">
         <li className="flex items-center gap-1">
           <Link
@@ -16,7 +17,7 @@ export default function Breadcrumbs({ items = [], className = '' }) {
             className="flex items-center gap-1 rounded-sm transition-colors hover:text-primary-700"
           >
             <Home className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>მთავარი</span>
+            <span>{t('breadcrumbs.home')}</span>
           </Link>
         </li>
 

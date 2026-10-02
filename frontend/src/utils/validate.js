@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 /**
  * ფორმების ვალიდაცია. ყველა წესი აქ ცხოვრობს — კომპონენტები მხოლოდ
  * validateX(values) იძახებენ და იღებენ { field: 'შეცდომის ტექსტი' } ობიექტს.
@@ -26,19 +27,24 @@ export function isValidEmail(value) {
   return EMAIL_PATTERN.test(String(value ?? '').trim());
 }
 
+/**
+ * Each message in the page's language, read when it is asked for - getters,
+ * so `MESSAGES.phone` keeps working for the callers and the tests that
+ * compare against it.
+ */
 export const MESSAGES = {
-  required: 'ეს ველი სავალდებულოა',
-  firstName: 'შეიყვანეთ სახელი',
-  lastName: 'შეიყვანეთ გვარი',
-  phone: 'ტელეფონის ფორმატი: 5XX XX XX XX',
-  email: 'შეიყვანეთ სწორი ელ. ფოსტა',
-  city: 'აირჩიეთ ქალაქი',
-  address: 'შეიყვანეთ მისამართი',
-  addressShort: 'მისამართი ძალიან მოკლეა (მინ. 5 სიმბოლო)',
-  password: `პაროლი უნდა იყოს მინიმუმ ${MIN_PASSWORD_LENGTH} სიმბოლო`,
-  passwordMismatch: 'პაროლები არ ემთხვევა',
-  nameShort: 'მინიმუმ 2 სიმბოლო',
-  terms: 'გთხოვთ, დაეთანხმოთ პირობებს',
+  get required() { return t('validation.required'); },
+  get firstName() { return t('validation.firstName'); },
+  get lastName() { return t('validation.lastName'); },
+  get phone() { return t('validation.phone'); },
+  get email() { return t('validation.email'); },
+  get city() { return t('validation.city'); },
+  get address() { return t('validation.address'); },
+  get addressShort() { return t('validation.addressShort'); },
+  get password() { return t('validation.password', { count: MIN_PASSWORD_LENGTH }); },
+  get passwordMismatch() { return t('validation.passwordMismatch'); },
+  get nameShort() { return t('validation.nameShort'); },
+  get terms() { return t('validation.terms'); },
 };
 
 /** ერთი ველის ვალიდაცია — blur-ზე inline შეცდომისთვის. */

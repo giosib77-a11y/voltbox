@@ -14,11 +14,12 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle.js';
 import * as api from '../../services/api.js';
 import { ADDRESS_FIELDS, validateField, validateForm } from '../../utils/validate.js';
 import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
+import { t } from '../../i18n/index.js';
 
 const EMPTY = { label: '', city: '', address: '', isDefault: false };
 
 export default function Addresses() {
-  useDocumentTitle('მისამართები');
+  useDocumentTitle(t('nav.addresses'));
 
   const toast = useToast();
   // The cities checkout delivers to: an address anywhere else could not be used.
@@ -49,9 +50,9 @@ export default function Addresses() {
       const next = await api.saveAddress(values);
       setData(next);
       setOpen(false);
-      toast.success('მისამართი შენახულია');
+      toast.success(t('account.addressSaved'));
     } catch (err) {
-      toast.error(err?.message || 'შენახვა ვერ მოხერხდა');
+      toast.error(err?.message || t('account.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -61,9 +62,9 @@ export default function Addresses() {
     try {
       const next = await api.deleteAddress(id);
       setData(next);
-      toast.info('მისამართი წაიშალა');
+      toast.info(t('account.addressDeleted'));
     } catch (err) {
-      toast.error(err?.message || 'წაშლა ვერ მოხერხდა');
+      toast.error(err?.message || t('account.deleteFailed'));
     }
   }
 
@@ -73,19 +74,19 @@ export default function Addresses() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-base font-bold text-ink-900">შენახული მისამართები</h2>
+        <h2 className="text-base font-bold text-ink-900">{t('account.savedAddresses')}</h2>
         <Button size="sm" onClick={openNew}>
           <Plus className="h-4 w-4" aria-hidden="true" />
-          დამატება
+          {t('account.add')}
         </Button>
       </div>
 
       {addresses.length === 0 ? (
         <EmptyState
           icon={MapPin}
-          title="მისამართები ჯერ არ დაგიმატებიათ"
-          description="შეინახეთ მისამართი, რომ შეკვეთის გაფორმებისას ხელახლა არ შეავსოთ."
-          actionLabel="მისამართის დამატება"
+          title={t('account.noAddresses')}
+          description={t('account.noAddressesText')}
+          actionLabel={t('account.addAddress')}
           onAction={openNew}
         />
       ) : (
@@ -95,11 +96,11 @@ export default function Addresses() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 text-sm font-semibold text-ink-900">
-                    {address.label || 'მისამართი'}
+                    {address.label || t('fields.address')}
                     {address.isDefault && (
                       <Badge tone="success" size="sm">
                         <Star className="h-3 w-3" aria-hidden="true" />
-                        ძირითადი
+                        {t('account.default')}
                       </Badge>
                     )}
                   </p>
@@ -110,7 +111,7 @@ export default function Addresses() {
                 <button
                   type="button"
                   onClick={() => handleDelete(address.id)}
-                  aria-label="მისამართის წაშლა"
+                  aria-label={t('account.deleteAddress')}
                   className="-mr-1.5 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-danger-50 hover:text-danger-fg"
                 >
                   <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -121,18 +122,18 @@ export default function Addresses() {
         </ul>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title="ახალი მისამართი">
+      <Modal open={open} onClose={() => setOpen(false)} title={t('account.newAddress')}>
         <form id="address-form" onSubmit={handleSave} noValidate className="space-y-4 p-5">
           <Input
-            label="დასახელება"
-            placeholder="მაგ. სახლი ან ოფისი"
+            label={t('account.addressName')}
+            placeholder={t('account.addressNamePlaceholder')}
             value={values.label}
             onChange={(e) => setValues((c) => ({ ...c, label: e.target.value }))}
           />
           <Select
-            label="ქალაქი"
+            label={t('fields.city')}
             required
-            placeholder="აირჩიეთ ქალაქი"
+            placeholder={t('validation.city')}
             options={(rules?.cities || []).map((city) => ({ value: city.name, label: city.name }))}
             value={values.city}
             error={errors.city}
@@ -140,9 +141,9 @@ export default function Addresses() {
             onBlur={(e) => setErrors((c) => ({ ...c, city: validateField('city', e.target.value) }))}
           />
           <Input
-            label="მისამართი"
+            label={t('fields.address')}
             required
-            placeholder="ქუჩა, ნომერი, ბინა"
+            placeholder={t('account.addressPlaceholder')}
             value={values.address}
             error={errors.address}
             onChange={(e) => setValues((c) => ({ ...c, address: e.target.value }))}
@@ -155,15 +156,15 @@ export default function Addresses() {
               onChange={(e) => setValues((c) => ({ ...c, isDefault: e.target.checked }))}
               className="h-4 w-4 accent-primary-600"
             />
-            ძირითად მისამართად დაყენება
+            {t('account.makeDefault')}
           </label>
 
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="outline" fullWidth onClick={() => setOpen(false)}>
-              გაუქმება
+              {t('common.cancel')}
             </Button>
             <Button type="submit" fullWidth loading={saving}>
-              შენახვა
+              {t('common.save')}
             </Button>
           </div>
         </form>

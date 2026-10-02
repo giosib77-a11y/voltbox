@@ -8,7 +8,7 @@ import RatingStars from './RatingStars.jsx';
 import { useCart } from '../../hooks/useCart.js';
 import { useToast } from '../../hooks/useToast.js';
 import { formatDiscount } from '../../utils/format.js';
-import { TEXT } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * პროდუქტის ბარათი.
@@ -28,8 +28,8 @@ function ProductCard({ product, className = '', priority = false }) {
     if (isOutOfStock) return;
 
     addItem(product, 1);
-    toast.success(`${product.name} — ${TEXT.addedToCart}`, {
-      action: { label: 'კალათის ნახვა', onClick: () => navigate('/cart') },
+    toast.success(t('product.addedNamed', { name: product.name }), {
+      action: { label: t('product.viewCart'), onClick: () => navigate('/cart') },
     });
   }
 
@@ -55,7 +55,7 @@ function ProductCard({ product, className = '', priority = false }) {
           />
 
           <div className="pointer-events-none absolute left-4 top-4 flex flex-col items-start gap-1.5">
-            {product.isNew && <Badge tone="new">{TEXT.isNew}</Badge>}
+            {product.isNew && <Badge tone="new">{t('common.isNew')}</Badge>}
             {product.hasDiscount && (
               <Badge tone="discount">{formatDiscount(product.discountPercent)}</Badge>
             )}
@@ -64,7 +64,7 @@ function ProductCard({ product, className = '', priority = false }) {
           {isOutOfStock && (
             <div className="absolute inset-2 bottom-0 flex items-center justify-center rounded-control bg-white/70 backdrop-blur-[1px]">
               <span className="rounded-pill bg-scrim/85 px-3 py-1.5 text-xs font-semibold text-white">
-                {TEXT.outOfStock}
+                {t('common.outOfStock')}
               </span>
             </div>
           )}
@@ -94,7 +94,7 @@ function ProductCard({ product, className = '', priority = false }) {
           type="button"
           onClick={handleAdd}
           disabled={isOutOfStock}
-          aria-label={`${product.name} — ${TEXT.addToCart}`}
+          aria-label={t('product.addNamed', { name: product.name })}
           className={[
             'inline-flex h-10 w-full items-center justify-center gap-2 rounded-control text-sm font-semibold transition-colors',
             isOutOfStock
@@ -105,16 +105,16 @@ function ProductCard({ product, className = '', priority = false }) {
           ].join(' ')}
         >
           {isOutOfStock ? (
-            TEXT.outOfStock
+            t('common.outOfStock')
           ) : inCartQty > 0 ? (
             <>
               <Check className="h-4 w-4" aria-hidden="true" />
-              კალათაშია ({inCartQty})
+              {t('product.inCart', { count: inCartQty })}
             </>
           ) : (
             <>
               <ShoppingCart className="h-4 w-4" aria-hidden="true" />
-              {TEXT.addToCart}
+              {t('common.addToCart')}
             </>
           )}
         </button>

@@ -11,6 +11,8 @@ import { useEmailEnabled } from '../hooks/useEmailEnabled.js';
 import * as api from '../services/api.js';
 import { validateField } from '../utils/validate.js';
 import { CONTACT } from '../constants/index.js';
+import { t } from '../i18n/index.js';
+import Rich from '../i18n/Rich.jsx';
 
 const LINK_CLASS = 'font-semibold text-primary-700 underline-offset-4 hover:underline';
 
@@ -26,7 +28,7 @@ const LINK_CLASS = 'font-semibold text-primary-700 underline-offset-4 hover:unde
  * აკრეფით მოხვდებით.
  */
 export default function ForgotPassword() {
-  useDocumentTitle('პაროლის აღდგენა');
+  useDocumentTitle(t('auth.recoverTitle'));
 
   const { loading } = useDeliveryRules();
   const emailEnabled = useEmailEnabled();
@@ -51,7 +53,7 @@ export default function ForgotPassword() {
       await api.requestPasswordReset({ email: address });
       setSentTo(address);
     } catch (failure) {
-      toast.error(failure?.message || 'მოთხოვნა ვერ გაიგზავნა');
+      toast.error(failure?.message || t('auth.requestFailed'));
     } finally {
       setSending(false);
     }
@@ -63,28 +65,32 @@ export default function ForgotPassword() {
   } else if (!emailEnabled) {
     body = (
       <p className="mt-4 text-sm text-ink-700">
-        პაროლის აღდგენა ამჟამად მიუწვდომელია. დაგვიკავშირდით ტელეფონით:{' '}
-        <a href={CONTACT.phoneHref} className={LINK_CLASS}>
-          {CONTACT.phone}
-        </a>
-        .
+        <Rich
+          k="auth.recoverUnavailable"
+          values={{
+            phone: (
+              <a href={CONTACT.phoneHref} className={LINK_CLASS}>
+                {CONTACT.phone}
+              </a>
+            ),
+          }}
+        />
       </p>
     );
   } else if (sentTo) {
     body = (
       <div role="status" className="mt-4 space-y-2 text-sm text-ink-700">
         <p>
-          თუ <strong className="text-ink-900">{sentTo}</strong> ანგარიშს ეკუთვნის, მასზე
-          პაროლის აღდგენის ბმული გაიგზავნა.
+          <Rich k="auth.recoverSent" values={{ email: <strong className="text-ink-900">{sentTo}</strong> }} />
         </p>
-        <p>ბმული მხოლოდ ერთხელ იმუშავებს. წერილი თუ არ ჩანს, სპამის საქაღალდეც შეამოწმეთ.</p>
+        <p>{t('auth.recoverOnce')}</p>
       </div>
     );
   } else {
     body = (
       <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
         <Input
-          label="ელ. ფოსტა"
+          label={t('fields.email')}
           type="email"
           required
           leftIcon={Mail}
@@ -103,7 +109,7 @@ export default function ForgotPassword() {
         />
         <Button type="submit" size="lg" fullWidth loading={sending}>
           <Send className="h-4 w-4" aria-hidden="true" />
-          ბმულის გაგზავნა
+          {t('auth.sendLink')}
         </Button>
       </form>
     );
@@ -113,16 +119,16 @@ export default function ForgotPassword() {
     <div className="container-page flex justify-center py-10 lg:py-16">
       <div className="w-full max-w-md">
         <div className="rounded-card border border-ink-200 bg-surface p-6 sm:p-8">
-          <h1 className="text-2xl font-bold tracking-tight text-ink-900">პაროლის აღდგენა</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink-900">{t('auth.recoverTitle')}</h1>
           <p className="mt-1.5 text-sm text-ink-600">
-            შეიყვანეთ ანგარიშის ელ. ფოსტა — ახალი პაროლის დასაყენებელ ბმულს გამოგიგზავნით.
+            {t('auth.recoverIntro')}
           </p>
 
           {body}
 
           <p className="mt-5 text-center text-sm text-ink-600">
             <Link to="/login" className={LINK_CLASS}>
-              შესვლის გვერდზე დაბრუნება
+              {t('auth.backToLogin')}
             </Link>
           </p>
         </div>

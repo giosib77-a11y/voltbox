@@ -25,6 +25,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { INFO_PAGES } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
 import { ToastProvider } from '../../context/ToastContext.jsx';
 import { forgetDeliveryRules } from '../../hooks/useDeliveryRules.js';
 
@@ -66,7 +67,7 @@ beforeEach(() => {
 });
 
 describe('the footer information links', () => {
-  it.each(PAGES)('„$title“ opens its page', async (page) => {
+  it.each(PAGES)('$path opens its page', async (page) => {
     const user = userEvent.setup();
     render(
       <ToastProvider>
@@ -75,12 +76,12 @@ describe('the footer information links', () => {
     );
 
     const before = await screen.findByRole('heading', { level: 1 }, { timeout: LAZY_PAGE });
-    expect(before).not.toHaveTextContent(page.title);
+    expect(before).not.toHaveTextContent(t(page.titleKey));
 
     const footer = screen.getByRole('navigation', { name: 'ინფორმაცია' });
-    await user.click(within(footer).getByRole('link', { name: page.title }));
+    await user.click(within(footer).getByRole('link', { name: t(page.titleKey) }));
 
-    await screen.findByRole('heading', { level: 1, name: page.title }, { timeout: LAZY_PAGE });
+    await screen.findByRole('heading', { level: 1, name: t(page.titleKey) }, { timeout: LAZY_PAGE });
     expect(window.location.pathname).toBe(page.path);
   }, 10_000);
 });

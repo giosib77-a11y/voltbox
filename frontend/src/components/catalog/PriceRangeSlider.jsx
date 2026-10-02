@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CURRENCY_SYMBOL } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * ფასის დიაპაზონი — ორი გადამფარავი range input + რიცხვითი ველები.
@@ -37,7 +38,7 @@ export default function PriceRangeSlider({ min = 0, max = 100, value = null, onC
 
   return (
     <div className="border-b border-ink-200 py-4">
-      <h3 className="text-sm font-semibold text-ink-900">ფასი</h3>
+      <h3 className="text-sm font-semibold text-ink-900">{t('filters.price')}</h3>
 
       <div className="relative mt-5 h-1.5">
         <div className="absolute inset-0 rounded-pill bg-ink-200" />
@@ -50,7 +51,7 @@ export default function PriceRangeSlider({ min = 0, max = 100, value = null, onC
           min={bounds.min}
           max={bounds.max}
           value={low}
-          aria-label="მინიმალური ფასი"
+          aria-label={t('filters.minPrice')}
           onChange={(e) => updateLow(e.target.value)}
           onMouseUp={commit}
           onTouchEnd={commit}
@@ -62,7 +63,7 @@ export default function PriceRangeSlider({ min = 0, max = 100, value = null, onC
           min={bounds.min}
           max={bounds.max}
           value={high}
-          aria-label="მაქსიმალური ფასი"
+          aria-label={t('filters.maxPrice')}
           onChange={(e) => updateHigh(e.target.value)}
           onMouseUp={commit}
           onTouchEnd={commit}
@@ -73,7 +74,7 @@ export default function PriceRangeSlider({ min = 0, max = 100, value = null, onC
 
       <div className="mt-5 flex items-center gap-2">
         <label className="flex-1">
-          <span className="sr-only">მინიმალური ფასი</span>
+          <span className="sr-only">{t('filters.minPrice')}</span>
           <input
             type="number"
             value={low}
@@ -88,7 +89,7 @@ export default function PriceRangeSlider({ min = 0, max = 100, value = null, onC
           —
         </span>
         <label className="flex-1">
-          <span className="sr-only">მაქსიმალური ფასი</span>
+          <span className="sr-only">{t('filters.maxPrice')}</span>
           <input
             type="number"
             value={high}

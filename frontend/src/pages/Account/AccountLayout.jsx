@@ -2,14 +2,15 @@ import { NavLink, Outlet } from 'react-router';
 import { KeyRound, LogOut, MapPin, Package, User } from 'lucide-react';
 import Breadcrumbs from '../../components/common/Breadcrumbs.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
+import { t } from '../../i18n/index.js';
 
 /** ანგარიშის განყოფილების კარკასი — გვერდითი მენიუთი. */
 
 const NAV = [
-  { to: '/account/orders', label: 'ჩემი შეკვეთები', icon: Package },
-  { to: '/account/profile', label: 'პროფილი', icon: User },
-  { to: '/account/addresses', label: 'მისამართები', icon: MapPin },
-  { to: '/account/password', label: 'პაროლის შეცვლა', icon: KeyRound },
+  { to: '/account/orders', labelKey: 'nav.orders', icon: Package },
+  { to: '/account/profile', labelKey: 'nav.profile', icon: User },
+  { to: '/account/addresses', labelKey: 'nav.addresses', icon: MapPin },
+  { to: '/account/password', labelKey: 'auth.changePassword', icon: KeyRound },
 ];
 
 export default function AccountLayout() {
@@ -17,11 +18,11 @@ export default function AccountLayout() {
 
   return (
     <div className="container-page py-5 lg:py-7">
-      <Breadcrumbs items={[{ label: 'ჩემი ანგარიში' }]} className="mb-4" />
+      <Breadcrumbs items={[{ label: t('account.title') }]} className="mb-4" />
 
       <header className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
-          ჩემი ანგარიში
+          {t('account.title')}
         </h1>
         <p className="mt-1 text-sm text-ink-600">
           {user?.firstName} {user?.lastName} · {user?.email}
@@ -30,7 +31,7 @@ export default function AccountLayout() {
 
       <div className="lg:flex lg:gap-7">
         <aside className="mb-5 lg:mb-0 lg:w-60 lg:shrink-0">
-          <nav aria-label="ანგარიშის ნავიგაცია">
+          <nav aria-label={t('account.nav')}>
             <ul className="flex gap-2 overflow-x-auto rounded-card border border-ink-200 bg-surface p-2 lg:flex-col lg:gap-1">
               {NAV.map((item) => (
                 <li key={item.to} className="shrink-0 lg:shrink">
@@ -45,7 +46,7 @@ export default function AccountLayout() {
                     }
                   >
                     <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    {item.label}
+                    {t(item.labelKey)}
                   </NavLink>
                 </li>
               ))}
@@ -56,7 +57,7 @@ export default function AccountLayout() {
                   className="flex w-full items-center gap-2.5 whitespace-nowrap rounded-control px-3 py-2.5 text-sm font-medium text-danger-fg transition-colors hover:bg-danger-50"
                 >
                   <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  გასვლა
+                  {t('nav.logout')}
                 </button>
               </li>
             </ul>

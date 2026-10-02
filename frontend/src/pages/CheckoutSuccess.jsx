@@ -12,19 +12,14 @@ import { useToast } from '../hooks/useToast.js';
 import * as api from '../services/api.js';
 import { formatDateTime, formatPrice } from '../utils/format.js';
 import { orderAmounts } from '../utils/pricing.js';
-import {
-  ORDER_STATUS_LABELS,
-  PAYMENT_METHODS,
-  SHIPPING,
-  TEXT,
-  UNKNOWN_ORDER_STATUS,
-} from '../constants/index.js';
+import { PAYMENT_METHODS, orderStatus } from '../constants/index.js';
+import { t } from '../i18n/index.js';
 
 /** შეკვეთის დადასტურების გვერდი — ნომრით და სრული დეტალებით. */
 export default function CheckoutSuccess() {
   const { id: orderNumber } = useParams();
   const toast = useToast();
-  useDocumentTitle(`შეკვეთა ${orderNumber || ''}`);
+  useDocumentTitle(t('order.titleNumber', { number: orderNumber || '' }));
 
   const { data: order, loading, error, reload } = useAsync(
     () => api.getOrderByNumber(orderNumber),
@@ -46,9 +41,9 @@ export default function CheckoutSuccess() {
       <div className="container-page max-w-3xl py-14">
         {error.status === 404 ? (
           <EmptyState
-            title="შეკვეთა ვერ მოიძებნა"
-            description="შესაძლოა ბმული არასწორია ან შეკვეთა სხვა მოწყობილობაზე გაფორმდა."
-            actionLabel={TEXT.backToShop}
+            title={t('order.notFound')}
+            description={t('order.notFoundText')}
+            actionLabel={t('common.backToShop')}
             actionTo="/"
           />
         ) : (
@@ -60,14 +55,15 @@ export default function CheckoutSuccess() {
 
   if (!order) return null;
 
-  const paymentLabel =
-    PAYMENT_METHODS.find((method) => method.value === order.paymentMethod)?.label || '—';
+  const paymentLabel = PAYMENT_METHODS.some((method) => method.value === order.paymentMethod)
+    ? t(`payment.${order.paymentMethod}`)
+    : '—';
 
   function copyOrderNumber() {
     navigator.clipboard
       ?.writeText(order.orderNumber)
-      .then(() => toast.success('შეკვეთის ნომერი დაკოპირდა'))
-      .catch(() => toast.error('კოპირება ვერ მოხერხდა'));
+      .then(() => toast.success(t('order.copied')))
+      .catch(() => toast.error(t('order.copyFailed')));
   }
 
   // This page is both the thank-you after checkout and the order's detail view,
@@ -77,7 +73,7 @@ export default function CheckoutSuccess() {
   // success message and a promise that an operator would call.
   const cancelled = order.status === 'cancelled';
   const delivered = order.status === 'delivered';
-  const status = ORDER_STATUS_LABELS[order.status] || UNKNOWN_ORDER_STATUS;
+  const status = orderStatus(order.status, t);
   const amounts = orderAmounts(order.totals);
 
   return (
@@ -95,14 +91,14 @@ export default function CheckoutSuccess() {
           )}
         </span>
         <h1 className="mt-5 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
-          {cancelled ? 'შეკვეთა გაუქმებულია' : delivered ? 'შეკვეთა ჩაბარებულია' : 'შეკვეთა მიღებულია!'}
+          {cancelled ? t('order.cancelledTitle') : delivered ? t('order.deliveredTitle') : t('order.receivedTitle')}
         </h1>
         <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-ink-600">
           {cancelled
-            ? 'თუ ეს შეცდომაა, დაგვიკავშირდით შეკვეთის ნომრით.'
+            ? t('order.cancelledText')
             : delivered
-              ? 'გმადლობთ შეკვეთისთვის.'
-              : 'გმადლობთ შეკვეთისთვის. ოპერატორი დაგიკავშირდებათ მითითებულ ნომერზე დეტალების დასაზუსტებლად.'}
+              ? t('order.deliveredText')
+              : t('order.receivedText')}
         </p>
 
         <div className="mt-4">
@@ -110,12 +106,12 @@ export default function CheckoutSuccess() {
         </div>
 
         <div className="mt-5 inline-flex items-center gap-2 rounded-card border border-ink-200 bg-surface px-4 py-2.5">
-          <span className="text-sm text-ink-500">შეკვეთის ნომერი:</span>
+          <span className="text-sm text-ink-500">{t('order.number')}</span>
           <strong className="text-base tabular-nums text-ink-900">{order.orderNumber}</strong>
           <button
             type="button"
             onClick={copyOrderNumber}
-            aria-label="შეკვეთის ნომრის კოპირება"
+            aria-label={t('order.copy')}
             className="ml-1 flex h-8 w-8 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-800"
           >
             <Copy className="h-4 w-4" aria-hidden="true" />
@@ -124,39 +120,39 @@ export default function CheckoutSuccess() {
       </div>
 
       <section className="mt-8 rounded-card border border-ink-200 bg-surface p-5 sm:p-6">
-        <h2 className="text-base font-bold text-ink-900">შეკვეთის დეტალები</h2>
+        <h2 className="text-base font-bold text-ink-900">{t('order.details')}</h2>
 
         <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-ink-500">თარიღი</dt>
+            <dt className="text-ink-500">{t('order.date')}</dt>
             <dd className="mt-0.5 font-medium text-ink-900">{formatDateTime(order.createdAt)}</dd>
           </div>
           <div>
-            <dt className="text-ink-500">გადახდა</dt>
+            <dt className="text-ink-500">{t('order.paymentLabel')}</dt>
             <dd className="mt-0.5 font-medium text-ink-900">{paymentLabel}</dd>
           </div>
           <div>
-            <dt className="text-ink-500">მიმღები</dt>
+            <dt className="text-ink-500">{t('order.recipient')}</dt>
             <dd className="mt-0.5 font-medium text-ink-900">
               {order.customer.firstName} {order.customer.lastName}
             </dd>
           </div>
           <div>
-            <dt className="text-ink-500">ტელეფონი</dt>
+            <dt className="text-ink-500">{t('fields.phone')}</dt>
             <dd className="mt-0.5 flex items-center gap-1.5 font-medium text-ink-900">
               <Phone className="h-3.5 w-3.5 text-ink-400" aria-hidden="true" />
               {order.customer.phone}
             </dd>
           </div>
           <div className="sm:col-span-2">
-            <dt className="text-ink-500">მისამართი</dt>
+            <dt className="text-ink-500">{t('fields.address')}</dt>
             <dd className="mt-0.5 font-medium text-ink-900">
               {order.customer.city}, {order.customer.address}
             </dd>
           </div>
           {order.customer.comment && (
             <div className="sm:col-span-2">
-              <dt className="text-ink-500">კომენტარი</dt>
+              <dt className="text-ink-500">{t('fields.comment')}</dt>
               <dd className="mt-0.5 text-ink-700">{order.customer.comment}</dd>
             </div>
           )}
@@ -189,19 +185,19 @@ export default function CheckoutSuccess() {
           {amounts.shipping !== null && (
             <>
               <div className="flex justify-between">
-                <dt className="text-ink-600">{TEXT.subtotal}</dt>
+                <dt className="text-ink-600">{t('common.subtotal')}</dt>
                 <dd className="font-medium text-ink-900">{formatPrice(amounts.subtotal)}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-ink-600">{TEXT.shipping}</dt>
+                <dt className="text-ink-600">{t('common.shipping')}</dt>
                 <dd className="font-medium text-ink-900">
-                  {amounts.shipping === 0 ? TEXT.free : formatPrice(amounts.shipping)}
+                  {amounts.shipping === 0 ? t('common.free') : formatPrice(amounts.shipping)}
                 </dd>
               </div>
             </>
           )}
           <div className="flex justify-between border-t border-ink-100 pt-2">
-            <dt className="text-base font-bold text-ink-900">{TEXT.total}</dt>
+            <dt className="text-base font-bold text-ink-900">{t('common.total')}</dt>
             <dd className="text-lg font-bold text-ink-900">{formatPrice(amounts.total)}</dd>
           </div>
         </dl>
@@ -211,16 +207,16 @@ export default function CheckoutSuccess() {
           // already arrived, is the same false promise as the headline was.
           <p className="mt-5 flex items-center gap-2 rounded-control bg-primary-50 px-3.5 py-3 text-xs text-primary-900">
             <Truck className="h-4 w-4 shrink-0" aria-hidden="true" />
-            სავარაუდო მიწოდება — {SHIPPING.etaDays}.
+            {t('order.eta', { eta: t('shipping.etaDays') })}
           </p>
         )}
       </section>
 
       <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <Button to="/">{TEXT.continueShopping}</Button>
+        <Button to="/">{t('common.continueShopping')}</Button>
         <Button variant="outline" to="/account/orders">
           <Package className="h-4 w-4" aria-hidden="true" />
-          ჩემი შეკვეთები
+          {t('nav.orders')}
         </Button>
       </div>
     </div>

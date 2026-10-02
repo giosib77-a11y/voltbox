@@ -2,10 +2,12 @@ import { useId, useState } from 'react';
 import { Link } from 'react-router';
 import { ChevronDown, LayoutDashboard, LogIn, LogOut, MapPin, Package, Phone, User } from 'lucide-react';
 import Modal from '../common/Modal.jsx';
+import LanguageSwitch from './LanguageSwitch.jsx';
 import CategoryIcon from '../common/CategoryIcon.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { CONTACT } from '../../constants/index.js';
 import { categoryTree } from '../../utils/categoryTree.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * მობილური მენიუ — slide-in drawer კატეგორიებითა და ანგარიშის ბმულებით.
@@ -19,10 +21,10 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} position="left" title="მენიუ">
-      <nav aria-label="მთავარი ნავიგაცია" className="p-3">
+    <Modal open={open} onClose={onClose} position="left" title={t('nav.menu')}>
+      <nav aria-label={t('nav.main')} className="p-3">
         <p className="px-3 pb-2 pt-1 text-2xs font-bold uppercase tracking-wide text-ink-500">
-          კატეგორიები
+          {t('nav.categories')}
         </p>
         <ul className="space-y-0.5">
           {categoryTree(categories).map((category) => (
@@ -32,21 +34,23 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
 
         <div className="my-3 border-t border-ink-200" />
 
-        <p className="px-3 pb-2 text-2xs font-bold uppercase tracking-wide text-ink-500">ანგარიში</p>
+        <p className="px-3 pb-2 text-2xs font-bold uppercase tracking-wide text-ink-500">{t('nav.account')}</p>
         <ul className="space-y-0.5">
           {isAuthenticated ? (
             <>
-              {/* იგივე, რაც desktop-ის მენიუში: ადმინს პანელამდე გზა უნდა ჰქონდეს */}
+              {/* იგივე, რაც desktop-ის მენიუში: ადმინს პანელამდე გზა უნდა ჰქონდეს.
+                  A full load, not a Link: the panel is Georgian only and
+                  outside the English router (i18n/index.js). */}
               {user?.isAdmin ? (
                 <li>
-                  <Link
-                    to="/admin"
+                  <a
+                    href="/admin"
                     onClick={onClose}
                     className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent-50"
                   >
                     <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
-                    ადმინ პანელი
-                  </Link>
+                    {t('nav.admin')}
+                  </a>
                 </li>
               ) : null}
               <li>
@@ -56,7 +60,7 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
                   className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-ink-800 transition-colors hover:bg-ink-100"
                 >
                   <Package className="h-5 w-5 text-ink-500" aria-hidden="true" />
-                  ჩემი შეკვეთები
+                  {t('nav.orders')}
                 </Link>
               </li>
               <li>
@@ -66,7 +70,7 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
                   className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-ink-800 transition-colors hover:bg-ink-100"
                 >
                   <User className="h-5 w-5 text-ink-500" aria-hidden="true" />
-                  პროფილი — {user?.firstName}
+                  {t('nav.profileOf', { name: user?.firstName })}
                 </Link>
               </li>
               <li>
@@ -76,7 +80,7 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
                   className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-ink-800 transition-colors hover:bg-ink-100"
                 >
                   <MapPin className="h-5 w-5 text-ink-500" aria-hidden="true" />
-                  მისამართები
+                  {t('nav.addresses')}
                 </Link>
               </li>
               <li>
@@ -86,7 +90,7 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
                   className="flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-danger-fg transition-colors hover:bg-danger-50"
                 >
                   <LogOut className="h-5 w-5" aria-hidden="true" />
-                  გასვლა
+                  {t('nav.logout')}
                 </button>
               </li>
             </>
@@ -98,7 +102,7 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
                 className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-ink-800 transition-colors hover:bg-ink-100"
               >
                 <LogIn className="h-5 w-5 text-ink-500" aria-hidden="true" />
-                შესვლა / რეგისტრაცია
+                {t('nav.loginOrRegister')}
               </Link>
             </li>
           )}
@@ -113,6 +117,10 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
           <Phone className="h-5 w-5 text-ink-500" aria-hidden="true" />
           {CONTACT.phone}
         </a>
+
+        <div className="my-3 border-t border-ink-200" />
+
+        <LanguageSwitch onNavigate={onClose} className="w-full px-3 font-medium" />
       </nav>
     </Modal>
   );
@@ -149,7 +157,7 @@ function MobileCategoryItem({ category, onNavigate }) {
             onClick={() => setExpanded((value) => !value)}
             aria-expanded={expanded}
             aria-controls={listId}
-            aria-label={`${category.name} — ქვეკატეგორიები`}
+            aria-label={t('nav.subcategories', { name: category.name })}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100"
           >
             <ChevronDown

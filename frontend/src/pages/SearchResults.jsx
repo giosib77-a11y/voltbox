@@ -15,14 +15,16 @@ import { useCatalogParams } from '../hooks/useQueryParams.js';
 import { useCategories, useProducts } from '../hooks/useProducts.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import { countActiveFilters } from '../utils/filter.js';
-import { formatItemsCount, formatNumber } from '../utils/format.js';
-import { PAGE_SIZE, QUERY_KEYS, SORT_OPTIONS, TEXT } from '../constants/index.js';
+import { formatCount, formatItemsCount } from '../utils/format.js';
+import { PAGE_SIZE, QUERY_KEYS, SORT_OPTIONS } from '../constants/index.js';
+import { t } from '../i18n/index.js';
+import Rich from '../i18n/Rich.jsx';
 
 /**
  * ძებნის შედეგები. ფილტრები კატეგორიათაშორისია (კატეგორია + ბრენდი),
  * კონფიგი მოდის `mockApi`-ის GLOBAL_FILTERS-იდან — facets-ის key-ებით.
  */
-const SEARCH_SORT_OPTIONS = [{ value: 'relevance', label: 'რელევანტურობით' }, ...SORT_OPTIONS];
+const SEARCH_SORT_OPTIONS = ['relevance', ...SORT_OPTIONS];
 
 export default function SearchResults() {
   const [searchParams] = useSearchParams();
@@ -36,11 +38,11 @@ export default function SearchResults() {
     () => [
       {
         key: 'category',
-        label: 'კატეგორია',
+        label: t('search.filterCategory'),
         type: 'checkbox',
         optionLabels: Object.fromEntries((categories || []).map((c) => [c.id, c.name])),
       },
-      { key: 'brand', label: 'ბრენდი', type: 'checkbox' },
+      { key: 'brand', label: t('search.filterBrand'), type: 'checkbox' },
     ],
     [categories],
   );
@@ -55,7 +57,7 @@ export default function SearchResults() {
 
   const { data, loading, error, reload } = useProducts(params, { skip: !query });
 
-  useDocumentTitle(query ? `ძებნა: ${query}` : 'ძებნა');
+  useDocumentTitle(query ? t('search.titleFor', { query }) : t('common.search'));
 
   const facets = data?.facets || { values: {}, price: { min: 0, max: 0 } };
   const activeCount = countActiveFilters(filters);
@@ -73,16 +75,16 @@ export default function SearchResults() {
 
   return (
     <div className="container-page py-5 lg:py-7">
-      <Breadcrumbs items={[{ label: 'ძებნა' }]} className="mb-4" />
+      <Breadcrumbs items={[{ label: t('common.search') }]} className="mb-4" />
 
       <div className="mb-5">
         <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
           {query ? (
             <>
-              შედეგები: <span className="text-primary-700">„{query}“</span>
+              <Rich k="search.resultsFor" values={{ query: <span className="text-primary-700">{t('search.quoted', { query })}</span> }} />
             </>
           ) : (
-            'ძებნა'
+            t('common.search')
           )}
         </h1>
         <div className="mt-4 max-w-xl md:hidden">
@@ -93,9 +95,9 @@ export default function SearchResults() {
       {!query ? (
         <div className="rounded-card border border-dashed border-ink-300 bg-surface px-6 py-14 text-center">
           <Search className="mx-auto h-8 w-8 text-ink-400" aria-hidden="true" />
-          <h2 className="mt-4 text-lg font-semibold text-ink-900">რას ეძებთ?</h2>
+          <h2 className="mt-4 text-lg font-semibold text-ink-900">{t('search.prompt')}</h2>
           <p className="mt-1.5 text-sm text-ink-600">
-            შეიყვანეთ პროდუქტის სახელი, ბრენდი ან მახასიათებელი — მაგალითად „20 000“ ან „USB C 2m“.
+            {t('search.promptHint')}
           </p>
           <div className="mx-auto mt-6 max-w-md">
             <SearchBar autoFocus />
@@ -113,10 +115,10 @@ export default function SearchResults() {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-ink-600" aria-live="polite">
                 {loading ? (
-                  <span className="text-ink-500">{TEXT.loading}</span>
+                  <span className="text-ink-500">{t('common.loading')}</span>
                 ) : (
                   <>
-                    {TEXT.found}{' '}
+                    {t('common.found')}{' '}
                     <strong className="text-ink-900">{formatItemsCount(data?.total || 0)}</strong>
                   </>
                 )}
@@ -125,7 +127,7 @@ export default function SearchResults() {
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" className="lg:hidden" onClick={() => setSheetOpen(true)}>
                   <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-                  {TEXT.filters}
+                  {t('common.filters')}
                   {activeCount > 0 && (
                     <span className="ml-0.5 rounded-pill bg-primary-600 px-1.5 text-2xs font-bold text-white">
                       {activeCount}
@@ -153,9 +155,9 @@ export default function SearchResults() {
                 skeletonCount={PAGE_SIZE}
                 emptyProps={{
                   icon: Search,
-                  title: `„${query}“ — შედეგები ვერ მოიძებნა`,
-                  description: 'შეამოწმეთ მართლწერა ან სცადეთ უფრო ზოგადი სიტყვა.',
-                  actionLabel: TEXT.backToShop,
+                  title: t('search.noResultsFor', { query }),
+                  description: t('search.noResultsHint'),
+                  actionLabel: t('common.backToShop'),
                   actionTo: '/',
                 }}
               />
@@ -172,14 +174,14 @@ export default function SearchResults() {
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         position="bottom"
-        title={`${TEXT.filters}${activeCount > 0 ? ` (${activeCount})` : ''}`}
+        title={`${t('common.filters')}${activeCount > 0 ? ` (${activeCount})` : ''}`}
         footer={
           <div className="flex gap-3">
             <Button variant="outline" fullWidth onClick={() => { clearFilters(); setSheetOpen(false); }}>
-              {TEXT.clearAll}
+              {t('common.clearAll')}
             </Button>
             <Button fullWidth onClick={() => setSheetOpen(false)}>
-              ჩვენება ({formatNumber(data?.total || 0)})
+              {t('catalog.show', { n: formatCount(data?.total || 0) })}
             </Button>
           </div>
         }

@@ -7,11 +7,12 @@ import { useToast } from '../../hooks/useToast.js';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle.js';
 import { formatPhone } from '../../utils/format.js';
 import { digitsOnly, isValidPhone, MESSAGES, validateField, validateForm } from '../../utils/validate.js';
+import { t } from '../../i18n/index.js';
 
 const FIELDS = ['firstName', 'lastName', 'email'];
 
 export default function Profile() {
-  useDocumentTitle('პროფილი');
+  useDocumentTitle(t('nav.profile'));
 
   const { user, updateProfile } = useAuth();
   const toast = useToast();
@@ -67,9 +68,9 @@ export default function Profile() {
         email: values.email.trim().toLowerCase(),
         phone: digitsOnly(values.phone),
       });
-      toast.success('პროფილი განახლდა');
+      toast.success(t('account.profileUpdated'));
     } catch (error) {
-      toast.error(error?.message || 'შენახვა ვერ მოხერხდა');
+      toast.error(error?.message || t('account.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -77,14 +78,14 @@ export default function Profile() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="rounded-card border border-ink-200 bg-surface p-5 sm:p-6">
-      <h2 className="text-base font-bold text-ink-900">პირადი მონაცემები</h2>
+      <h2 className="text-base font-bold text-ink-900">{t('account.personal')}</h2>
       <p className="mt-1 text-sm text-ink-600">
-        ეს მონაცემები ავტომატურად შეივსება შეკვეთის გაფორმებისას.
+        {t('account.personalHint')}
       </p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <Input
-          label="სახელი"
+          label={t('fields.firstName')}
           required
           value={values.firstName}
           error={touched.firstName ? errors.firstName : ''}
@@ -93,7 +94,7 @@ export default function Profile() {
           autoComplete="given-name"
         />
         <Input
-          label="გვარი"
+          label={t('fields.lastName')}
           required
           value={values.lastName}
           error={touched.lastName ? errors.lastName : ''}
@@ -102,7 +103,7 @@ export default function Profile() {
           autoComplete="family-name"
         />
         <Input
-          label="ელ. ფოსტა"
+          label={t('fields.email')}
           type="email"
           required
           value={values.email}
@@ -112,7 +113,7 @@ export default function Profile() {
           autoComplete="email"
         />
         <Input
-          label="ტელეფონი"
+          label={t('fields.phone')}
           inputMode="tel"
           placeholder="5XX XX XX XX"
           value={values.phone}
@@ -125,7 +126,7 @@ export default function Profile() {
 
       <Button type="submit" className="mt-6" loading={saving}>
         <Save className="h-4 w-4" aria-hidden="true" />
-        შენახვა
+        {t('common.save')}
       </Button>
     </form>
   );

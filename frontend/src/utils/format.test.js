@@ -16,7 +16,15 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { calcDiscountPercent, formatDiscount } from './format.js';
+import {
+  calcDiscountPercent,
+  formatDate,
+  formatDiscount,
+  formatItemsCount,
+  formatPrice,
+  formatReviews,
+} from './format.js';
+import { i18n } from '../i18n/index.js';
 
 describe('calcDiscountPercent', () => {
   it.each([
@@ -79,5 +87,26 @@ describe('formatDiscount', () => {
     [50, '-50%'],
   ])('%s renders as %s', (percent, expected) => {
     expect(formatDiscount(percent)).toBe(expected);
+  });
+});
+
+describe('the language', () => {
+  const ISO = '2026-01-14T10:00:00';
+
+  it('leaves the Georgian as it was', () => {
+    expect(formatDate(ISO)).toBe('14 იანვარი, 2026');
+    expect(formatReviews(1)).toBe('1 შეფასება');
+    expect(formatItemsCount(2499)).toBe('2 499 პროდუქტი');
+    expect(formatPrice(2499)).toBe('2 499 ₾');
+  });
+
+  it('dates and counts in English, the price still in lari', () => {
+    i18n.changeLanguage('en');
+
+    expect(formatDate(ISO)).toBe('14 January 2026');
+    expect(formatReviews(1)).toBe('1 review');
+    expect(formatReviews(128)).toBe('128 reviews');
+    expect(formatItemsCount(2499)).toBe('2,499 products');
+    expect(formatPrice(2499)).toBe('2 499 ₾');
   });
 });

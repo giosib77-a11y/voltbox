@@ -1,22 +1,29 @@
 import Breadcrumbs from '../../components/common/Breadcrumbs.jsx';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle.js';
 import { usePageMeta } from '../../hooks/usePageMeta.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * ფუტერის საინფორმაციო გვერდების საერთო ჩარჩო — ბილიკი, სათაური, meta.
  *
  * `page` არის `INFO_PAGES`-ის ჩანაწერი: სათაური იგივეა, რაც ფუტერის ბმულს
  * აწერია, canonical კი — ის მისამართი, რომელზეც მარშრუტი დგას.
+ *
+ * The frame - title, breadcrumb - is in the page's language; the text is not
+ * translated yet and is Georgian in both, so it says so with `lang="ka"` for a
+ * screen reader to read it in the right voice (and the pages build it with
+ * `tKa`, never `t`).
  */
 export default function InfoPage({ page, description, children }) {
-  useDocumentTitle(page.title);
+  const title = t(page.titleKey);
+  useDocumentTitle(title);
   usePageMeta({ description, canonical: page.path });
 
   return (
     <div className="container-page max-w-3xl py-8 lg:py-12">
-      <Breadcrumbs items={[{ label: page.title }]} className="mb-4" />
-      <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">{page.title}</h1>
-      <div className="mt-6 space-y-8 text-sm leading-relaxed text-ink-700 sm:text-base">
+      <Breadcrumbs items={[{ label: title }]} className="mb-4" />
+      <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">{title}</h1>
+      <div lang="ka" className="mt-6 space-y-8 text-sm leading-relaxed text-ink-700 sm:text-base">
         {children}
       </div>
     </div>

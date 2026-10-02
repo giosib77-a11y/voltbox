@@ -1,5 +1,5 @@
 import { Minus, Plus } from 'lucide-react';
-import { TEXT } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * რაოდენობის მრიცხველი. `max` ყოველთვის მარაგით არის შეზღუდული.
@@ -17,7 +17,7 @@ export default function QuantityStepper({
   onChange,
   size = 'md',
   disabled = false,
-  label = TEXT.quantity,
+  label = t('common.quantity'),
   className = '',
 }) {
   const dims = SIZES[size] || SIZES.md;
@@ -36,7 +36,7 @@ export default function QuantityStepper({
         type="button"
         onClick={() => commit(value - 1)}
         disabled={disabled || value <= min}
-        aria-label="რაოდენობის შემცირება"
+        aria-label={t('cart.decrease')}
         className={`flex items-center justify-center text-ink-700 transition-colors hover:bg-ink-100 disabled:cursor-not-allowed disabled:text-ink-300 disabled:hover:bg-transparent ${dims.button}`}
       >
         <Minus className="h-4 w-4" aria-hidden="true" />
@@ -58,7 +58,7 @@ export default function QuantityStepper({
         type="button"
         onClick={() => commit(value + 1)}
         disabled={disabled || value >= safeMax}
-        aria-label="რაოდენობის გაზრდა"
+        aria-label={t('cart.increase')}
         className={`flex items-center justify-center text-ink-700 transition-colors hover:bg-ink-100 disabled:cursor-not-allowed disabled:text-ink-300 disabled:hover:bg-transparent ${dims.button}`}
       >
         <Plus className="h-4 w-4" aria-hidden="true" />

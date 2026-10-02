@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { t } from '../../i18n/index.js';
 
 /**
  * პაგინაცია მრავალწერტილებით.
@@ -28,12 +29,12 @@ export default function Pagination({ page = 1, totalPages = 1, onChange, classNa
     'flex h-10 min-w-[2.5rem] items-center justify-center rounded-control border px-2 text-sm font-semibold transition-colors';
 
   return (
-    <nav aria-label="გვერდები" className={`flex items-center justify-center gap-1.5 ${className}`}>
+    <nav aria-label={t('pagination.label')} className={`flex items-center justify-center gap-1.5 ${className}`}>
       <button
         type="button"
         onClick={() => onChange(page - 1)}
         disabled={page <= 1}
-        aria-label="წინა გვერდი"
+        aria-label={t('pagination.previous')}
         className={`${buttonBase} border-ink-300 bg-surface text-ink-700 hover:border-primary-400 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink-300 disabled:hover:text-ink-700`}
       >
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -65,7 +66,7 @@ export default function Pagination({ page = 1, totalPages = 1, onChange, classNa
         type="button"
         onClick={() => onChange(page + 1)}
         disabled={page >= totalPages}
-        aria-label="შემდეგი გვერდი"
+        aria-label={t('pagination.next')}
         className={`${buttonBase} border-ink-300 bg-surface text-ink-700 hover:border-primary-400 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink-300 disabled:hover:text-ink-700`}
       >
         <ChevronRight className="h-4 w-4" aria-hidden="true" />

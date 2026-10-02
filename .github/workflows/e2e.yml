@@ -3,7 +3,8 @@ name: e2e
 # The whole shop over real sockets: uvicorn on :8100, the built storefront on
 # :4173, Postgres from backend/docker-compose.yml. backend/scripts/e2e/up.sh
 # resets and starts it, journey.py walks it, and frontend/scripts/e2e/
-# cart-sync.mjs walks a basket through the built site in Chromium. It is the
+# cart-sync.mjs walks a basket through the built site in Chromium, once in
+# Georgian and once under /en. It is the
 # only check of the system end to end, and it used to run only when someone
 # remembered to run it.
 #

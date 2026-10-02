@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
-import { COLOR_SWATCHES } from '../../constants/index.js';
+import { COLOR_SWATCHES } from '../../constants/colorSwatches.js';
 import { formatNumber } from '../../utils/format.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * ერთი ფილტრის ჯგუფი. ტიპს კარნახობს კონფიგი (`categories.js`) —
@@ -80,7 +81,7 @@ export default function FilterGroup({ config, counts = {}, value, onToggle }) {
             onClick={() => setShowAll((v) => !v)}
             className="mt-2.5 text-xs font-semibold text-primary-700 underline-offset-2 hover:underline"
           >
-            {showAll ? 'ნაკლების ჩვენება' : `კიდევ ${options.length - VISIBLE_LIMIT} ვარიანტი`}
+            {showAll ? t('filters.showLess') : t('filters.showMore', { count: options.length - VISIBLE_LIMIT })}
           </button>
         )}
       </div>
@@ -169,7 +170,7 @@ function ToggleControl({ config, counts, value, onToggle }) {
   return (
     <label className="flex cursor-pointer items-center justify-between gap-3 rounded-control px-2 py-1.5 hover:bg-ink-50">
       <span className="text-sm text-ink-700">
-        მხოლოდ {config.label}
+        {t('filters.only', { label: config.label })}
         <span className="ml-1.5 text-xs text-ink-500">({formatNumber(count)})</span>
       </span>
       <input

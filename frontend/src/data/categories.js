@@ -8,7 +8,7 @@
  * filter.type:
  *   checkbox — მრავლობითი არჩევანი (OR ჯგუფის შიგნით)
  *   toggle   — ჩართვა/გამორთვა; `match` განსაზღვრავს „ჩართულის“ მნიშვნელობას
- *   swatch   — ფერების ბადე (მნიშვნელობები COLOR_SWATCHES-იდან ხატავს ფერს)
+ *   swatch   — ფერების ბადე (მნიშვნელობები constants/colorSwatches.js-იდან ხატავს ფერს)
  */
 
 /** @type {import('../types.js').Category[]} */

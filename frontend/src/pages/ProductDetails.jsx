@@ -18,14 +18,22 @@ import { productStructuredData, usePageMeta } from '../hooks/usePageMeta.js';
 import { useCart } from '../hooks/useCart.js';
 import { useToast } from '../hooks/useToast.js';
 import { formatPrice, formatSpecValue } from '../utils/format.js';
-import { DELIVERY_INFO, SHIPPING, SPEC_LABELS, TEXT } from '../constants/index.js';
 import { useDeliveryRules } from '../hooks/useDeliveryRules.js';
+import { i18n, t } from '../i18n/index.js';
 
-const TABS = [
-  { id: 'description', label: 'აღწერა' },
-  { id: 'specs', label: 'მახასიათებლები' },
-  { id: 'delivery', label: 'მიწოდება' },
+// Each tab's label is `product.tabs.<id>`.
+const TABS = ['description', 'specs', 'delivery'];
+
+/** The returns and warranty cards of the delivery tab, which hold no prices. */
+const DELIVERY_INFO = [
+  { title: 'deliveryInfo.returnsTitle', text: 'deliveryInfo.returnsText' },
+  { title: 'deliveryInfo.warrantyTitle', text: 'deliveryInfo.warrantyText' },
 ];
+
+/** A spec key's label, or the key itself when there is none. */
+function specLabel(key) {
+  return i18n.exists(`specs.${key}`) ? t(`specs.${key}`) : key;
+}
 
 export default function ProductDetails() {
   const { slug } = useParams();
@@ -44,7 +52,7 @@ export default function ProductDetails() {
     setQty(1);
   }, [slug]);
 
-  useDocumentTitle(product?.name || (loading ? 'იტვირთება…' : 'პროდუქტი'));
+  useDocumentTitle(product?.name || (loading ? t('common.loading') : t('product.title')));
   usePageMeta({
     description: product?.shortDescription,
     canonical: product ? `/product/${product.slug}` : undefined,
@@ -66,9 +74,9 @@ export default function ProductDetails() {
       <div className="container-page py-14">
         {isNotFound ? (
           <EmptyState
-            title="პროდუქტი ვერ მოიძებნა"
-            description="შესაძლოა ის აღარ იყიდება ან მისამართი არასწორია."
-            actionLabel={TEXT.backToShop}
+            title={t('product.notFound')}
+            description={t('product.notFoundText')}
+            actionLabel={t('common.backToShop')}
             actionTo="/"
           />
         ) : (
@@ -85,8 +93,8 @@ export default function ProductDetails() {
 
   function handleAddToCart() {
     addItem(product, qty);
-    toast.success(`${product.name} — ${TEXT.addedToCart}`, {
-      action: { label: 'კალათაში გადასვლა', onClick: () => navigate('/cart') },
+    toast.success(t('product.addedNamed', { name: product.name }), {
+      action: { label: t('product.goToCart'), onClick: () => navigate('/cart') },
     });
   }
 
@@ -134,7 +142,7 @@ export default function ProductDetails() {
             />
             {savings > 0 && (
               <p className="mt-1.5 text-sm font-medium text-accent-fg">
-                დაზოგავთ {formatPrice(savings)}
+                {t('product.youSave', { price: formatPrice(savings) })}
               </p>
             )}
 
@@ -153,14 +161,14 @@ export default function ProductDetails() {
                 disabled={!product.inStock}
               >
                 <ShoppingCart className="h-4 w-4" aria-hidden="true" />
-                {product.inStock ? TEXT.addToCart : TEXT.outOfStock}
+                {product.inStock ? t('common.addToCart') : t('common.outOfStock')}
               </Button>
             </div>
 
             {inCartQty > 0 && (
               <p className="mt-3 flex items-center gap-1.5 text-sm font-medium text-success-700">
                 <Check className="h-4 w-4" aria-hidden="true" />
-                კალათაშია {inCartQty} ცალი
+                {t('product.inCartUnits', { count: inCartQty })}
               </p>
             )}
           </div>
@@ -168,19 +176,19 @@ export default function ProductDetails() {
           <ul className="mt-5 grid gap-2.5 text-sm text-ink-600 sm:grid-cols-2">
             <li className="flex items-start gap-2.5">
               <Truck className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" aria-hidden="true" />
-              მიწოდება {SHIPPING.etaDays}
+              {t('product.delivery', { eta: t('shipping.etaDays') })}
             </li>
             <li className="flex items-start gap-2.5">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" aria-hidden="true" />
-              გარანტია {formatSpecValue(product.specs?.warranty || '12 თვე')}
+              {t('product.warranty', { period: formatSpecValue(product.specs?.warranty || t('product.defaultWarranty')) })}
             </li>
             <li className="flex items-start gap-2.5">
               <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" aria-hidden="true" />
-              დაბრუნება 14 დღეში
+              {t('product.returns')}
             </li>
             <li className="flex items-start gap-2.5">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" aria-hidden="true" />
-              ორიგინალი პროდუქცია
+              {t('product.original')}
             </li>
           </ul>
         </div>
@@ -189,7 +197,7 @@ export default function ProductDetails() {
       <ProductTabs product={product} tab={tab} onTabChange={setTab} />
 
       <ProductCarousel
-        title="მსგავსი პროდუქტები"
+        title={t('product.related')}
         products={related || []}
         loading={relatedLoading}
       />
@@ -202,36 +210,40 @@ function ProductTabs({ product, tab, onTabChange }) {
   // Where the shop delivers and for how much, from GET /delivery - the table the
   // checkout charges by. The static entries after it hold no prices.
   const { rules } = useDeliveryRules();
+  const translatedInfo = DELIVERY_INFO.map((info) => ({ title: t(info.title), text: t(info.text) }));
   const deliveryInfo = rules
     ? [
         {
-          title: 'კურიერით მიწოდება',
-          text: `${rules.cities.map((c) => `${c.name} — ${formatPrice(c.fee)}`).join(', ')}. ${formatPrice(rules.freeFrom)}-დან მიწოდება უფასოა. სხვა ქალაქებში მიწოდება ჯერ არ ხორციელდება.`,
+          title: t('product.courierTitle'),
+          text: t('product.courierText', {
+            cities: rules.cities.map((c) => `${c.name} — ${formatPrice(c.fee)}`).join(', '),
+            price: formatPrice(rules.freeFrom),
+          }),
         },
-        ...DELIVERY_INFO,
+        ...translatedInfo,
       ]
-    : DELIVERY_INFO;
+    : translatedInfo;
   const specEntries = Object.entries(product.specs || {});
 
   return (
     <section className="mt-10 rounded-card border border-ink-200 bg-surface">
-      <div role="tablist" aria-label="პროდუქტის დეტალები" className="flex overflow-x-auto border-b border-ink-200">
-        {TABS.map((item) => (
+      <div role="tablist" aria-label={t('product.detailsLabel')} className="flex overflow-x-auto border-b border-ink-200">
+        {TABS.map((id) => (
           <button
-            key={item.id}
+            key={id}
             type="button"
             role="tab"
-            id={`tab-${item.id}`}
-            aria-selected={tab === item.id}
-            aria-controls={`panel-${item.id}`}
-            onClick={() => onTabChange(item.id)}
+            id={`tab-${id}`}
+            aria-selected={tab === id}
+            aria-controls={`panel-${id}`}
+            onClick={() => onTabChange(id)}
             className={`shrink-0 border-b-2 px-5 py-3.5 text-sm font-semibold transition-colors ${
-              tab === item.id
+              tab === id
                 ? 'border-primary-600 text-primary-700'
                 : 'border-transparent text-ink-600 hover:text-ink-900'
             }`}
           >
-            {item.label}
+            {t(`product.tabs.${id}`)}
           </button>
         ))}
       </div>
@@ -258,26 +270,26 @@ function ProductTabs({ product, tab, onTabChange }) {
         {tab === 'specs' && (
           <div role="tabpanel" id="panel-specs" aria-labelledby="tab-specs">
             <table className="w-full max-w-2xl text-sm">
-              <caption className="sr-only">{product.name} — ტექნიკური მახასიათებლები</caption>
+              <caption className="sr-only">{t('product.specsCaption', { name: product.name })}</caption>
               <tbody>
                 {specEntries.map(([key, value]) => (
                   <tr key={key} className="border-b border-ink-100 last:border-b-0">
                     <th scope="row" className="w-1/2 py-2.5 pr-4 text-left font-medium text-ink-500">
-                      {SPEC_LABELS[key] || key}
+                      {specLabel(key)}
                     </th>
                     <td className="py-2.5 font-semibold text-ink-900">{formatSpecValue(value)}</td>
                   </tr>
                 ))}
                 <tr className="border-t border-ink-100">
                   <th scope="row" className="py-2.5 pr-4 text-left font-medium text-ink-500">
-                    ბრენდი
+                    {t('search.filterBrand')}
                   </th>
                   <td className="py-2.5 font-semibold text-ink-900">{product.brand}</td>
                 </tr>
                 {product.brandCountry && (
                   <tr className="border-t border-ink-100">
                     <th scope="row" className="py-2.5 pr-4 text-left font-medium text-ink-500">
-                      {SPEC_LABELS.origin}
+                      {t('specs.origin')}
                     </th>
                     <td className="py-2.5 font-semibold text-ink-900">{product.brandCountry}</td>
                   </tr>

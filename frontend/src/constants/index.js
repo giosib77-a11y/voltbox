@@ -1,7 +1,9 @@
 /**
- * ცენტრალიზებული ტექსტები და კონფიგი.
- * ყველა განმეორებადი სტრიქონი აქედან მოდის — მოგვიანებით i18n-ზე გადატანა
- * მოხდება ამ ერთი ფაილის key-value ლექსიკონად გადაქცევით.
+ * ცენტრალიზებული კონფიგი.
+ *
+ * Interface text lives in src/i18n/ka.json and en.json; what stays here is
+ * configuration, and for a list whose entries have words - sort options,
+ * payment methods, order statuses - the values the words are keyed by.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -9,29 +11,27 @@
 /* -------------------------------------------------------------------------- */
 
 export const SITE_NAME = 'VoltBox';
-export const SITE_TAGLINE = 'ელექტრონიკა და აქსესუარები';
-export const SITE_DESCRIPTION =
-  'კაბელები, დამტენები, Power Bank-ები, ყურსასმენები და აქსესუარები — ერთ სივრცეში.';
 
 export const CONTACT = {
   phone: '+995 322 00 11 22',
   phoneHref: 'tel:+995322001122',
   email: 'info@voltbox.ge',
-  address: 'თბილისი, ჭავჭავაძის გამზირი 42',
-  workHours: 'ორშ.–შაბ. 10:00–20:00',
+  // The address and the working hours are words: `contact.*` in the
+  // translation files.
 };
 
 /**
- * ფუტერის „ინფორმაციის“ ოთხი გვერდი — მისამართი და სათაური ერთად.
+ * ფუტერის „ინფორმაციის“ ოთხი გვერდი — მისამართი და სათაურის გასაღები ერთად.
  *
  * ფუტერი ბმულს, App.jsx მარშრუტს, გვერდი კი სათაურს აქედან იღებს. ბმულები
  * ადრე კატეგორიებზე და მთავარ გვერდზე მიდიოდა, რადგან გვერდები არ არსებობდა.
+ * The title is `t(titleKey)`; backend/tests/test_sitemap.py reads the paths.
  */
 export const INFO_PAGES = {
-  delivery: { path: '/delivery', title: 'მიწოდების პირობები' },
-  returns: { path: '/returns', title: 'დაბრუნება და გარანტია' },
-  privacy: { path: '/privacy', title: 'კონფიდენციალურობა' },
-  faq: { path: '/faq', title: 'ხშირად დასმული კითხვები' },
+  delivery: { path: '/delivery', titleKey: 'infoPages.delivery' },
+  returns: { path: '/returns', titleKey: 'infoPages.returns' },
+  privacy: { path: '/privacy', titleKey: 'infoPages.privacy' },
+  faq: { path: '/faq', titleKey: 'infoPages.faq' },
 };
 
 /**
@@ -71,18 +71,16 @@ export const STORAGE_KEYS = {
 
 export const CURRENCY_SYMBOL = '₾';
 
-/**
- * მიწოდების ვადა — მხოლოდ ტექსტი. ერთადერთი წყარო: კალათა, პროდუქტის გვერდი,
- * შეკვეთის დადასტურება და საინფორმაციო გვერდები ყველა ამას კითხულობს.
+/*
+ * მიწოდების ვადა — მხოლოდ ტექსტი, `shipping.etaDays` თარგმანის ფაილებში.
+ * ერთადერთი წყარო: კალათა, პროდუქტის გვერდი, შეკვეთის დადასტურება და
+ * საინფორმაციო გვერდები ყველა ამას კითხულობს.
  *
  * ფასები აქ აღარ არის: ქალაქები, ტარიფები და უფასო მიწოდების ზღვარი
  * backend-ის app/services/delivery.py-შია და `GET /delivery`-ით მოდის
  * (hooks/useDeliveryRules.js). საკუთარი ასლი აქ რომ ყოფილიყო, კალათა ერთ ფასს
  * აჩვენებდა, სერვერი კი მეორეს ჩამოაჭრიდა.
  */
-export const SHIPPING = {
-  etaDays: '1–3 სამუშაო დღე',
-};
 
 /** მარაგის ზღვარი, რომლის ქვემოთაც ვწერთ "ბოლო ცალები". */
 export const LOW_STOCK_THRESHOLD = 3;
@@ -93,13 +91,8 @@ export const LOW_STOCK_THRESHOLD = 3;
 
 export const PAGE_SIZE = 12;
 
-export const SORT_OPTIONS = [
-  { value: 'popular', label: 'პოპულარობით' },
-  { value: 'newest', label: 'სიახლით' },
-  { value: 'price_asc', label: 'ფასი: ზრდადობით' },
-  { value: 'price_desc', label: 'ფასი: კლებადობით' },
-  { value: 'rating', label: 'შეფასებით' },
-];
+/** Each one's label is `t('sort.<value>')`. */
+export const SORT_OPTIONS = ['popular', 'newest', 'price_asc', 'price_desc', 'rating'];
 
 export const DEFAULT_SORT = 'popular';
 
@@ -113,78 +106,36 @@ export const QUERY_KEYS = {
 };
 
 /* -------------------------------------------------------------------------- */
-/*  specs — ტექნიკური გასაღებების ქართული ლეიბლები                             */
+/*  specs                                                                      */
 /* -------------------------------------------------------------------------- */
 
-export const SPEC_LABELS = {
-  ram: 'ოპერატიული მეხსიერება',
-  storage: 'მეხსიერება',
-  screen: 'ეკრანის ზომა',
-  network: 'ქსელი',
-  color: 'ფერი',
-  camera: 'კამერა',
-  battery: 'ბატარეა',
-  os: 'ოპერაციული სისტემა',
-  connector: 'კონექტორი',
-  length: 'სიგრძე',
-  fastCharge: 'სწრაფი დატენვა',
-  material: 'მასალა',
-  capacity: 'ტევადობა',
-  output: 'გამომავალი სიმძლავრე',
-  wireless: 'უსადენო',
-  power: 'სიმძლავრე',
-  ports: 'პორტები',
-  type: 'ტიპი',
-  anc: 'ხმაურის შთანთქმა (ANC)',
-  playtime: 'მუშაობის დრო',
-  compatibility: 'თავსებადობა',
-  protection: 'დაცვა',
-  weight: 'წონა',
-  warranty: 'გარანტია',
-  origin: 'ბრენდის წარმოშობა',
-};
-
-/** ლოგიკური მნიშვნელობების ქართული ჩვენება. */
-export const BOOLEAN_LABELS = { true: 'დიახ', false: 'არა' };
-
-/** ფერების ვიზუალური swatch-ები (ფილტრისთვის). */
-export const COLOR_SWATCHES = {
-  'შავი': '#1e2330',
-  'თეთრი': '#f5f6f8',
-  'ვერცხლისფერი': '#c8ccd4',
-  'ნაცრისფერი': '#8a92a3',
-  'ლურჯი': '#2f5fd0',
-  'მწვანე': '#2f9e6b',
-  'წითელი': '#d9352c',
-  'ოქროსფერი': '#d8b56a',
-  'იისფერი': '#7a5bd6',
-  'ვარდისფერი': '#e79ab4',
-  'ყვითელი': '#f0c419',
-  'ბეჟი': '#e3d6c3',
-  'გამჭვირვალე': '#e8eef5',
-};
+/*
+ * A spec key's label is `specs.<key>` in the translation files; a key with no
+ * entry there is shown as it is. BOOLEAN_LABELS, which said the same as
+ * formatSpecValue and was imported by nothing, is gone.
+ */
 
 /* -------------------------------------------------------------------------- */
 /*  გადახდა (checkout)                                                        */
 /* -------------------------------------------------------------------------- */
 
 /**
- * ყველა მეთოდი, რომლითაც შეკვეთა შეიძლება იყოს შენახული — ლეიბლისთვის.
+ * ყველა მეთოდი, რომლითაც შეკვეთა შეიძლება იყოს შენახული — ლეიბლი `payment.<value>`.
  * `offered: false` checkout-ში აღარ ჩანს (API მას ახალ შეკვეთაზე 400-ით
  * უარყოფს), მაგრამ ძველი შეკვეთის გვერდმა ის მაინც უნდა დაასახელოს.
  * backend-ის PAYMENT_METHODS / OFFERED_PAYMENT_METHODS-ს ამოწმებს
  * backend/tests/test_payment_methods.py.
  */
 export const PAYMENT_METHODS = [
-  { value: 'cash', label: 'ნაღდი ანგარიშსწორება მიღებისას', offered: true },
-  { value: 'card_on_delivery', label: 'ბარათით კურიერთან', offered: false },
+  { value: 'cash', offered: true },
+  { value: 'card_on_delivery', offered: false },
 ];
 
 /** რასაც checkout სთავაზობს. */
 export const OFFERED_PAYMENT_METHODS = PAYMENT_METHODS.filter((method) => method.offered);
 
 /**
- * შეკვეთის სტატუსი მყიდველის ენაზე — ექვსივე.
+ * შეკვეთის სტატუსი მყიდველის ენაზე — ექვსივე (ტონი აქ, სიტყვა `orderStatus.*`).
  *
  * ექვსივე იმიტომ, რომ სერვერს ექვსი აქვს (app/services/order_status.py). სიაში
  * ოთხი იყო და `confirmed`-იც და `cancelled`-იც `pending`-ზე ვარდებოდა — ანუ
@@ -193,78 +144,20 @@ export const OFFERED_PAYMENT_METHODS = PAYMENT_METHODS.filter((method) => method
  * ერთ ადგილას, რომ ორმა გვერდმა ერთი და იგივე თქვას. ადმინის ფორმულირება სხვაა
  * (src/admin/statuses.jsx) — იქ მაღაზიის თანამშრომელი კითხულობს.
  */
-export const ORDER_STATUS_LABELS = {
-  pending: { label: 'მიღებულია', tone: 'warning' },
-  confirmed: { label: 'დადასტურებულია', tone: 'warning' },
-  processing: { label: 'მზადდება', tone: 'warning' },
-  shipped: { label: 'გზაშია', tone: 'neutral' },
-  delivered: { label: 'ჩაბარებულია', tone: 'success' },
-  cancelled: { label: 'გაუქმებულია', tone: 'danger' },
+export const ORDER_STATUS_TONES = {
+  pending: 'warning',
+  confirmed: 'warning',
+  processing: 'warning',
+  shipped: 'neutral',
+  delivered: 'success',
+  cancelled: 'danger',
 };
 
-/** უცნობი სტატუსი არაფერს ამბობს — გამოცნობით დაიწერა ერთხელ „მუშავდება“ გაუქმებულზე. */
-export const UNKNOWN_ORDER_STATUS = { label: '—', tone: 'neutral' };
-
-/* -------------------------------------------------------------------------- */
-/*  გამეორებადი UI ტექსტები                                                    */
-/* -------------------------------------------------------------------------- */
-
-export const TEXT = {
-  addToCart: 'კალათაში დამატება',
-  addedToCart: 'პროდუქტი დაემატა კალათაში',
-  removedFromCart: 'პროდუქტი წაიშალა კალათიდან',
-  undo: 'დაბრუნება',
-  outOfStock: 'მარაგში არ არის',
-  inStock: 'მარაგშია',
-  lowStock: 'ბოლო ცალები',
-  isNew: 'ახალი',
-  loading: 'იტვირთება…',
-  retry: 'ხელახლა ცდა',
-  clearFilters: 'ფილტრების გასუფთავება',
-  clearAll: 'გასუფთავება',
-  filters: 'ფილტრი',
-  sort: 'დალაგება',
-  search: 'ძებნა',
-  searchPlaceholder: 'მოძებნე პროდუქტი, ბრენდი ან მახასიათებელი…',
-  viewAll: 'ყველას ნახვა',
-  viewAllResults: 'ყველა შედეგის ნახვა',
-  backToShop: 'დაბრუნება მაღაზიაში',
-  checkout: 'შეკვეთის გაფორმება',
-  continueShopping: 'შოპინგის გაგრძელება',
-  subtotal: 'ჯამი',
-  shipping: 'მიწოდება',
-  total: 'სულ გადასახდელი',
-  free: 'უფასო',
-  quantity: 'რაოდენობა',
-  remove: 'წაშლა',
-  errorTitle: 'დაფიქსირდა შეცდომა',
-  errorGeneric: 'მონაცემების ჩატვირთვა ვერ მოხერხდა. სცადეთ ხელახლა.',
-  emptyTitle: 'შედეგები ვერ მოიძებნა',
-  found: 'ნაპოვნია',
-  recentSearches: 'ბოლო ძებნები',
-  requiredField: 'ეს ველი სავალდებულოა',
-};
-
-export const HOME_SECTION_TITLES = {
-  popularCategories: 'პოპულარული კატეგორიები',
-  newArrivals: 'ახალი პროდუქტები',
-  discounted: 'ფასდაკლებები',
-  featured: 'რეკომენდებული',
-  // სამივე ზედა ჯგუფი ცარიელია (ახალ მაღაზიას დროშები ჯერ არ აქვს) — უახლესი პროდუქტები
-  latest: 'ბოლოს დამატებული',
-};
-
-/* -------------------------------------------------------------------------- */
-/*  მიწოდების ინფო (პროდუქტის tab)                                             */
-/* -------------------------------------------------------------------------- */
-
-export const DELIVERY_INFO = [
-  {
-    title: 'დაბრუნება',
-    text: 'პროდუქტის დაბრუნება შესაძლებელია 14 კალენდარული დღის განმავლობაში, სასაქონლო იერსახის შენარჩუნებით.',
-  },
-  {
-    title: 'გარანტია',
-    text: 'ყველა პროდუქტს აქვს ოფიციალური გარანტია. კონკრეტული ვადა მითითებულია მახასიათებლებში.',
-  },
-];
+/**
+ * A status as the page shows it: `{ label, tone }`, the label `orderStatus.*`.
+ * უცნობი სტატუსი არაფერს ამბობს — გამოცნობით დაიწერა ერთხელ „მუშავდება“ გაუქმებულზე.
+ */
+export function orderStatus(status, t) {
+  const tone = ORDER_STATUS_TONES[status];
+  return tone ? { label: t(`orderStatus.${status}`), tone } : { label: '—', tone: 'neutral' };
+}

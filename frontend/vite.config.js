@@ -43,7 +43,7 @@ const API_PROXY = {
 };
 
 /**
- * React and the router in a `vendor` chunk, lucide in an `icons` chunk.
+ * React, the router and i18next in a `vendor` chunk, lucide in an `icons` chunk.
  *
  * In one chunk with the app, every deploy renamed all of it, and a returning
  * visitor downloaded React again with each code change: 92.6 kB gzip on the
@@ -64,7 +64,7 @@ const API_PROXY = {
 // `[\\/]` because Rolldown matches these in native code against the module id
 // as the OS spells it, so a Windows build sees backslashes.
 const VENDOR_MODULE =
-  /[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom|@remix-run[\\/]router)[\\/]/;
+  /[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom|@remix-run[\\/]router|i18next)[\\/]/;
 const ICONS_MODULE = /[\\/]node_modules[\\/]lucide-react[\\/]/;
 
 // https://vitejs.dev/config/

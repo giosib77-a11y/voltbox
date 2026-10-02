@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import ProductCard from './ProductCard.jsx';
 import { ProductCardSkeleton } from '../common/Skeleton.jsx';
-import { TEXT } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * მთავარი გვერდის სექცია: mobile-ზე ჰორიზონტალური carousel, desktop-ზე grid.
@@ -36,14 +36,14 @@ export default function ProductCarousel({
               to={viewAllTo}
               className="rounded-sm text-sm font-semibold text-primary-700 underline-offset-4 hover:underline"
             >
-              {TEXT.viewAll}
+              {t('common.viewAll')}
             </Link>
           )}
           <div className="hidden gap-1.5 lg:flex">
             <button
               type="button"
               onClick={() => scrollBy(-1)}
-              aria-label="წინა პროდუქტები"
+              aria-label={t('carousel.previous')}
               className="flex h-9 w-9 items-center justify-center rounded-control border border-line-strong bg-surface text-ink-700 transition-colors hover:border-primary-400 hover:bg-ink-100 hover:text-fg"
             >
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -51,7 +51,7 @@ export default function ProductCarousel({
             <button
               type="button"
               onClick={() => scrollBy(1)}
-              aria-label="შემდეგი პროდუქტები"
+              aria-label={t('carousel.next')}
               className="flex h-9 w-9 items-center justify-center rounded-control border border-line-strong bg-surface text-ink-700 transition-colors hover:border-primary-400 hover:bg-ink-100 hover:text-fg"
             >
               <ChevronRight className="h-4 w-4" aria-hidden="true" />

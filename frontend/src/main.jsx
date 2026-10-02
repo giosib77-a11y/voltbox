@@ -1,3 +1,7 @@
+// First: it reads the language from the address, and every module below may
+// translate as soon as it runs.
+import './i18n/index.js';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 

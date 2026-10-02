@@ -3,7 +3,8 @@
  *
  * What it does: fixes the API prefix the tests reason about, registers jest-dom
  * matchers, and clears localStorage plus every mock between tests, so a session
- * written by one test cannot leak into the next.
+ * written by one test cannot leak into the next - and the language, so one
+ * test's English cannot either.
  * Where it fits: referenced from vite.config.js `test.setupFiles`.
  */
 
@@ -30,9 +31,15 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
+// The page's language comes from the address; jsdom's is `/`, so Georgian, as
+// every test written before English existed expects. A test that switches to
+// English is put back here.
+import { DEFAULT_LANGUAGE, i18n } from './src/i18n/index.js';
+
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   localStorage.clear();
+  i18n.changeLanguage(DEFAULT_LANGUAGE);
 });

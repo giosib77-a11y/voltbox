@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import ProductImage from '../common/ProductImage.jsx';
 import { Skeleton } from '../common/Skeleton.jsx';
+import { t } from '../../i18n/index.js';
 
 /**
  * პროდუქტის გალერეა: დიდი ფოტო zoom-ით, thumbnails, ისრები და swipe.
@@ -72,8 +73,8 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
     <div className="flex flex-col gap-3">
       <div
         role="group"
-        aria-roledescription="გალერეა"
-        aria-label={`${alt} — სურათი ${index + 1} / ${total}`}
+        aria-roledescription={t('gallery.role')}
+        aria-label={t('gallery.slide', { name: alt, index: index + 1, total })}
         tabIndex={0}
         onKeyDown={handleKeyDown}
         onMouseMove={handleMouseMove}
@@ -84,7 +85,7 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
       >
         <img
           src={images[index]}
-          alt={`${alt} — სურათი ${index + 1}`}
+          alt={t('gallery.image', { name: alt, index: index + 1 })}
           className="h-full w-full object-cover transition-transform duration-200 storefront:mix-blend-multiply"
           style={
             zoom
@@ -101,7 +102,7 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
             <button
               type="button"
               onClick={() => go(-1)}
-              aria-label="წინა სურათი"
+              aria-label={t('gallery.previous')}
               className="absolute left-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-surface/90 text-ink-700 shadow-card transition-opacity hover:bg-surface lg:opacity-0 lg:group-hover:opacity-100"
             >
               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
@@ -109,7 +110,7 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
             <button
               type="button"
               onClick={() => go(1)}
-              aria-label="შემდეგი სურათი"
+              aria-label={t('gallery.next')}
               className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-surface/90 text-ink-700 shadow-card transition-opacity hover:bg-surface lg:opacity-0 lg:group-hover:opacity-100"
             >
               <ChevronRight className="h-5 w-5" aria-hidden="true" />
@@ -136,7 +137,7 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
               key={image}
               type="button"
               onClick={() => setIndex(i)}
-              aria-label={`სურათი ${i + 1}`}
+              aria-label={t('gallery.thumb', { index: i + 1 })}
               aria-current={i === index}
               className={`shrink-0 overflow-hidden rounded-control border-2 transition-colors ${
                 i === index ? 'border-primary-600' : 'border-ink-200 hover:border-ink-300'

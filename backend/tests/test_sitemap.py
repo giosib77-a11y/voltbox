@@ -14,6 +14,7 @@ list of dead links from the shop's own mouth.
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from xml.etree import ElementTree
 
 import httpx
 import pytest
@@ -158,3 +159,71 @@ async def test_a_slug_with_a_character_xml_cares_about_is_escaped(
 
     assert "a&amp;b" in body
     assert "<loc>https://voltbox.test/product/a&b</loc>" not in body
+
+
+XMLNS = {
+    "s": "http://www.sitemaps.org/schemas/sitemap/0.9",
+    "xhtml": "http://www.w3.org/1999/xhtml",
+}
+
+
+def _parsed(body: str) -> dict[str, dict[str, str]]:
+    """Each <loc> and the hreflang alternates its entry names."""
+    # The API's own output, from a test: nothing untrusted to defuse.
+    root = ElementTree.fromstring(body)  # noqa: S314
+    return {
+        url.findtext("s:loc", namespaces=XMLNS): {
+            link.get("hreflang"): link.get("href") for link in url.findall("xhtml:link", XMLNS)
+        }
+        for url in root.findall("s:url", XMLNS)
+    }
+
+
+async def test_every_page_is_listed_in_english_too(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """The storefront serves English under /en; a crawler finds it here."""
+    await _catalogue(db)
+
+    entries = _parsed((await client.get("/sitemap.xml")).text)
+
+    for path in ("/category/phones", "/product/live-one", "/faq"):
+        assert f"{SITE}{path}" in entries, path
+        assert f"{SITE}/en{path}" in entries, path
+    # The English home page is /en, as the storefront links it - not /en/.
+    assert f"{SITE}/en" in entries
+    assert f"{SITE}/en/" not in entries
+    # The same set of pages in each language, nothing extra in either.
+    english = {loc for loc in entries if loc == f"{SITE}/en" or loc.startswith(f"{SITE}/en/")}
+    assert len(english) * 2 == len(entries)
+
+
+async def test_each_entry_names_both_languages(client: httpx.AsyncClient, db: AsyncSession) -> None:
+    """Both versions of a page carry the same pair, the Georgian as x-default -
+    hreflang is ignored unless the pages name each other."""
+    await _catalogue(db)
+
+    entries = _parsed((await client.get("/sitemap.xml")).text)
+
+    pair = {
+        "ka": f"{SITE}/product/live-one",
+        "en": f"{SITE}/en/product/live-one",
+        "x-default": f"{SITE}/product/live-one",
+    }
+    assert entries[f"{SITE}/product/live-one"] == pair
+    assert entries[f"{SITE}/en/product/live-one"] == pair
+    assert entries[f"{SITE}/en"] == {"ka": f"{SITE}/", "en": f"{SITE}/en", "x-default": f"{SITE}/"}
+    assert all(set(alternates) == {"ka", "en", "x-default"} for alternates in entries.values())
+
+
+async def test_nothing_hidden_comes_back_in_english(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    await _catalogue(db)
+
+    body = (await client.get("/sitemap.xml")).text
+
+    assert "hidden-one" not in body
+    assert "archived-one" not in body
+    for path in ("/admin", "/account", "/checkout", "/cart"):
+        assert f"{SITE}/en{path}" not in body, path

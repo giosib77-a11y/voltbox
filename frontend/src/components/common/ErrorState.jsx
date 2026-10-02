@@ -1,14 +1,14 @@
 import { AlertTriangle, RotateCcw } from 'lucide-react';
 import Button from './Button.jsx';
-import { TEXT } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * შეცდომის მდგომარეობა ხელახლა ცდის ღილაკით.
  * @param {{ error?: Error, onRetry?: () => void }} props
  */
 export default function ErrorState({
-  title = TEXT.errorTitle,
-  description = TEXT.errorGeneric,
+  title = t('common.errorTitle'),
+  description = t('common.errorGeneric'),
   error = null,
   onRetry = null,
   className = '',
@@ -28,7 +28,7 @@ export default function ErrorState({
       {onRetry && (
         <Button variant="outline" className="mt-6" onClick={onRetry}>
           <RotateCcw className="h-4 w-4" aria-hidden="true" />
-          {TEXT.retry}
+          {t('common.retry')}
         </Button>
       )}
     </div>

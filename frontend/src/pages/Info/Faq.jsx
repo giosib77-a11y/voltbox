@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import { Skeleton } from '../../components/common/Skeleton.jsx';
-import { CONTACT, INFO_PAGES, SHIPPING } from '../../constants/index.js';
+import { CONTACT, INFO_PAGES } from '../../constants/index.js';
+import { tKa } from '../../i18n/index.js';
 import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { useEmailEnabled } from '../../hooks/useEmailEnabled.js';
 import InfoPage, { InfoSection, TEXT_LINK_CLASS } from './InfoPage.jsx';
@@ -55,7 +56,7 @@ export default function Faq() {
     },
     {
       question: 'რამდენ ხანში მომივა?',
-      answer: <p>{SHIPPING.etaDays}.</p>,
+      answer: <p>{tKa('shipping.etaDays')}.</p>,
     },
     {
       question: 'შემიძლია დავაბრუნო?',
@@ -64,7 +65,7 @@ export default function Faq() {
           დიახ, მიღებიდან 14 დღის განმავლობაში, თუ პროდუქტი გამოუყენებელია და შეფუთვა დაცულია.
           დეტალები —{' '}
           <Link to={INFO_PAGES.returns.path} className={TEXT_LINK_CLASS}>
-            „{INFO_PAGES.returns.title}“
+            „{tKa(INFO_PAGES.returns.titleKey)}“
           </Link>{' '}
           გვერდზე.
         </p>

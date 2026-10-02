@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 import { buildFilterChips, toggleFilterValue } from '../../utils/filter.js';
-import { TEXT } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * აქტიური ფილტრების chip-ები — ცალ-ცალკე მოხსნით და საერთო გასუფთავებით.
@@ -33,7 +33,7 @@ export default function ActiveFilters({ filters = [], active = {}, onChange, onC
             <span className="text-ink-500 group-hover:text-danger-fg">{chip.groupLabel}:</span>
             {chip.label}
             <X className="h-3.5 w-3.5" aria-hidden="true" />
-            <span className="sr-only">ფილტრის მოხსნა</span>
+            <span className="sr-only">{t('filters.remove')}</span>
           </button>
         </li>
       ))}
@@ -44,7 +44,7 @@ export default function ActiveFilters({ filters = [], active = {}, onChange, onC
           onClick={onClear}
           className="rounded-pill px-2.5 py-1 text-xs font-semibold text-primary-700 underline-offset-2 hover:underline"
         >
-          {TEXT.clearAll}
+          {t('common.clearAll')}
         </button>
       </li>
     </ul>

@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react';
 import { useToast } from '../../context/ToastContext.jsx';
+import { t } from '../../i18n/index.js';
 
 /**
  * Toast-ების ვიზუალური კონტეინერი.
@@ -34,7 +35,7 @@ export default function ToastViewport() {
     <div
       className="pointer-events-none fixed inset-x-0 bottom-0 z-toast flex flex-col items-center gap-2 p-4 sm:inset-x-auto sm:right-0 sm:items-end"
       role="region"
-      aria-label="შეტყობინებები"
+      aria-label={t('toast.region')}
       // The live region is the container, not the toast.
       //
       // A screen reader announces changes *inside* a region that already
@@ -78,7 +79,7 @@ export default function ToastViewport() {
             <button
               type="button"
               onClick={() => dismiss(toast.id)}
-              aria-label="შეტყობინების დახურვა"
+              aria-label={t('toast.dismiss')}
               className="-mr-1 -mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-700"
             >
               <X className="h-4 w-4" aria-hidden="true" />

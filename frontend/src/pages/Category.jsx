@@ -16,8 +16,9 @@ import { useCategories, useProducts } from '../hooks/useProducts.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import { usePageMeta } from '../hooks/usePageMeta.js';
 import { countActiveFilters } from '../utils/filter.js';
-import { formatItemsCount, formatNumber } from '../utils/format.js';
-import { PAGE_SIZE, TEXT } from '../constants/index.js';
+import { formatCount, formatItemsCount } from '../utils/format.js';
+import { PAGE_SIZE } from '../constants/index.js';
+import { t } from '../i18n/index.js';
 
 /**
  * კატეგორიის გვერდი.
@@ -44,7 +45,7 @@ export default function Category() {
 
   const { data, loading, error, reload } = useProducts(params, { skip: !category });
 
-  useDocumentTitle(category ? category.name : 'კატალოგი');
+  useDocumentTitle(category ? category.name : t('catalog.title'));
   usePageMeta({
     description: category?.description || undefined,
     canonical: category ? `/category/${category.slug}` : '/category',
@@ -55,9 +56,9 @@ export default function Category() {
     return (
       <div className="container-page py-16">
         <EmptyState
-          title="კატეგორია ვერ მოიძებნა"
-          description="შესაძლოა მისამართი შეიცვალა ან კატეგორია აღარ არსებობს."
-          actionLabel={TEXT.backToShop}
+          title={t('catalog.categoryNotFound')}
+          description={t('catalog.categoryNotFoundText')}
+          actionLabel={t('common.backToShop')}
           actionTo="/"
         />
       </div>
@@ -103,10 +104,10 @@ export default function Category() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-ink-600" aria-live="polite">
               {loading ? (
-                <span className="text-ink-500">{TEXT.loading}</span>
+                <span className="text-ink-500">{t('common.loading')}</span>
               ) : (
                 <>
-                  {TEXT.found}{' '}
+                  {t('common.found')}{' '}
                   <strong className="text-ink-900">{formatItemsCount(data?.total || 0)}</strong>
                 </>
               )}
@@ -120,7 +121,7 @@ export default function Category() {
                 onClick={() => setSheetOpen(true)}
               >
                 <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-                {TEXT.filters}
+                {t('common.filters')}
                 {activeCount > 0 && (
                   <span className="ml-0.5 rounded-pill bg-primary-600 px-1.5 text-2xs font-bold text-white">
                     {activeCount}
@@ -148,9 +149,9 @@ export default function Category() {
               skeletonCount={PAGE_SIZE}
               emptyProps={{
                 icon: PackageSearch,
-                title: 'ამ ფილტრებით პროდუქტი ვერ მოიძებნა',
-                description: 'შეამცირეთ ფილტრების რაოდენობა ან გაასუფთავეთ ისინი.',
-                actionLabel: activeCount > 0 ? TEXT.clearFilters : TEXT.backToShop,
+                title: t('catalog.noMatch'),
+                description: t('catalog.noMatchText'),
+                actionLabel: activeCount > 0 ? t('common.clearFilters') : t('common.backToShop'),
                 onAction: activeCount > 0 ? clearFilters : undefined,
                 actionTo: activeCount > 0 ? undefined : '/',
               }}
@@ -172,7 +173,7 @@ export default function Category() {
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         position="bottom"
-        title={`${TEXT.filters}${activeCount > 0 ? ` (${activeCount})` : ''}`}
+        title={`${t('common.filters')}${activeCount > 0 ? ` (${activeCount})` : ''}`}
         footer={
           <div className="flex gap-3">
             <Button
@@ -183,10 +184,10 @@ export default function Category() {
                 setSheetOpen(false);
               }}
             >
-              {TEXT.clearAll}
+              {t('common.clearAll')}
             </Button>
             <Button fullWidth onClick={() => setSheetOpen(false)}>
-              ჩვენება ({formatNumber(data?.total || 0)})
+              {t('catalog.show', { n: formatCount(data?.total || 0) })}
             </Button>
           </div>
         }

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
-import { SITE_DESCRIPTION, SITE_NAME } from '../constants/index.js';
+import { SITE_NAME } from '../constants/index.js';
+import { DEFAULT_LANGUAGE, LANGUAGES, currentLanguage, localizedPath, t } from '../i18n/index.js';
 
 /**
  * გვერდის meta-ტეგები: აღწერა, canonical და სტრუქტურირებული მონაცემები.
@@ -9,7 +10,8 @@ import { SITE_DESCRIPTION, SITE_NAME } from '../constants/index.js';
  * them again when the page unmounts so the next one does not inherit them.
  * Where it fits: called by the pages that have something specific to say —
  * a product, a category. `useDocumentTitle` stays separate; it is used
- * everywhere and has nothing to clean up.
+ * everywhere and has nothing to clean up. `useLanguageAlternates`, below, is
+ * the Layout's: every page names its other-language version.
  *
  * What it deliberately does not do: help a link preview. Facebook, Messenger
  * and Viber do not run JavaScript, so anything written here is invisible to
@@ -43,6 +45,9 @@ function setMeta(name, content) {
 
 function setCanonical(path) {
   if (!path) return null;
+  // The page's own address in the language it is in: `/en/product/x` is its
+  // own page, not a copy of `/product/x`, or the hreflang pair means nothing.
+  const href = `${SITE_URL}${localizedPath(path, currentLanguage())}`;
   let tag = document.head.querySelector('link[rel="canonical"]');
   const created = !tag;
   if (!tag) {
@@ -51,7 +56,7 @@ function setCanonical(path) {
     document.head.appendChild(tag);
   }
   const previous = tag.getAttribute('href');
-  tag.setAttribute('href', `${SITE_URL}${path}`);
+  tag.setAttribute('href', href);
   return () => {
     if (created) tag.remove();
     else if (previous !== null) tag.setAttribute('href', previous);
@@ -76,13 +81,44 @@ export function usePageMeta({ description, canonical, structuredData } = {}) {
 
   useEffect(() => {
     const undo = [
-      setMeta('description', description || SITE_DESCRIPTION),
+      setMeta('description', description || t('site.description')),
       setCanonical(canonical),
       setStructuredData(serialized ? JSON.parse(serialized) : null),
     ].filter(Boolean);
 
     return () => undo.forEach((restore) => restore());
   }, [description, canonical, serialized]);
+}
+
+/**
+ * The page in every language, as `<link rel="alternate" hreflang>`.
+ *
+ * `pathname` is the router's, without the language: `/cart` on both `/cart`
+ * and `/en/cart`. Each page lists both languages and itself among them, which
+ * is what a search engine needs to treat the two as one page in two languages
+ * rather than as duplicates; x-default is the Georgian, the shop's own.
+ *
+ * And `<html lang>`, which the page load already set (i18n/index.js): set
+ * again here so it can never disagree with the words on the page.
+ */
+export function useLanguageAlternates(pathname) {
+  useEffect(() => {
+    document.documentElement.lang = currentLanguage();
+
+    const links = [
+      ...LANGUAGES.map((language) => [language, localizedPath(pathname, language)]),
+      ['x-default', localizedPath(pathname, DEFAULT_LANGUAGE)],
+    ].map(([hreflang, path]) => {
+      const link = document.createElement('link');
+      link.setAttribute('rel', 'alternate');
+      link.setAttribute('hreflang', hreflang);
+      link.setAttribute('href', `${SITE_URL}${path}`);
+      document.head.appendChild(link);
+      return link;
+    });
+
+    return () => links.forEach((link) => link.remove());
+  }, [pathname]);
 }
 
 /**
@@ -111,7 +147,10 @@ export function productStructuredData(product) {
       availability: product.inStock
         ? 'https://schema.org/InStock'
         : 'https://schema.org/OutOfStock',
-      url: SITE_URL && product.slug ? `${SITE_URL}/product/${product.slug}` : undefined,
+      url:
+        SITE_URL && product.slug
+          ? `${SITE_URL}${localizedPath(`/product/${product.slug}`, currentLanguage())}`
+          : undefined,
       seller: { '@type': 'Organization', name: SITE_NAME },
     },
   };

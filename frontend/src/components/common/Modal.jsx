@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { t } from '../../i18n/index.js';
 
 /**
  * უნივერსალური მოდალი / drawer / bottom-sheet.
@@ -123,7 +124,7 @@ export default function Modal({
     >
       <button
         type="button"
-        aria-label="დახურვა"
+        aria-label={t('common.close')}
         tabIndex={-1}
         className="absolute inset-0 cursor-default bg-scrim/50 animate-fade-in"
         onClick={onClose}
@@ -152,7 +153,7 @@ export default function Modal({
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="დახურვა"
+                aria-label={t('common.close')}
                 className="-mr-1.5 flex h-9 w-9 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-800"
               >
                 <X className="h-5 w-5" aria-hidden="true" />

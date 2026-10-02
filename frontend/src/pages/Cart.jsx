@@ -10,13 +10,13 @@ import { useToast } from '../hooks/useToast.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import { useDeliveryRules } from '../hooks/useDeliveryRules.js';
 import { amountToFreeDelivery, deliveryFee, totalWithDelivery } from '../utils/pricing.js';
-import { TEXT } from '../constants/index.js';
+import { t } from '../i18n/index.js';
 
 /**
  * კალათის გვერდი. ავტორიზაცია არ არის საჭირო.
  */
 export default function Cart() {
-  useDocumentTitle('კალათა');
+  useDocumentTitle(t('cart.title'));
 
   const { items, itemsCount, subtotal, savings, setQty, removeItem, restoreItem, clear } = useCart();
   // The cart does not know the city yet: the fee is known only once the basket
@@ -33,9 +33,9 @@ export default function Cart() {
     lastRemoved.current = item;
     removeItem(productId);
 
-    toast.info(`${item.snapshot.name} — ${TEXT.removedFromCart}`, {
+    toast.info(t('cart.removedNamed', { name: item.snapshot.name }), {
       action: {
-        label: TEXT.undo,
+        label: t('common.undo'),
         onClick: () => {
           if (lastRemoved.current) restoreItem(lastRemoved.current);
           lastRemoved.current = null;
@@ -47,12 +47,12 @@ export default function Cart() {
   if (items.length === 0) {
     return (
       <div className="container-page py-6 lg:py-10">
-        <Breadcrumbs items={[{ label: 'კალათა' }]} className="mb-5" />
+        <Breadcrumbs items={[{ label: t('cart.title') }]} className="mb-5" />
         <EmptyState
           icon={ShoppingCart}
-          title="თქვენი კალათა ცარიელია"
-          description="დაათვალიერეთ კატალოგი და დაამატეთ პროდუქტები — შეკვეთისთვის რეგისტრაცია საჭირო არ არის."
-          actionLabel={TEXT.backToShop}
+          title={t('cart.emptyTitle')}
+          description={t('cart.emptyText')}
+          actionLabel={t('common.backToShop')}
           actionTo="/"
         />
       </div>
@@ -61,15 +61,15 @@ export default function Cart() {
 
   return (
     <div className="container-page py-5 lg:py-7">
-      <Breadcrumbs items={[{ label: 'კალათა' }]} className="mb-4" />
+      <Breadcrumbs items={[{ label: t('cart.title') }]} className="mb-4" />
 
       <div className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
-          კალათა
-          <span className="ml-2 text-base font-medium text-ink-500">{itemsCount} ცალი</span>
+          {t('cart.title')}
+          <span className="ml-2 text-base font-medium text-ink-500">{t('cart.units', { count: itemsCount })}</span>
         </h1>
         <Button variant="link" size="sm" className="px-0" onClick={clear}>
-          კალათის გასუფთავება
+          {t('cart.clear')}
         </Button>
       </div>
 
@@ -98,11 +98,11 @@ export default function Cart() {
               freeFrom={rules?.freeFrom}
               itemsCount={itemsCount}
               savings={savings}
-              actionLabel={TEXT.checkout}
+              actionLabel={t('common.checkout')}
               actionTo="/checkout"
             >
               <Button variant="ghost" fullWidth className="mt-2" to="/">
-                {TEXT.continueShopping}
+                {t('common.continueShopping')}
               </Button>
             </CartSummary>
           </div>

@@ -2,15 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { LayoutDashboard, LogOut, MapPin, Package, User, UserCircle2 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * მომხმარებლის მენიუ (desktop). არაავტორიზებულისთვის — შესვლის ბმული.
  */
 
 const LINKS = [
-  { to: '/account/orders', label: 'ჩემი შეკვეთები', icon: Package },
-  { to: '/account/profile', label: 'პროფილი', icon: User },
-  { to: '/account/addresses', label: 'მისამართები', icon: MapPin },
+  { to: '/account/orders', labelKey: 'nav.orders', icon: Package },
+  { to: '/account/profile', labelKey: 'nav.profile', icon: User },
+  { to: '/account/addresses', labelKey: 'nav.addresses', icon: MapPin },
 ];
 
 export default function UserMenu() {
@@ -40,7 +41,7 @@ export default function UserMenu() {
         className="flex h-10 items-center gap-2 rounded-control px-2.5 text-sm font-medium text-ink-700 transition-colors hover:bg-ink-100 hover:text-fg"
       >
         <UserCircle2 className="h-5 w-5" aria-hidden="true" />
-        <span className="hidden lg:inline">შესვლა</span>
+        <span className="hidden lg:inline">{t('nav.login')}</span>
       </Link>
     );
   }
@@ -74,17 +75,19 @@ export default function UserMenu() {
 
           {/* ადმინს პანელამდე მისასვლელი გზა უნდა ჰქონდეს — თორემ /admin
               მხოლოდ იმას აქვს, ვინც მისამართი დაიმახსოვრა. `isAdmin` სესიიდან
-              მოდის; უფლებას მაინც სერვერი წყვეტს ყოველ მოთხოვნაზე. */}
+              მოდის; უფლებას მაინც სერვერი წყვეტს ყოველ მოთხოვნაზე.
+              A full load, not a Link: the panel is Georgian only and outside
+              the English router (i18n/index.js). */}
           {user?.isAdmin ? (
-            <Link
-              to="/admin"
+            <a
+              href="/admin"
               role="menuitem"
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 border-b border-ink-200 px-3 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-50"
             >
               <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
-              ადმინ პანელი
-            </Link>
+              {t('nav.admin')}
+            </a>
           ) : null}
 
           {LINKS.map((link) => (
@@ -96,7 +99,7 @@ export default function UserMenu() {
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-ink-700 transition-colors hover:bg-ink-200 hover:text-fg"
             >
               <link.icon className="h-4 w-4 text-ink-500" aria-hidden="true" />
-              {link.label}
+              {t(link.labelKey)}
             </Link>
           ))}
 
@@ -110,7 +113,7 @@ export default function UserMenu() {
             className="flex w-full items-center gap-2.5 border-t border-ink-200 px-3 py-2 text-sm text-danger-fg transition-colors hover:bg-danger-50"
           >
             <LogOut className="h-4 w-4" aria-hidden="true" />
-            გასვლა
+            {t('nav.logout')}
           </button>
         </div>
       )}

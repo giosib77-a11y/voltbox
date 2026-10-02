@@ -25,7 +25,8 @@ import {
   validateField,
   validateForm,
 } from '../utils/validate.js';
-import { OFFERED_PAYMENT_METHODS, TEXT } from '../constants/index.js';
+import { OFFERED_PAYMENT_METHODS } from '../constants/index.js';
+import { t } from '../i18n/index.js';
 
 const EMPTY_FORM = {
   firstName: '',
@@ -43,7 +44,7 @@ const EMPTY_FORM = {
  * შესვლის ბანერი ინფორმაციულია და ფორმას არ ბლოკავს.
  */
 export default function Checkout() {
-  useDocumentTitle('შეკვეთის გაფორმება');
+  useDocumentTitle(t('common.checkout'));
 
   const navigate = useNavigate();
   const { items, itemsCount, subtotal, savings, clear } = useCart();
@@ -166,7 +167,7 @@ export default function Checkout() {
     if (Object.keys(nextErrors).length > 0) {
       const firstField = fields.find((field) => nextErrors[field]);
       document.getElementById(`checkout-${firstField}`)?.focus();
-      toast.error('შეავსეთ სავალდებულო ველები სწორად');
+      toast.error(t('checkout.fixFields'));
       return;
     }
 
@@ -192,7 +193,7 @@ export default function Checkout() {
       clear();
       navigate(`/checkout/success/${order.orderNumber}`, { replace: true });
     } catch (error) {
-      toast.error(error?.message || 'შეკვეთის გაფორმება ვერ მოხერხდა. სცადეთ ხელახლა.');
+      toast.error(error?.message || t('checkout.failed'));
     } finally {
       setSubmitting(false);
     }
@@ -201,11 +202,11 @@ export default function Checkout() {
   if (items.length === 0) {
     return (
       <div className="container-page py-6 lg:py-10">
-        <Breadcrumbs items={[{ label: 'შეკვეთის გაფორმება' }]} className="mb-5" />
+        <Breadcrumbs items={[{ label: t('common.checkout') }]} className="mb-5" />
         <EmptyState
-          title="კალათა ცარიელია"
-          description="შეკვეთის გასაფორმებლად ჯერ დაამატეთ პროდუქტები კალათაში."
-          actionLabel={TEXT.backToShop}
+          title={t('checkout.emptyTitle')}
+          description={t('checkout.emptyText')}
+          actionLabel={t('common.backToShop')}
           actionTo="/"
         />
       </div>
@@ -215,25 +216,25 @@ export default function Checkout() {
   return (
     <div className="container-page py-5 lg:py-7">
       <Breadcrumbs
-        items={[{ label: 'კალათა', to: '/cart' }, { label: 'შეკვეთის გაფორმება' }]}
+        items={[{ label: t('cart.title'), to: '/cart' }, { label: t('common.checkout') }]}
         className="mb-4"
       />
 
       <h1 className="mb-5 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
-        შეკვეთის გაფორმება
+        {t('common.checkout')}
       </h1>
 
       {!isAuthenticated && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-card border border-primary-200 bg-primary-50 px-4 py-3">
           <p className="flex items-center gap-2 text-sm text-primary-900">
             <LogIn className="h-4 w-4 shrink-0" aria-hidden="true" />
-            უკვე გაქვთ ანგარიში? შესვლა შეკვეთის ისტორიას შეინახავს — თუმცა სავალდებულო არ არის.
+            {t('checkout.loginBanner')}
           </p>
           <Link
             to="/login?redirect=/checkout"
             className="shrink-0 text-sm font-semibold text-primary-700 underline-offset-4 hover:underline"
           >
-            შესვლა
+            {t('nav.login')}
           </Link>
         </div>
       )}
@@ -241,12 +242,12 @@ export default function Checkout() {
       <form onSubmit={handleSubmit} noValidate className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:gap-7">
         <div className="space-y-5">
           <fieldset className="rounded-card border border-ink-200 bg-surface p-5">
-            <legend className="px-1 text-base font-bold text-ink-900">მიმღების მონაცემები</legend>
+            <legend className="px-1 text-base font-bold text-ink-900">{t('checkout.recipient')}</legend>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Input
                 id="checkout-firstName"
-                label="სახელი"
+                label={t('fields.firstName')}
                 required
                 value={values.firstName}
                 error={touched.firstName ? errors.firstName : ''}
@@ -256,7 +257,7 @@ export default function Checkout() {
               />
               <Input
                 id="checkout-lastName"
-                label="გვარი"
+                label={t('fields.lastName')}
                 required
                 value={values.lastName}
                 error={touched.lastName ? errors.lastName : ''}
@@ -266,11 +267,11 @@ export default function Checkout() {
               />
               <Input
                 id="checkout-phone"
-                label="ტელეფონი"
+                label={t('fields.phone')}
                 required
                 inputMode="tel"
                 placeholder="5XX XX XX XX"
-                hint="ქართული მობილური ნომერი"
+                hint={t('checkout.phoneHint')}
                 value={values.phone}
                 error={touched.phone ? errors.phone : ''}
                 onChange={(e) => handleChange('phone', e.target.value)}
@@ -279,15 +280,15 @@ export default function Checkout() {
               />
               <Select
                 id="checkout-city"
-                label="ქალაქი"
+                label={t('fields.city')}
                 required
-                placeholder="აირჩიეთ ქალაქი"
+                placeholder={t('validation.city')}
                 options={cityOptions}
                 value={values.city}
-                hint={rulesError ? '' : 'მიწოდება ამ ეტაპზე მხოლოდ ამ ქალაქებშია'}
+                hint={rulesError ? '' : t('checkout.cityHint')}
                 error={
                   rulesError
-                    ? 'ქალაქების სია ვერ ჩაიტვირთა.'
+                    ? t('checkout.citiesFailed')
                     : touched.city
                       ? errors.city
                       : ''
@@ -303,16 +304,16 @@ export default function Checkout() {
                 onClick={reloadRules}
                 className="mt-2 text-sm font-semibold text-primary-700 underline-offset-4 hover:underline"
               >
-                {TEXT.retry}
+                {t('common.retry')}
               </button>
             )}
 
             <div className="mt-4 grid gap-4">
               <Input
                 id="checkout-address"
-                label="მისამართი"
+                label={t('fields.address')}
                 required
-                placeholder="ქუჩა, ნომერი, სადარბაზო, ბინა"
+                placeholder={t('checkout.addressPlaceholder')}
                 value={values.address}
                 error={touched.address ? errors.address : ''}
                 onChange={(e) => handleChange('address', e.target.value)}
@@ -321,20 +322,20 @@ export default function Checkout() {
               />
               <Textarea
                 id="checkout-comment"
-                label="კომენტარი"
+                label={t('fields.comment')}
                 rows={3}
-                placeholder="დამატებითი ინფორმაცია კურიერისთვის (არასავალდებულო)"
+                placeholder={t('checkout.commentPlaceholder')}
                 value={values.comment}
                 onChange={(e) => handleChange('comment', e.target.value)}
               />
               {askGuestEmail && (
                 <Input
                   id="checkout-guestEmail"
-                  label="ელ. ფოსტა"
+                  label={t('fields.email')}
                   type="email"
                   inputMode="email"
                   placeholder="name@example.com"
-                  hint="შეკვეთის დადასტურებას ამ მისამართზე გამოგიგზავნით. არასავალდებულო."
+                  hint={t('checkout.emailHint')}
                   value={values.guestEmail}
                   error={touched.guestEmail ? errors.guestEmail : ''}
                   onChange={(e) => handleChange('guestEmail', e.target.value)}
@@ -346,7 +347,7 @@ export default function Checkout() {
           </fieldset>
 
           <fieldset className="rounded-card border border-ink-200 bg-surface p-5">
-            <legend className="px-1 text-base font-bold text-ink-900">გადახდის მეთოდი</legend>
+            <legend className="px-1 text-base font-bold text-ink-900">{t('checkout.payment')}</legend>
             <div className="mt-4 space-y-2.5">
               {OFFERED_PAYMENT_METHODS.map((method) => (
                 <label
@@ -365,13 +366,13 @@ export default function Checkout() {
                     onChange={(e) => handleChange('paymentMethod', e.target.value)}
                     className="h-4 w-4 accent-primary-600"
                   />
-                  <span className="text-sm font-medium text-ink-800">{method.label}</span>
+                  <span className="text-sm font-medium text-ink-800">{t(`payment.${method.value}`)}</span>
                 </label>
               ))}
             </div>
             <p className="mt-3 flex items-center gap-2 text-xs text-ink-500">
               <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
-              ონლაინ გადახდა დროებით მიუწვდომელია — ანგარიშსწორება ხდება მიღებისას.
+              {t('checkout.onlinePaymentNote')}
             </p>
           </fieldset>
         </div>
@@ -379,7 +380,7 @@ export default function Checkout() {
         <div>
           <div className="lg:sticky lg:top-[8.5rem]">
             <div className="mb-4 rounded-card border border-ink-200 bg-surface p-4">
-              <h2 className="text-sm font-bold text-ink-900">შეკვეთა ({itemsCount} ცალი)</h2>
+              <h2 className="text-sm font-bold text-ink-900">{t('checkout.orderUnits', { count: itemsCount })}</h2>
               <ul className="mt-3 space-y-3">
                 {items.map((item) => (
                   <li key={item.productId} className="flex items-center gap-3">
@@ -413,7 +414,7 @@ export default function Checkout() {
               freeFrom={rules?.freeFrom}
               itemsCount={itemsCount}
               savings={savings}
-              actionLabel="შეკვეთის დადასტურება"
+              actionLabel={t('checkout.confirm')}
               onAction={handleSubmit}
               loading={submitting}
             />

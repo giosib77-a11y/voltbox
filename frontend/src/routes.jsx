@@ -1,0 +1,170 @@
+import { lazy } from 'react';
+import { Navigate } from 'react-router';
+
+import Layout from './components/layout/Layout.jsx';
+import RequireAuth from './components/layout/RequireAuth.jsx';
+import AdminBoundary from './admin/AdminBoundary.jsx';
+import { INFO_PAGES } from './constants/index.js';
+import { DEFAULT_LANGUAGE } from './i18n/index.js';
+
+/**
+ * The storefront's routes, and the admin panel's.
+ *
+ * გვერდები იტვირთება მოთხოვნისამებრ (`React.lazy`) — Vite თითოეულს ცალკე
+ * chunk-ად ჭრის. Layout, Header, Footer და საერთო კომპონენტები რჩება მთავარ
+ * ბანდლში, რადგან ისინი ყველა მარშრუტზე საჭიროა.
+ *
+ * `<Suspense>` და მისი skeleton-fallback `components/layout/Layout.jsx`-შია.
+ */
+const Home = lazy(() => import('./pages/Home.jsx'));
+const Category = lazy(() => import('./pages/Category.jsx'));
+const ProductDetails = lazy(() => import('./pages/ProductDetails.jsx'));
+const SearchResults = lazy(() => import('./pages/SearchResults.jsx'));
+const Cart = lazy(() => import('./pages/Cart.jsx'));
+const Checkout = lazy(() => import('./pages/Checkout.jsx'));
+const CheckoutSuccess = lazy(() => import('./pages/CheckoutSuccess.jsx'));
+const Login = lazy(() => import('./pages/Login.jsx'));
+const Register = lazy(() => import('./pages/Register.jsx'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword.jsx'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'));
+const NotFound = lazy(() => import('./pages/NotFound.jsx'));
+const AccountLayout = lazy(() => import('./pages/Account/AccountLayout.jsx'));
+const Orders = lazy(() => import('./pages/Account/Orders.jsx'));
+const Profile = lazy(() => import('./pages/Account/Profile.jsx'));
+const Addresses = lazy(() => import('./pages/Account/Addresses.jsx'));
+const ChangePassword = lazy(() => import('./pages/Account/ChangePassword.jsx'));
+const DeliveryTerms = lazy(() => import('./pages/Info/DeliveryTerms.jsx'));
+const ReturnsWarranty = lazy(() => import('./pages/Info/ReturnsWarranty.jsx'));
+const Privacy = lazy(() => import('./pages/Info/Privacy.jsx'));
+const Faq = lazy(() => import('./pages/Info/Faq.jsx'));
+
+/**
+ * ადმინის მარშრუტები.
+ *
+ * ყველა `lazy()` განზრახ ამ ფუნქციის შიგნითაა და არა მოდულის დონეზე:
+ * `import.meta.env.VITE_API_MODE` ბილდის დროს კონსტანტად ჩანაცვლდება, ამიტომ
+ * mock-ბილდში ქვემოთა ტოტი მკვდარი კოდია და Rollup მასთან ერთად ადმინის
+ * `import()`-ებსაც აგდებს — მაღაზიის ბილდში ადმინის chunk-ები საერთოდ არ ჩნდება.
+ *
+ * ადმინი მხოლოდ `http` რეჟიმში მუშაობს: ის რეალურ მონაცემებს მართავს და mock-ზე
+ * მისი გაყალბება ვერაფერს დაამტკიცებდა მარაგისა და აუდიტის წესებზე.
+ */
+function adminChildren() {
+  if (import.meta.env?.VITE_API_MODE !== 'http') {
+    const AdminUnavailable = lazy(() => import('./admin/pages/AdminUnavailable.jsx'));
+    return [{ path: '*', element: <AdminUnavailable /> }];
+  }
+
+  const AdminLogin = lazy(() => import('./admin/pages/AdminLogin.jsx'));
+  const AdminLayout = lazy(() => import('./admin/AdminLayout.jsx'));
+  const AdminDashboard = lazy(() => import('./admin/pages/AdminDashboard.jsx'));
+  const RequireAdmin = lazy(() => import('./admin/RequireAdmin.jsx'));
+  const AdminSessionProvider = lazy(() => import('./admin/AdminSessionContext.jsx'));
+  const ProductList = lazy(() => import('./admin/pages/ProductList.jsx'));
+  const ProductForm = lazy(() => import('./admin/pages/ProductForm.jsx'));
+  const CategoryList = lazy(() => import('./admin/pages/CategoryList.jsx'));
+  const BrandList = lazy(() => import('./admin/pages/BrandList.jsx'));
+  const OrderList = lazy(() => import('./admin/pages/OrderList.jsx'));
+  const OrderDetail = lazy(() => import('./admin/pages/OrderDetail.jsx'));
+  const InventoryList = lazy(() => import('./admin/pages/InventoryList.jsx'));
+  const CustomerList = lazy(() => import('./admin/pages/CustomerList.jsx'));
+  const CustomerDetail = lazy(() => import('./admin/pages/CustomerDetail.jsx'));
+
+  return [
+    { path: 'login', element: <AdminLogin /> },
+    {
+      // ადმინობის შემოწმება ერთხელ ხდება აქ და ყველას უზიარდება. აქამდე მას
+      // სამი კომპონენტი ცალ-ცალკე აკეთებდა — სამი იდენტური მოთხოვნა ყოველ
+      // გახსნაზე, და პანელი სამივეს ელოდებოდა დახატვამდე.
+      element: <AdminSessionProvider />,
+      children: [
+        {
+          element: <RequireAdmin />,
+          children: [
+            {
+              element: <AdminLayout />,
+              children: [
+                { index: true, element: <AdminDashboard /> },
+                { path: 'products', element: <ProductList /> },
+                { path: 'products/new', element: <ProductForm /> },
+                { path: 'products/:id', element: <ProductForm /> },
+                { path: 'categories', element: <CategoryList /> },
+                { path: 'brands', element: <BrandList /> },
+                { path: 'orders', element: <OrderList /> },
+                { path: 'orders/:id', element: <OrderDetail /> },
+                { path: 'inventory', element: <InventoryList /> },
+                { path: 'customers', element: <CustomerList /> },
+                { path: 'customers/:id', element: <CustomerDetail /> },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ];
+}
+
+const adminRoutes = {
+  path: '/admin',
+  // საკუთარი Suspense — მაღაზიის Layout-ს ადმინი არ იყენებს
+  element: <AdminBoundary />,
+  children: adminChildren(),
+};
+
+/**
+ * მარშრუტების ერთადერთი აღწერა, ერთი ენისთვის.
+ * გვერდები lazy-ია; Layout და RequireAuth — არა (ყოველთვის საჭიროა).
+ *
+ * The same tree serves both languages: App.jsx mounts it under the language's
+ * basename, so `/en/cart` reaches the same Cart as `/cart`, and an unknown
+ * `/en/...` path reaches the same NotFound. Only the Georgian tree has the
+ * admin panel, which is Georgian only; `/en/admin` is a 404.
+ *
+ * A function so a test can build the tree for either language behind a memory
+ * router - the lazy pages and the admin routes are created once, above.
+ */
+export function appRoutes(language) {
+  const shop = {
+    path: '/',
+    element: <Layout />,
+    children: [
+      { index: true, element: <Home /> },
+      { path: 'category/:slug', element: <Category /> },
+      { path: 'product/:slug', element: <ProductDetails /> },
+      { path: 'search', element: <SearchResults /> },
+      { path: 'cart', element: <Cart /> },
+      { path: 'checkout', element: <Checkout /> },
+      { path: 'checkout/success/:id', element: <CheckoutSuccess /> },
+      { path: 'login', element: <Login /> },
+      { path: 'register', element: <Register /> },
+      { path: 'forgot-password', element: <ForgotPassword /> },
+      { path: 'reset-password', element: <ResetPassword /> },
+      { path: INFO_PAGES.delivery.path, element: <DeliveryTerms /> },
+      { path: INFO_PAGES.returns.path, element: <ReturnsWarranty /> },
+      { path: INFO_PAGES.privacy.path, element: <Privacy /> },
+      { path: INFO_PAGES.faq.path, element: <Faq /> },
+      {
+        path: 'account',
+        element: <RequireAuth />,
+        children: [
+          {
+            element: <AccountLayout />,
+            children: [
+              // Absolute, and still in the shopper's language: the router
+              // puts its basename in front of every absolute path.
+              { index: true, element: <Navigate to="/account/orders" replace /> },
+              { path: 'orders', element: <Orders /> },
+              { path: 'profile', element: <Profile /> },
+              { path: 'addresses', element: <Addresses /> },
+              { path: 'password', element: <ChangePassword /> },
+            ],
+          },
+        ],
+      },
+      { path: '*', element: <NotFound /> },
+    ],
+  };
+
+  // ადმინს მაღაზიის Layout (header/footer) არ სჭირდება — ცალკე ხეა
+  return language === DEFAULT_LANGUAGE ? [adminRoutes, shop] : [shop];
+}

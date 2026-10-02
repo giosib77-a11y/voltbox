@@ -6,12 +6,13 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { useToast } from '../../hooks/useToast.js';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle.js';
 import { MIN_PASSWORD_LENGTH, PASSWORD_FIELDS, validateField, validateForm } from '../../utils/validate.js';
+import { t } from '../../i18n/index.js';
 
 const EMPTY = { currentPassword: '', newPassword: '', confirmPassword: '' };
 
 // MOCK ONLY — replace with real auth API.
 export default function ChangePassword() {
-  useDocumentTitle('პაროლის შეცვლა');
+  useDocumentTitle(t('auth.changePassword'));
 
   const { changePassword } = useAuth();
   const toast = useToast();
@@ -47,9 +48,9 @@ export default function ChangePassword() {
       });
       setValues(EMPTY);
       setTouched({});
-      toast.success('პაროლი შეიცვალა');
+      toast.success(t('account.passwordChanged'));
     } catch (error) {
-      toast.error(error?.message || 'პაროლის შეცვლა ვერ მოხერხდა');
+      toast.error(error?.message || t('account.passwordChangeFailed'));
       if (error?.details?.currentPassword) {
         setErrors({ currentPassword: error.message });
       }
@@ -60,14 +61,14 @@ export default function ChangePassword() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="max-w-md rounded-card border border-ink-200 bg-surface p-5 sm:p-6">
-      <h2 className="text-base font-bold text-ink-900">პაროლის შეცვლა</h2>
+      <h2 className="text-base font-bold text-ink-900">{t('auth.changePassword')}</h2>
       <p className="mt-1 text-sm text-ink-600">
-        ახალი პაროლი უნდა შეიცავდეს მინიმუმ {MIN_PASSWORD_LENGTH} სიმბოლოს.
+        {t('account.passwordRule', { count: MIN_PASSWORD_LENGTH })}
       </p>
 
       <div className="mt-5 space-y-4">
         <Input
-          label="მიმდინარე პაროლი"
+          label={t('account.currentPassword')}
           type="password"
           required
           autoComplete="current-password"
@@ -77,7 +78,7 @@ export default function ChangePassword() {
           onBlur={() => handleBlur('currentPassword')}
         />
         <Input
-          label="ახალი პაროლი"
+          label={t('auth.newPassword')}
           type="password"
           required
           autoComplete="new-password"
@@ -87,7 +88,7 @@ export default function ChangePassword() {
           onBlur={() => handleBlur('newPassword')}
         />
         <Input
-          label="გაიმეორეთ ახალი პაროლი"
+          label={t('fields.repeatNewPassword')}
           type="password"
           required
           autoComplete="new-password"
@@ -100,7 +101,7 @@ export default function ChangePassword() {
 
       <Button type="submit" className="mt-6" loading={saving}>
         <KeyRound className="h-4 w-4" aria-hidden="true" />
-        პაროლის განახლება
+        {t('account.updatePassword')}
       </Button>
     </form>
   );

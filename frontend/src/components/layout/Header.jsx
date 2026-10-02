@@ -8,9 +8,11 @@ import UserMenu from './UserMenu.jsx';
 import CartBadge from '../cart/CartBadge.jsx';
 import SearchBar from '../search/SearchBar.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import LanguageSwitch from './LanguageSwitch.jsx';
 import { CONTACT, QUERY_KEYS } from '../../constants/index.js';
 import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { formatPrice } from '../../utils/format.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * Sticky header.
@@ -46,7 +48,7 @@ export default function Header({ categories = [] }) {
         <div className="container-page flex h-9 items-center justify-between text-xs text-fg-muted">
           <p className="flex items-center gap-1.5">
             <Truck className="h-3.5 w-3.5 text-primary-700" aria-hidden="true" />
-            {rules && <>უფასო მიწოდება {formatPrice(rules.freeFrom)}-ზე მეტ შეკვეთაზე</>}
+            {rules && t('header.freeDelivery', { price: formatPrice(rules.freeFrom) })}
           </p>
           <a href={CONTACT.phoneHref} className="flex items-center gap-1.5 transition-colors hover:text-fg">
             <Phone className="h-3.5 w-3.5" aria-hidden="true" />
@@ -60,7 +62,7 @@ export default function Header({ categories = [] }) {
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
-            aria-label="მენიუს გახსნა"
+            aria-label={t('header.openMenu')}
             className="-ml-2 flex h-10 w-10 items-center justify-center rounded-control text-ink-700 transition-colors hover:bg-ink-100 hover:text-fg md:hidden"
           >
             <Menu className="h-5 w-5" aria-hidden="true" />
@@ -77,6 +79,8 @@ export default function Header({ categories = [] }) {
           </div>
 
           <div className="ml-auto flex items-center gap-0.5 md:ml-0">
+            {/* On a phone the switch is in the menu: the bar has no room for it. */}
+            <LanguageSwitch className="hidden md:flex" />
             <ThemeToggle />
             <UserMenu />
             <CartBadge />

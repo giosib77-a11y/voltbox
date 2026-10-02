@@ -2,7 +2,7 @@ import { Clock, Search, X } from 'lucide-react';
 import ProductImage from '../common/ProductImage.jsx';
 import { Skeleton } from '../common/Skeleton.jsx';
 import { formatPrice } from '../../utils/format.js';
-import { TEXT } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * ძებნის ჩამოსაშლელი, ორ რეჟიმში:
@@ -36,7 +36,7 @@ export default function SearchSuggestions({
       <div className={panel}>
         <div className="flex items-center justify-between gap-2 border-b border-ink-200 px-3 py-2">
           <span className="text-2xs font-bold uppercase tracking-wide text-ink-500">
-            {TEXT.recentSearches}
+            {t('common.recentSearches')}
           </span>
           <button
             type="button"
@@ -44,11 +44,11 @@ export default function SearchSuggestions({
             onClick={onClearRecent}
             className="rounded-control px-1.5 py-0.5 text-xs font-semibold text-primary-700 hover:underline"
           >
-            {TEXT.clearAll}
+            {t('common.clearAll')}
           </button>
         </div>
 
-        <ul id={listId} role="listbox" aria-label={TEXT.recentSearches} className="p-1.5">
+        <ul id={listId} role="listbox" aria-label={t('common.recentSearches')} className="p-1.5">
           {recent.map((term, index) => (
             <li key={term} role="presentation" className="group/item relative">
               <button
@@ -69,7 +69,7 @@ export default function SearchSuggestions({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onForgetRecent(term)}
-                aria-label={`„${term}“ ისტორიიდან წაშლა`}
+                aria-label={t('search.forget', { term })}
                 className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-control text-ink-500 opacity-0 transition-opacity hover:bg-ink-100 focus-visible:opacity-100 group-hover/item:opacity-100"
               >
                 <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -104,13 +104,13 @@ export default function SearchSuggestions({
       {!loading && !hasResults && query && (
         <div className="px-4 py-6 text-center">
           <Search className="mx-auto mb-2 h-5 w-5 text-ink-500" aria-hidden="true" />
-          <p className="text-sm font-medium text-ink-800">„{query}“ — შედეგები ვერ მოიძებნა</p>
-          <p className="mt-1 text-xs text-ink-500">სცადეთ სხვა სიტყვა ან ბრენდის სახელი.</p>
+          <p className="text-sm font-medium text-ink-800">{t('search.noResultsFor', { query })}</p>
+          <p className="mt-1 text-xs text-ink-500">{t('search.tryAnother')}</p>
         </div>
       )}
 
       {!loading && hasResults && (
-        <ul id={listId} role="listbox" aria-label="ძებნის შედეგები" className="max-h-[60vh] overflow-y-auto p-1.5">
+        <ul id={listId} role="listbox" aria-label={t('search.results')} className="max-h-[60vh] overflow-y-auto p-1.5">
           {results.map((product, index) => (
             <li key={product.id} role="presentation">
               <button
@@ -153,7 +153,7 @@ export default function SearchSuggestions({
               }`}
             >
               <Search className="h-4 w-4" aria-hidden="true" />
-              {TEXT.viewAllResults}
+              {t('common.viewAllResults')}
             </button>
           </li>
         </ul>

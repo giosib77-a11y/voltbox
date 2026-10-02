@@ -3,7 +3,7 @@ import { Trash2 } from 'lucide-react';
 import ProductImage from '../common/ProductImage.jsx';
 import QuantityStepper from './QuantityStepper.jsx';
 import { formatPrice } from '../../utils/format.js';
-import { TEXT } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * კალათის ერთი ჩანაწერი.
@@ -34,10 +34,10 @@ export default function CartItem({ item, onQtyChange, onRemove }) {
               {snapshot.name}
             </Link>
             <p className="mt-1 text-xs text-ink-500">
-              {formatPrice(snapshot.price)} / ცალი
+              {t('cart.perUnit', { price: formatPrice(snapshot.price) })}
               {snapshot.stock > 0 && snapshot.stock <= 3 && (
                 <span className="ml-2 font-medium text-warning-600">
-                  მარაგშია {snapshot.stock}
+                  {t('cart.stockLeft', { count: snapshot.stock })}
                 </span>
               )}
             </p>
@@ -46,7 +46,7 @@ export default function CartItem({ item, onQtyChange, onRemove }) {
           <button
             type="button"
             onClick={() => onRemove(productId)}
-            aria-label={`${snapshot.name} — ${TEXT.remove}`}
+            aria-label={t('cart.removeItem', { name: snapshot.name })}
             className="-mr-1.5 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-danger-50 hover:text-danger-fg"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -60,7 +60,7 @@ export default function CartItem({ item, onQtyChange, onRemove }) {
             min={1}
             max={maxQty}
             onChange={(next) => onQtyChange(productId, next)}
-            label={`${snapshot.name} — ${TEXT.quantity}`}
+            label={t('cart.itemQuantity', { name: snapshot.name })}
           />
           <span className="text-base font-bold text-ink-900">{formatPrice(lineTotal)}</span>
         </div>

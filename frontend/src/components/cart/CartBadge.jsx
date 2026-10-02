@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { ShoppingCart } from 'lucide-react';
 import { useCart } from '../../hooks/useCart.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * კალათის აიქონი ბეჯით. რაოდენობის ცვლილებაზე ბეჯი „ხტება“.
@@ -25,7 +26,7 @@ export default function CartBadge({ className = '' }) {
   return (
     <Link
       to="/cart"
-      aria-label={itemsCount > 0 ? `კალათა — ${itemsCount} პროდუქტი` : 'კალათა ცარიელია'}
+      aria-label={itemsCount > 0 ? t('cart.badge', { count: itemsCount }) : t('cart.badgeEmpty')}
       className={`relative flex h-10 w-10 items-center justify-center rounded-control text-ink-700 transition-colors hover:bg-ink-100 hover:text-fg ${className}`}
     >
       <ShoppingCart className="h-5 w-5" aria-hidden="true" />

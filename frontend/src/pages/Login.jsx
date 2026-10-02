@@ -10,10 +10,12 @@ import { useEmailEnabled } from '../hooks/useEmailEnabled.js';
 import { LOGIN_FIELDS, validateField, validateForm } from '../utils/validate.js';
 import { QUERY_KEYS, SITE_NAME } from '../constants/index.js';
 import { getSafeRedirect } from '../utils/redirect.js';
+import { t } from '../i18n/index.js';
+import Rich from '../i18n/Rich.jsx';
 
 // MOCK ONLY — replace with real auth API.
 export default function Login() {
-  useDocumentTitle('შესვლა');
+  useDocumentTitle(t('nav.login'));
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -55,11 +57,11 @@ export default function Login() {
 
     try {
       await login(values);
-      toast.success('კეთილი იყოს თქვენი დაბრუნება!');
+      toast.success(t('auth.welcomeBack'));
       navigate(redirectTo, { replace: true });
     } catch (error) {
-      toast.error(error?.message || 'შესვლა ვერ მოხერხდა');
-      setErrors({ password: error?.message || 'ელ. ფოსტა ან პაროლი არასწორია' });
+      toast.error(error?.message || t('auth.loginFailed'));
+      setErrors({ password: error?.message || t('apiErrors.INVALID_CREDENTIALS') });
     }
   }
 
@@ -67,14 +69,14 @@ export default function Login() {
     <div className="container-page flex justify-center py-10 lg:py-16">
       <div className="w-full max-w-md">
         <div className="rounded-card border border-ink-200 bg-surface p-6 sm:p-8">
-          <h1 className="text-2xl font-bold tracking-tight text-ink-900">შესვლა</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink-900">{t('nav.login')}</h1>
           <p className="mt-1.5 text-sm text-ink-600">
-            შედით ანგარიშში შეკვეთების ისტორიისა და მისამართების სანახავად.
+            {t('auth.loginIntro')}
           </p>
 
           <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
             <Input
-              label="ელ. ფოსტა"
+              label={t('fields.email')}
               type="email"
               required
               leftIcon={Mail}
@@ -87,7 +89,7 @@ export default function Login() {
             />
 
             <Input
-              label="პაროლი"
+              label={t('fields.password')}
               type={showPassword ? 'text' : 'password'}
               required
               autoComplete="current-password"
@@ -99,7 +101,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? 'პაროლის დამალვა' : 'პაროლის ჩვენება'}
+                  aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   className="flex h-8 w-8 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100"
                 >
                   {showPassword ? (
@@ -117,31 +119,30 @@ export default function Login() {
                   to="/forgot-password"
                   className="font-medium text-primary-700 underline-offset-4 hover:underline"
                 >
-                  დაგავიწყდათ პაროლი?
+                  {t('auth.forgot')}
                 </Link>
               </p>
             )}
 
             <Button type="submit" size="lg" fullWidth loading={pending}>
               <LogIn className="h-4 w-4" aria-hidden="true" />
-              შესვლა
+              {t('nav.login')}
             </Button>
           </form>
 
           <p className="mt-5 text-center text-sm text-ink-600">
-            არ გაქვთ ანგარიში?{' '}
+            {t('auth.noAccount')}{' '}
             <Link
               to={`/register${redirectTo ? `?${QUERY_KEYS.redirect}=${encodeURIComponent(redirectTo)}` : ''}`}
               className="font-semibold text-primary-700 underline-offset-4 hover:underline"
             >
-              რეგისტრაცია
+              {t('auth.register')}
             </Link>
           </p>
         </div>
 
         <p className="mt-4 rounded-control bg-ink-100 px-4 py-3 text-center text-xs leading-relaxed text-ink-600">
-          <strong>დემო რეჟიმი:</strong> {SITE_NAME}-ის ავტორიზაცია mock-ია და მონაცემები ინახება
-          მხოლოდ ამ ბრაუზერში. შეკვეთისთვის ანგარიში საჭირო არ არის.
+          <Rich k="auth.demoNote" values={{ label: <strong>{t('auth.demoLabel')}</strong>, site: SITE_NAME }} />
         </p>
       </div>
     </div>

@@ -10,7 +10,9 @@
  * "სმარტფონი" names the product. The singular stays: "ტელეფონი", "ტელეფონით",
  * "ტელეფონის ნომერი" are the contact number in the forms and on the info pages.
  *
- * Notes: reads the source, so a sentence added later is caught too. Skipped:
+ * Notes: reads the source and the two translation files, where the copy
+ * lives since the English version - so a sentence added later is caught too,
+ * in either language ("phones", "smartphone" in English). Skipped:
  * the admin panel, which names whatever categories exist; `data/`, the
  * catalogue the mock API serves in development - a fake backend's records, not
  * the shop's copy; and tests. og-image.png carries the same list drawn as
@@ -22,7 +24,7 @@ import { join, relative } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { SITE_DESCRIPTION } from './constants/index.js';
+import ka from './i18n/ka.json';
 
 // `process.cwd()` rather than import.meta.url: under jsdom that is not a
 // file: URL. Vitest runs from the frontend root.
@@ -32,6 +34,8 @@ const SRC = join(ROOT, 'src');
 const SKIP = ['admin', 'data'];
 
 const PHONES_AS_PRODUCT_LINE = /ტელეფონებ|სმარტფონ/;
+// English only where English copy is: in source, "Smartphone" is an icon's name.
+const PHONES_IN_ENGLISH = /phones|smartphone/i;
 
 function sourceFiles(dir) {
   return readdirSync(dir).flatMap((entry) => {
@@ -41,7 +45,12 @@ function sourceFiles(dir) {
   });
 }
 
-const files = [...sourceFiles(SRC), join(ROOT, 'index.html')];
+const files = [
+  ...sourceFiles(SRC),
+  join(ROOT, 'index.html'),
+  join(SRC, 'i18n', 'ka.json'),
+  join(SRC, 'i18n', 'en.json'),
+];
 
 describe('what the storefront says it sells', () => {
   it('finds the files to check', () => {
@@ -56,7 +65,10 @@ describe('what the storefront says it sells', () => {
       readFileSync(file, 'utf8')
         .split('\n')
         .map((line, i) => [line, i])
-        .filter(([line]) => PHONES_AS_PRODUCT_LINE.test(line))
+        .filter(
+          ([line]) =>
+            PHONES_AS_PRODUCT_LINE.test(line) || (file.endsWith('en.json') && PHONES_IN_ENGLISH.test(line)),
+        )
         .map(([line, i]) => `${relative(ROOT, file)}:${i + 1}: ${line.trim()}`),
     );
     expect(found).toEqual([]);
@@ -64,7 +76,7 @@ describe('what the storefront says it sells', () => {
 
   it('names what the shop does sell', () => {
     for (const line of ['კაბელები', 'დამტენები', 'Power Bank', 'ყურსასმენები', 'აქსესუარები']) {
-      expect(SITE_DESCRIPTION).toContain(line);
+      expect(ka.site.description).toContain(line);
     }
   });
 });

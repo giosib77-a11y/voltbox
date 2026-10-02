@@ -12,6 +12,11 @@ idea what is in the catalogue. A sitemap generated at build time is a snapshot
 that goes stale the first time a product is added, and the whole point of the
 file is to be current.
 
+Every page is listed in both languages - Georgian at its own path, English
+under /en - and each entry names both versions, with the Georgian as
+x-default: the form Google reads hreflang from in a sitemap. The paths must
+agree with the storefront's `localizedPath` (frontend/src/i18n/index.js).
+
 Notes: the shop is a separate host from this API, so every URL is built from
 SITE_URL rather than from the request. Serving this file under the shop's own
 domain - a rewrite on the static host - is what makes a crawler trust it
@@ -50,23 +55,54 @@ CATEGORY_PRIORITY = "0.8"
 PRODUCT_PRIORITY = "0.7"
 
 
+#: Each language and what it puts in front of a path. Georgian, the default,
+#: keeps the bare path - every link shared before English existed still works.
+LANGUAGES = (("ka", ""), ("en", "/en"))
+DEFAULT_LANGUAGE = "ka"
+
+
 def _url(path: str) -> str:
     return f"{settings.site_url.rstrip('/')}{path}"
 
 
-def _entry(loc: str, changefreq: str, priority: str, lastmod: datetime | None = None) -> str:
-    parts = [f"    <loc>{escape(loc)}</loc>"]
-    if lastmod is not None:
-        parts.append(f"    <lastmod>{lastmod.date().isoformat()}</lastmod>")
-    parts.append(f"    <changefreq>{changefreq}</changefreq>")
-    parts.append(f"    <priority>{priority}</priority>")
-    body = "\n".join(parts)
-    return f"  <url>\n{body}\n  </url>"
+def _localized(path: str, prefix: str) -> str:
+    """`/cart` under `/en` is `/en/cart`; the home page is `/en`, not `/en/`."""
+    if not prefix:
+        return path
+    return prefix if path == "/" else f"{prefix}{path}"
+
+
+def _entries(
+    path: str, changefreq: str, priority: str, lastmod: datetime | None = None
+) -> list[str]:
+    """One <url> per language, each naming every language's version of the page."""
+    versions = {language: _url(_localized(path, prefix)) for language, prefix in LANGUAGES}
+    alternates = [
+        f'    <xhtml:link rel="alternate" hreflang="{language}" href="{escape(href)}"/>'
+        for language, href in versions.items()
+    ]
+    alternates.append(
+        '    <xhtml:link rel="alternate" hreflang="x-default" '
+        f'href="{escape(versions[DEFAULT_LANGUAGE])}"/>'
+    )
+
+    entries = []
+    for loc in versions.values():
+        parts = [f"    <loc>{escape(loc)}</loc>", *alternates]
+        if lastmod is not None:
+            parts.append(f"    <lastmod>{lastmod.date().isoformat()}</lastmod>")
+        parts.append(f"    <changefreq>{changefreq}</changefreq>")
+        parts.append(f"    <priority>{priority}</priority>")
+        body = "\n".join(parts)
+        entries.append(f"  <url>\n{body}\n  </url>")
+    return entries
 
 
 async def build_sitemap(db: AsyncSession) -> str:
     """The document, as text. Separate from the route so a test can read it."""
-    entries = [_entry(_url(path), freq, priority) for path, freq, priority in FIXED_PAGES]
+    entries = [
+        entry for path, freq, priority in FIXED_PAGES for entry in _entries(path, freq, priority)
+    ]
 
     categories = (
         await db.scalars(select(Category).order_by(Category.position, Category.slug))
@@ -82,19 +118,18 @@ async def build_sitemap(db: AsyncSession) -> str:
         )
     ).all()
 
-    entries += [
-        _entry(_url(f"/category/{category.slug}"), "weekly", CATEGORY_PRIORITY)
-        for category in categories
-    ]
-    entries += [
-        _entry(_url(f"/product/{product.slug}"), "weekly", PRODUCT_PRIORITY, product.updated_at)
-        for product in products
-    ]
+    for category in categories:
+        entries += _entries(f"/category/{category.slug}", "weekly", CATEGORY_PRIORITY)
+    for product in products:
+        entries += _entries(
+            f"/product/{product.slug}", "weekly", PRODUCT_PRIORITY, product.updated_at
+        )
 
     joined = "\n".join(entries)
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'
+        ' xmlns:xhtml="http://www.w3.org/1999/xhtml">\n'
         f"{joined}\n"
         "</urlset>\n"
     )

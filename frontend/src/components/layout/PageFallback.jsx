@@ -1,4 +1,5 @@
 import { Skeleton, ProductGridSkeleton } from '../common/Skeleton.jsx';
+import { t } from '../../i18n/index.js';
 
 /**
  * `<Suspense>`-ის fallback მარშრუტებს შორის გადასვლისას.
@@ -9,13 +10,13 @@ import { Skeleton, ProductGridSkeleton } from '../common/Skeleton.jsx';
  */
 export default function PageFallback() {
   return (
-    <div className="container-page py-5 lg:py-7" role="status" aria-label="იტვირთება">
+    <div className="container-page py-5 lg:py-7" role="status" aria-label={t('layout.loadingLabel')}>
       <Skeleton className="h-4 w-52" />
       <Skeleton className="mt-4 h-8 w-72" />
       <div className="mt-7">
         <ProductGridSkeleton count={8} />
       </div>
-      <span className="sr-only">გვერდი იტვირთება…</span>
+      <span className="sr-only">{t('layout.pageLoading')}</span>
     </div>
   );
 }

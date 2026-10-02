@@ -1,15 +1,14 @@
 import { Link } from 'react-router';
 import { Clock, Mail, MapPin, Phone, Zap } from 'lucide-react';
-import { CONTACT, INFO_PAGES, SITE_DESCRIPTION, SITE_NAME } from '../../constants/index.js';
+import { CONTACT, INFO_PAGES, SITE_NAME } from '../../constants/index.js';
 import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { formatPrice } from '../../utils/format.js';
 import { rootCategories } from '../../utils/categoryTree.js';
+import { t } from '../../i18n/index.js';
 
 /** საიტის ქვედა კოლონტიტული. */
 
-const INFO_LINKS = [INFO_PAGES.delivery, INFO_PAGES.returns, INFO_PAGES.privacy, INFO_PAGES.faq].map(
-  (page) => ({ label: page.title, to: page.path }),
-);
+const INFO_LINKS = [INFO_PAGES.delivery, INFO_PAGES.returns, INFO_PAGES.privacy, INFO_PAGES.faq];
 
 export default function Footer({ categories = [] }) {
   const year = new Date().getFullYear();
@@ -25,16 +24,16 @@ export default function Footer({ categories = [] }) {
             </span>
             <span className="text-lg font-bold tracking-tight text-ink-900">{SITE_NAME}</span>
           </div>
-          <p className="mt-3 max-w-xs text-sm leading-relaxed text-ink-600">{SITE_DESCRIPTION}</p>
+          <p className="mt-3 max-w-xs text-sm leading-relaxed text-ink-600">{t('site.description')}</p>
           {rules && (
             <p className="mt-4 rounded-control bg-primary-50 px-3 py-2 text-xs font-medium text-primary-800">
-              უფასო მიწოდება {formatPrice(rules.freeFrom)}-დან
+              {t('footer.freeDelivery', { price: formatPrice(rules.freeFrom) })}
             </p>
           )}
         </div>
 
-        <nav aria-label="კატეგორიები (ქვედა მენიუ)">
-          <h2 className="text-sm font-bold text-ink-900">კატეგორიები</h2>
+        <nav aria-label={t('footer.categoriesNav')}>
+          <h2 className="text-sm font-bold text-ink-900">{t('footer.categories')}</h2>
           <ul className="mt-3 space-y-2">
             {rootCategories(categories).map((category) => (
               <li key={category.id}>
@@ -49,16 +48,16 @@ export default function Footer({ categories = [] }) {
           </ul>
         </nav>
 
-        <nav aria-label="ინფორმაცია">
-          <h2 className="text-sm font-bold text-ink-900">ინფორმაცია</h2>
+        <nav aria-label={t('footer.info')}>
+          <h2 className="text-sm font-bold text-ink-900">{t('footer.info')}</h2>
           <ul className="mt-3 space-y-2">
-            {INFO_LINKS.map((link) => (
-              <li key={link.label}>
+            {INFO_LINKS.map((page) => (
+              <li key={page.path}>
                 <Link
-                  to={link.to}
+                  to={page.path}
                   className="text-sm text-ink-600 transition-colors hover:text-primary-700"
                 >
-                  {link.label}
+                  {t(page.titleKey)}
                 </Link>
               </li>
             ))}
@@ -66,7 +65,7 @@ export default function Footer({ categories = [] }) {
         </nav>
 
         <div>
-          <h2 className="text-sm font-bold text-ink-900">კონტაქტი</h2>
+          <h2 className="text-sm font-bold text-ink-900">{t('footer.contact')}</h2>
           <ul className="mt-3 space-y-2.5 text-sm text-ink-600">
             <li>
               <a href={CONTACT.phoneHref} className="flex items-center gap-2 hover:text-primary-700">
@@ -82,11 +81,11 @@ export default function Footer({ categories = [] }) {
             </li>
             <li className="flex items-start gap-2">
               <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" aria-hidden="true" />
-              {CONTACT.address}
+              {t('contact.address')}
             </li>
             <li className="flex items-start gap-2">
               <Clock className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" aria-hidden="true" />
-              {CONTACT.workHours}
+              {t('contact.workHours')}
             </li>
           </ul>
         </div>
@@ -95,9 +94,9 @@ export default function Footer({ categories = [] }) {
       <div className="border-t border-ink-100">
         <div className="container-page flex flex-col items-center justify-between gap-2 py-5 text-xs text-ink-500 sm:flex-row">
           <p>
-            © {year} {SITE_NAME}. ყველა უფლება დაცულია.
+            © {year} {SITE_NAME}. {t('footer.rights')}
           </p>
-          <p>დემო პროექტი — მონაცემები mock წყაროდან.</p>
+          <p>{t('footer.demo')}</p>
         </div>
       </div>
     </footer>

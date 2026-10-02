@@ -54,14 +54,18 @@ export default [
   },
 
   {
-    // These six export a component together with what belongs to it: each
+    // These export a component together with what belongs to it: each
     // context its Provider and its hook (and the cart its reducer), the two
     // status files their badges with the labels and the rule the badges render.
     // Splitting a hook from its Provider means exporting the raw Context from a
     // third module, which is what the hook exists to hide. The price is dev
     // only: an edit to one of these files reloads the page instead of
     // hot-swapping it. Listed by name, so a new file still gets the warning.
+    //
+    // routes.jsx is the route table: the lazy pages it declares are what it
+    // exists to export, through a function a test can call per language.
     files: [
+      'src/routes.jsx',
       'src/admin/AdminSessionContext.jsx',
       'src/admin/components/StatusBadge.jsx',
       'src/admin/statuses.jsx',

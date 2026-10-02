@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 
-import { HOME_SECTION_TITLES } from '../constants/index.js';
+import { t } from '../i18n/index.js';
 
 import Home from './Home.jsx';
 import * as api from '../services/api.js';
@@ -80,7 +80,7 @@ describe('Home', () => {
   it('shows root categories in the grid and no subcategory', async () => {
     mount();
 
-    const heading = await screen.findByRole('heading', { name: HOME_SECTION_TITLES.popularCategories });
+    const heading = await screen.findByRole('heading', { name: t('home.popularCategories') });
     const grid = within(heading.closest('section'));
     expect(await grid.findByRole('link', { name: /ტელეფონები/ })).toHaveAttribute(
       'href',
@@ -128,7 +128,7 @@ describe('Home', () => {
     });
     mount();
 
-    const section = (await screen.findByRole('heading', { name: HOME_SECTION_TITLES.latest })).closest('section');
+    const section = (await screen.findByRole('heading', { name: t('home.latest') })).closest('section');
     expect(within(section).getByRole('link', { name: /Anker Nano 20W/ })).toHaveAttribute(
       'href',
       '/product/anker-nano'
@@ -147,10 +147,10 @@ describe('Home', () => {
     mount();
 
     // Loaded: the category grid's skeletons are gone and the page is still there
-    await screen.findByRole('heading', { name: HOME_SECTION_TITLES.popularCategories });
+    await screen.findByRole('heading', { name: t('home.popularCategories') });
     await waitFor(() => expect(document.querySelector('.animate-shimmer')).toBeNull());
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: HOME_SECTION_TITLES.latest })).toBeNull();
+    expect(screen.queryByRole('heading', { name: t('home.latest') })).toBeNull();
     expect(document.querySelector('a[href^="/product/"]')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
   });

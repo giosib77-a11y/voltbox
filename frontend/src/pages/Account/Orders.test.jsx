@@ -14,7 +14,8 @@ import { MemoryRouter } from 'react-router';
 
 import Orders from './Orders.jsx';
 import * as api from '../../services/api.js';
-import { ORDER_STATUS_LABELS } from '../../constants/index.js';
+import { ORDER_STATUS_TONES } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
 
 const order = (status) => ({
   orderNumber: `VB-20260912-${status.length}000`,
@@ -44,13 +45,13 @@ beforeEach(() => {
 });
 
 describe('the order list', () => {
-  it.each(Object.keys(ORDER_STATUS_LABELS))('names the %s status in the customer\'s words', async (
+  it.each(Object.keys(ORDER_STATUS_TONES))('names the %s status in the customer\'s words', async (
     status,
   ) => {
     vi.spyOn(api, 'getOrders').mockResolvedValue([order(status)]);
     renderOrders();
 
-    expect(await screen.findByText(ORDER_STATUS_LABELS[status].label)).toBeInTheDocument();
+    expect(await screen.findByText(t(`orderStatus.${status}`))).toBeInTheDocument();
   });
 
   it('never tells a cancelled order it is being prepared', async () => {

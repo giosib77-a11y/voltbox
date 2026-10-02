@@ -3,7 +3,7 @@ import FilterGroup from './FilterGroup.jsx';
 import PriceRangeSlider from './PriceRangeSlider.jsx';
 import Button from '../common/Button.jsx';
 import { countActiveFilters, toggleFilterValue } from '../../utils/filter.js';
-import { TEXT } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * გენერიკული ფილტრების პანელი.
@@ -47,11 +47,11 @@ export default function FilterSidebar({
       <div className="mb-1 flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-ink-900">
           <SlidersHorizontal className="h-4 w-4 text-ink-500" aria-hidden="true" />
-          {TEXT.filters}
+          {t('common.filters')}
         </h2>
         {activeCount > 0 && (
           <Button variant="link" size="xs" onClick={onClear} className="px-0">
-            {TEXT.clearAll}
+            {t('common.clearAll')}
           </Button>
         )}
       </div>

@@ -6,7 +6,7 @@
  * follow the email switch (the FAQ's forgotten-password answer, Resend in the
  * privacy list); that no page shows a placeholder from its source text; and
  * that a fact listed in docs/info-pages-todo.md stays hidden until it is
- * written into SHOP_FACTS, then appears; the delivery time is SHIPPING's, the
+ * written into SHOP_FACTS, then appears; the delivery time is `shipping.etaDays`'s, in Georgian, the
  * one the cart shows; and that what the privacy page says is stored, sent to
  * Telegram and asked at registration is read from the code that does it.
  * Notes: the API is the real http client over a stubbed fetch, so a fixture is
@@ -23,7 +23,8 @@ import DeliveryTerms from './DeliveryTerms.jsx';
 import ReturnsWarranty from './ReturnsWarranty.jsx';
 import Privacy from './Privacy.jsx';
 import Faq from './Faq.jsx';
-import { CONTACT, SHIPPING, SHOP_FACTS, STORAGE_KEYS } from '../../constants/index.js';
+import { CONTACT, SHOP_FACTS, STORAGE_KEYS } from '../../constants/index.js';
+import { tKa } from '../../i18n/index.js';
 import { forgetDeliveryRules, loadDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { createOrder, register } from '../../services/httpApi.js';
 
@@ -229,9 +230,9 @@ describe('facts the owner has not supplied yet', () => {
 
 describe('delivery time', () => {
   it.each([
-    ['delivery', DeliveryTerms, `შეკვეთის მიტანას სჭირდება ${SHIPPING.etaDays}.`],
-    ['faq', Faq, `${SHIPPING.etaDays}.`],
-  ])('the %s page states SHIPPING.etaDays, as the cart does', async (_, Page, sentence) => {
+    ['delivery', DeliveryTerms, `შეკვეთის მიტანას სჭირდება ${tKa('shipping.etaDays')}.`],
+    ['faq', Faq, `${tKa('shipping.etaDays')}.`],
+  ])('the %s page states shipping.etaDays, as the cart does', async (_, Page, sentence) => {
     answer(rules());
     await mount(Page);
 

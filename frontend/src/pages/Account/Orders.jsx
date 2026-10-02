@@ -10,11 +10,12 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle.js';
 import * as api from '../../services/api.js';
 import { formatDateTime, formatPrice } from '../../utils/format.js';
 import { orderAmounts } from '../../utils/pricing.js';
-import { ORDER_STATUS_LABELS, TEXT, UNKNOWN_ORDER_STATUS } from '../../constants/index.js';
+import { orderStatus } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
 
 
 export default function Orders() {
-  useDocumentTitle('ჩემი შეკვეთები');
+  useDocumentTitle(t('nav.orders'));
   const { data: orders, loading, error, reload } = useAsync(() => api.getOrders(), [], {
     initialData: [],
   });
@@ -35,9 +36,9 @@ export default function Orders() {
     return (
       <EmptyState
         icon={Package}
-        title="შეკვეთები ჯერ არ გაქვთ"
-        description="როგორც კი პირველ შეკვეთას გააფორმებთ, ის აქ გამოჩნდება."
-        actionLabel={TEXT.backToShop}
+        title={t('account.noOrders')}
+        description={t('account.noOrdersText')}
+        actionLabel={t('common.backToShop')}
         actionTo="/"
       />
     );
@@ -46,7 +47,7 @@ export default function Orders() {
   return (
     <ul className="space-y-4">
       {orders.map((order) => {
-        const status = ORDER_STATUS_LABELS[order.status] || UNKNOWN_ORDER_STATUS;
+        const status = orderStatus(order.status, t);
         const amounts = orderAmounts(order.totals);
 
         return (
@@ -91,8 +92,10 @@ export default function Orders() {
 
             {amounts.shipping !== null && (
               <p className="border-t border-ink-100 px-4 py-2.5 text-xs text-ink-600">
-                {TEXT.subtotal}: {formatPrice(amounts.subtotal)} · {TEXT.shipping}:{' '}
-                {amounts.shipping === 0 ? TEXT.free : formatPrice(amounts.shipping)}
+                {t('account.orderAmounts', {
+                  subtotal: formatPrice(amounts.subtotal),
+                  shipping: amounts.shipping === 0 ? t('common.free') : formatPrice(amounts.shipping),
+                })}
               </p>
             )}
 
@@ -104,7 +107,7 @@ export default function Orders() {
                 to={`/checkout/success/${order.orderNumber}`}
                 className="font-semibold text-primary-700 underline-offset-4 hover:underline"
               >
-                დეტალების ნახვა
+                {t('account.viewDetails')}
               </Link>
             </div>
           </li>

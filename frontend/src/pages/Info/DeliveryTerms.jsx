@@ -1,4 +1,5 @@
-import { INFO_PAGES, SHIPPING } from '../../constants/index.js';
+import { INFO_PAGES } from '../../constants/index.js';
+import { tKa } from '../../i18n/index.js';
 import InfoPage, { InfoSection } from './InfoPage.jsx';
 import DeliveryTable from './DeliveryTable.jsx';
 
@@ -22,7 +23,7 @@ export default function DeliveryTerms() {
 
       <InfoSection title="მიწოდების ვადა">
         <p>
-          შეკვეთის მიტანას სჭირდება {SHIPPING.etaDays}. მიწოდებას ახორციელებს საკურიერო
+          შეკვეთის მიტანას სჭირდება {tKa('shipping.etaDays')}. მიწოდებას ახორციელებს საკურიერო
           სერვისი.
         </p>
       </InfoSection>

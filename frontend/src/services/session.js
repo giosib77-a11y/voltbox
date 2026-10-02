@@ -15,6 +15,7 @@
 
 import { STORAGE_KEYS } from '../constants/index.js';
 import { readJSON, writeJSON } from '../utils/storage.js';
+import { languageFromPath, localizedPath, stripLanguage } from '../i18n/index.js';
 
 const BASE_URL = (import.meta.env?.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
@@ -106,15 +107,29 @@ export function isAuthPath(path) {
  */
 function defaultOnSessionLost() {
   if (typeof window === 'undefined') return;
-  const { pathname, search } = window.location;
-  const here = `${pathname}${search}`;
-  const isAdmin = pathname.startsWith('/admin');
-  const target = isAdmin
-    ? `/admin/login?next=${encodeURIComponent(here)}`
-    : `/login?redirect=${encodeURIComponent(here)}`;
-  // Already on the login page — navigating again would loop.
-  if (pathname === '/admin/login' || pathname === '/login') return;
-  window.location.assign(target);
+  const target = loginRedirectTarget(window.location.pathname, window.location.search);
+  if (target) window.location.assign(target);
+}
+
+/**
+ * Where a lost session sends the user from `pathname`, or null when they are
+ * already on that login page - navigating again would loop.
+ *
+ * The shop's login page is in the language the shopper is in, and the return
+ * path is the one that language's router reads - without /en, which the
+ * router puts back. Otherwise an English shopper lands on the Georgian login
+ * and comes back to /en/en/... - a 404.
+ */
+export function loginRedirectTarget(pathname, search = '') {
+  if (pathname.startsWith('/admin')) {
+    return pathname === '/admin/login'
+      ? null
+      : `/admin/login?next=${encodeURIComponent(`${pathname}${search}`)}`;
+  }
+  const routerPath = stripLanguage(pathname);
+  if (routerPath === '/login') return null;
+  const login = localizedPath('/login', languageFromPath(pathname));
+  return `${login}?redirect=${encodeURIComponent(`${routerPath}${search}`)}`;
 }
 
 let onSessionLost = defaultOnSessionLost;

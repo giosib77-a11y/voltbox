@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 import { useCart } from '../hooks/useCart.js';
 import { useToast } from '../hooks/useToast.js';
+import { t } from '../i18n/index.js';
 
 /**
  * Ties the cart to whoever is signed in.
@@ -46,7 +47,7 @@ export default function CartAccountSync() {
       // Kept, because nothing confirmed the account has it. Worth a line: the
       // basket is still on screen after signing out, which otherwise reads as
       // a bug, and it is no longer waiting on another device.
-      toast.info('კალათა ამ ბრაუზერში დარჩა — ანგარიშზე შენახვა ვერ მოხერხდა');
+      toast.info(t('cart.keptInBrowser'));
     }
   }, [user, initializing, mergeWithAccount, detachFromAccount, toast]);
 

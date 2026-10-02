@@ -9,12 +9,13 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import { MIN_PASSWORD_LENGTH, REGISTER_FIELDS, validateField, validateForm } from '../utils/validate.js';
 import { QUERY_KEYS } from '../constants/index.js';
 import { getSafeRedirect } from '../utils/redirect.js';
+import { t } from '../i18n/index.js';
 
 const EMPTY = { firstName: '', lastName: '', email: '', password: '', confirmPassword: '' };
 
 // MOCK ONLY — replace with real auth API.
 export default function Register() {
-  useDocumentTitle('რეგისტრაცია');
+  useDocumentTitle(t('auth.register'));
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -55,10 +56,10 @@ export default function Register() {
 
     try {
       await register(values);
-      toast.success('ანგარიში წარმატებით შეიქმნა');
+      toast.success(t('auth.registered'));
       navigate(redirectTo, { replace: true });
     } catch (error) {
-      toast.error(error?.message || 'რეგისტრაცია ვერ მოხერხდა');
+      toast.error(error?.message || t('auth.registerFailed'));
       if (error?.details?.email) setErrors((c) => ({ ...c, email: error.message }));
     }
   }
@@ -67,7 +68,7 @@ export default function Register() {
     <button
       type="button"
       onClick={() => setShowPassword((v) => !v)}
-      aria-label={showPassword ? 'პაროლის დამალვა' : 'პაროლის ჩვენება'}
+      aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
       className="flex h-8 w-8 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100"
     >
       {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
@@ -78,15 +79,15 @@ export default function Register() {
     <div className="container-page flex justify-center py-10 lg:py-16">
       <div className="w-full max-w-md">
         <div className="rounded-card border border-ink-200 bg-surface p-6 sm:p-8">
-          <h1 className="text-2xl font-bold tracking-tight text-ink-900">რეგისტრაცია</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink-900">{t('auth.register')}</h1>
           <p className="mt-1.5 text-sm text-ink-600">
-            შექმენით ანგარიში — შეკვეთების ისტორია და მისამართები ერთ ადგილას იქნება.
+            {t('auth.registerIntro')}
           </p>
 
           <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
-                label="სახელი"
+                label={t('fields.firstName')}
                 required
                 autoComplete="given-name"
                 value={values.firstName}
@@ -95,7 +96,7 @@ export default function Register() {
                 onBlur={() => handleBlur('firstName')}
               />
               <Input
-                label="გვარი"
+                label={t('fields.lastName')}
                 required
                 autoComplete="family-name"
                 value={values.lastName}
@@ -106,7 +107,7 @@ export default function Register() {
             </div>
 
             <Input
-              label="ელ. ფოსტა"
+              label={t('fields.email')}
               type="email"
               required
               leftIcon={Mail}
@@ -119,11 +120,11 @@ export default function Register() {
             />
 
             <Input
-              label="პაროლი"
+              label={t('fields.password')}
               type={showPassword ? 'text' : 'password'}
               required
               autoComplete="new-password"
-              hint={`მინიმუმ ${MIN_PASSWORD_LENGTH} სიმბოლო`}
+              hint={t('auth.minChars', { count: MIN_PASSWORD_LENGTH })}
               value={values.password}
               error={touched.password ? errors.password : ''}
               onChange={(e) => handleChange('password', e.target.value)}
@@ -132,7 +133,7 @@ export default function Register() {
             />
 
             <Input
-              label="გაიმეორეთ პაროლი"
+              label={t('fields.repeatPassword')}
               type={showPassword ? 'text' : 'password'}
               required
               autoComplete="new-password"
@@ -144,17 +145,17 @@ export default function Register() {
 
             <Button type="submit" size="lg" fullWidth loading={pending}>
               <UserPlus className="h-4 w-4" aria-hidden="true" />
-              ანგარიშის შექმნა
+              {t('auth.createAccount')}
             </Button>
           </form>
 
           <p className="mt-5 text-center text-sm text-ink-600">
-            უკვე გაქვთ ანგარიში?{' '}
+            {t('auth.haveAccount')}{' '}
             <Link
               to={`/login?${QUERY_KEYS.redirect}=${encodeURIComponent(redirectTo)}`}
               className="font-semibold text-primary-700 underline-offset-4 hover:underline"
             >
-              შესვლა
+              {t('nav.login')}
             </Link>
           </p>
         </div>

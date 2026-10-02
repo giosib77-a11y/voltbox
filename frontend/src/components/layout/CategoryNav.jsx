@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, LayoutGrid } from 'lucide-react';
 import CategoryIcon from '../common/CategoryIcon.jsx';
 import { useMediaQuery } from '../../hooks/useMediaQuery.js';
 import { categoryTree } from '../../utils/categoryTree.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * კატეგორიების ვერტიკალური მენიუ (desktop, md+) — თითო ხაზი თითო ფესვზე, მისი
@@ -80,7 +81,7 @@ export default function CategoryNav({ categories, className = '' }) {
   return (
     <nav
       ref={navRef}
-      aria-label="კატეგორიები"
+      aria-label={t('nav.categories')}
       className={`relative ${className}`}
       onPointerMove={(event) => {
         lastX.current = event.clientX;
@@ -183,7 +184,7 @@ function CategoryNavItem({ category, canHover, open, setActiveId, close, aim }) 
           type="button"
           onClick={() => setOpen(!open)}
           {...disclosure}
-          aria-label={`${category.name} — ქვეკატეგორიები`}
+          aria-label={t('nav.subcategories', { name: category.name })}
           className={`flex w-9 items-center justify-center self-stretch transition-colors hover:bg-ink-100 hover:text-fg ${
             open ? 'bg-ink-100 text-fg' : 'text-fg-muted'
           }`}
@@ -283,7 +284,7 @@ export function CategoryMenuButton({ categories }) {
         }`}
       >
         <LayoutGrid className="h-4 w-4" aria-hidden="true" />
-        კატეგორიები
+        {t('nav.categories')}
         <ChevronDown
           className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`}
           aria-hidden="true"

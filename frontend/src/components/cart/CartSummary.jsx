@@ -1,7 +1,8 @@
 import { Truck } from 'lucide-react';
 import Button from '../common/Button.jsx';
 import { formatPrice } from '../../utils/format.js';
-import { SHIPPING, TEXT } from '../../constants/index.js';
+import { t } from '../../i18n/index.js';
+import Rich from '../../i18n/Rich.jsx';
 
 /**
  * შეკვეთის შეჯამება. ციფრები გვერდიდან მოდის (utils/pricing.js + `GET /delivery`) —
@@ -20,7 +21,7 @@ export default function CartSummary({
   freeFrom = null,
   itemsCount = 0,
   savings = 0,
-  actionLabel = TEXT.checkout,
+  actionLabel = t('common.checkout'),
   actionTo = '',
   onAction = null,
   actionDisabled = false,
@@ -32,22 +33,22 @@ export default function CartSummary({
 
   return (
     <div className={`rounded-card border border-ink-200 bg-surface p-5 ${className}`}>
-      <h2 className="text-base font-bold text-ink-900">შეკვეთის შეჯამება</h2>
+      <h2 className="text-base font-bold text-ink-900">{t('cart.summary')}</h2>
 
       <dl className="mt-4 space-y-2.5 text-sm">
         <div className="flex items-baseline justify-between gap-4">
           <dt className="text-ink-600">
-            {TEXT.subtotal}
-            {itemsCount > 0 && <span className="text-ink-500"> · {itemsCount} ცალი</span>}
+            {t('common.subtotal')}
+            {itemsCount > 0 && <span className="text-ink-500"> · {t('cart.units', { count: itemsCount })}</span>}
           </dt>
           <dd className="font-semibold text-ink-900">{formatPrice(subtotal)}</dd>
         </div>
 
         <div className="flex items-baseline justify-between gap-4">
-          <dt className="text-ink-600">{TEXT.shipping}</dt>
+          <dt className="text-ink-600">{t('common.shipping')}</dt>
           {known ? (
             <dd className={shipping === 0 ? 'font-semibold text-success-700' : 'font-semibold text-ink-900'}>
-              {shipping === 0 ? TEXT.free : formatPrice(shipping)}
+              {shipping === 0 ? t('common.free') : formatPrice(shipping)}
             </dd>
           ) : (
             <dd className="text-right font-semibold text-ink-900">
@@ -60,7 +61,7 @@ export default function CartSummary({
 
         {savings > 0 && (
           <div className="flex items-baseline justify-between gap-4">
-            <dt className="text-ink-600">დაზოგილი</dt>
+            <dt className="text-ink-600">{t('cart.saved')}</dt>
             <dd className="font-semibold text-accent-fg">−{formatPrice(savings)}</dd>
           </div>
         )}
@@ -68,7 +69,7 @@ export default function CartSummary({
         <div className="border-t border-ink-200 pt-3">
           <div className="flex items-baseline justify-between gap-4">
             <dt className="text-base font-bold text-ink-900">
-              {known ? TEXT.total : 'ჯამი მიწოდების გარეშე'}
+              {known ? t('common.total') : t('cart.totalWithoutDelivery')}
             </dt>
             <dd className="text-xl font-bold text-ink-900">{formatPrice(known ? total : subtotal)}</dd>
           </div>
@@ -79,8 +80,10 @@ export default function CartSummary({
         <div className="mt-4 flex items-start gap-2.5 rounded-control bg-primary-50 p-3 text-xs leading-relaxed text-primary-800">
           <Truck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <p>
-            დაამატე კიდევ <strong>{formatPrice(remaining)}</strong> და მიწოდება უფასო იქნება
-            (ზღვარი — {formatPrice(freeFrom)}).
+            <Rich
+              k="cart.freeShippingHint"
+              values={{ amount: <strong>{formatPrice(remaining)}</strong>, limit: formatPrice(freeFrom) }}
+            />
           </p>
         </div>
       )}
@@ -102,7 +105,7 @@ export default function CartSummary({
       {children}
 
       <p className="mt-4 text-center text-xs text-ink-500">
-        მიწოდება {SHIPPING.etaDays} · დაბრუნება 14 დღეში
+        {t('cart.terms', { eta: t('shipping.etaDays') })}
       </p>
     </div>
   );

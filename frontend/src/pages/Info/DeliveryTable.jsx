@@ -1,6 +1,6 @@
 import ErrorState from '../../components/common/ErrorState.jsx';
 import { Skeleton } from '../../components/common/Skeleton.jsx';
-import { TEXT } from '../../constants/index.js';
+import { tKa } from '../../i18n/index.js';
 import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { formatPrice } from '../../utils/format.js';
 
@@ -55,7 +55,7 @@ export default function DeliveryTable() {
             <th scope="row" className="px-4 py-3 font-medium text-primary-800">
               შეკვეთა {formatPrice(rules.freeFrom)}-დან
             </th>
-            <td className="px-4 py-3 text-right font-semibold text-primary-800">{TEXT.free}</td>
+            <td className="px-4 py-3 text-right font-semibold text-primary-800">{tKa('common.free')}</td>
           </tr>
         </tbody>
       </table>

@@ -2,6 +2,7 @@ import { Component } from 'react';
 import { AlertOctagon } from 'lucide-react';
 
 import { reportError } from '../../services/reportError.js';
+import { currentLanguage, localizedPath, t } from '../../i18n/index.js';
 
 /**
  * მთელი აპლიკაციის ErrorBoundary.
@@ -32,7 +33,8 @@ export default class ErrorBoundary extends Component {
 
   handleReload() {
     this.setState({ error: null });
-    window.location.assign('/');
+    // Outside the router, so the language's home by hand.
+    window.location.assign(localizedPath('/', currentLanguage()));
   }
 
   render() {
@@ -45,10 +47,9 @@ export default class ErrorBoundary extends Component {
           <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-danger-50">
             <AlertOctagon className="h-7 w-7 text-danger-fg" aria-hidden="true" />
           </div>
-          <h1 className="text-xl font-bold text-ink-900">რაღაც შეიცვალა…</h1>
+          <h1 className="text-xl font-bold text-ink-900">{t('errorBoundary.title')}</h1>
           <p className="mt-2 text-sm text-ink-600">
-            აპლიკაციაში მოულოდნელი შეცდომა მოხდა. სცადეთ გვერდის განახლება — თუ პრობლემა
-            გაგრძელდება, დაგვიკავშირდით.
+            {t('errorBoundary.text')}
           </p>
           {import.meta.env?.DEV && (
             <pre className="mt-4 overflow-x-auto rounded-control bg-ink-50 p-3 text-left text-xs text-danger-fg">
@@ -60,7 +61,7 @@ export default class ErrorBoundary extends Component {
             onClick={this.handleReload}
             className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-control bg-primary-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
           >
-            მთავარ გვერდზე დაბრუნება
+            {t('errorBoundary.home')}
           </button>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { SITE_NAME } from '../constants/index.js';
+import { t } from '../i18n/index.js';
 
 /**
  * გვერდის სათაურის დინამიური დაყენება.
@@ -7,7 +8,7 @@ import { SITE_NAME } from '../constants/index.js';
  */
 export function useDocumentTitle(title) {
   useEffect(() => {
-    document.title = title ? `${title} · ${SITE_NAME}` : `${SITE_NAME} — ელექტრონიკის აქსესუარები`;
+    document.title = title ? `${title} · ${SITE_NAME}` : `${SITE_NAME} — ${t('site.defaultTitle')}`;
   }, [title]);
 }
 

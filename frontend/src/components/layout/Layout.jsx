@@ -1,5 +1,5 @@
 import { Suspense, useLayoutEffect } from 'react';
-import { Outlet } from 'react-router';
+import { Outlet, useLocation } from 'react-router';
 import Header from './Header.jsx';
 import Footer from './Footer.jsx';
 import ScrollToTop from './ScrollToTop.jsx';
@@ -7,6 +7,8 @@ import PageFallback from './PageFallback.jsx';
 import ToastViewport from '../common/Toast.jsx';
 import { useCategories } from '../../hooks/useProducts.js';
 import { useTheme } from '../../hooks/useTheme.js';
+import { useLanguageAlternates } from '../../hooks/usePageMeta.js';
+import { t } from '../../i18n/index.js';
 import { applyTheme } from '../../utils/theme.js';
 
 /**
@@ -16,6 +18,8 @@ import { applyTheme } from '../../utils/theme.js';
 export default function Layout() {
   const { data: categories } = useCategories();
   const [theme] = useTheme();
+  const { pathname } = useLocation();
+  useLanguageAlternates(pathname);
 
   // public/theme-init.js set the class before the first paint; this keeps it
   // right after a pick, a change in the system setting, or a visit that began
@@ -36,7 +40,7 @@ export default function Layout() {
   return (
     <div data-storefront className="flex min-h-screen flex-col bg-canvas text-fg [@supports(min-height:100dvh)]:min-h-[100dvh]">
       <a href="#main-content" className="skip-link">
-        მთავარ კონტენტზე გადასვლა
+        {t('layout.skipToContent')}
       </a>
 
       <ScrollToTop />

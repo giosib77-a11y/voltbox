@@ -13,6 +13,7 @@ import {
   validateField,
   validateForm,
 } from '../utils/validate.js';
+import { t } from '../i18n/index.js';
 
 const EMPTY = { newPassword: '', confirmPassword: '' };
 const LINK_CLASS = 'font-semibold text-primary-700 underline-offset-4 hover:underline';
@@ -37,7 +38,7 @@ function tokenFrom(hash) {
  * ანგარიშის ყველა სესიას ხურავს, ამიტომ გვერდი შესვლაზე გადადის.
  */
 export default function ResetPassword() {
-  useDocumentTitle('ახალი პაროლი');
+  useDocumentTitle(t('auth.newPassword'));
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -84,7 +85,7 @@ export default function ResetPassword() {
     setSaving(true);
     try {
       await api.resetPassword({ token, newPassword: values.newPassword });
-      toast.success('პაროლი შეიცვალა. შედით ახალი პაროლით.');
+      toast.success(t('auth.resetDone'));
       navigate('/login', { replace: true });
     } catch (error) {
       if (error?.details?.code === 'INVALID_RESET_TOKEN') {
@@ -95,10 +96,10 @@ export default function ResetPassword() {
       // from the list of the most common ones.
       const fields = error?.details?.details;
       if (Array.isArray(fields) && fields.some((f) => f?.field === 'newPassword')) {
-        setErrors({ newPassword: 'ეს პაროლი ძალიან მარტივია — აირჩიეთ სხვა.' });
+        setErrors({ newPassword: t('auth.tooCommon') });
         return;
       }
-      toast.error(error?.message || 'პაროლი ვერ შეიცვალა');
+      toast.error(error?.message || t('auth.resetFailed'));
     } finally {
       setSaving(false);
     }
@@ -110,13 +111,13 @@ export default function ResetPassword() {
       <div role="alert" className="mt-4 space-y-3 text-sm text-ink-700">
         <p>
           {linkDead
-            ? 'ბმული არასწორია ან მისი ვადა ამოიწურა. თუ აღდგენა რამდენჯერმე მოითხოვეთ, იმუშავებს მხოლოდ ბოლო წერილის ბმული.'
-            : 'ბმული არასრულია. გახსენით ის წერილიდან ხელახლა.'}
+            ? t('auth.linkDead')
+            : t('auth.linkIncomplete')}
         </p>
         {emailEnabled && (
           <p>
             <Link to="/forgot-password" className={LINK_CLASS}>
-              ახალი ბმულის მოთხოვნა
+              {t('auth.requestNewLink')}
             </Link>
           </p>
         )}
@@ -126,18 +127,18 @@ export default function ResetPassword() {
     body = (
       <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
         <Input
-          label="ახალი პაროლი"
+          label={t('auth.newPassword')}
           type="password"
           required
           autoComplete="new-password"
-          hint={`მინიმუმ ${MIN_PASSWORD_LENGTH} სიმბოლო`}
+          hint={t('auth.minChars', { count: MIN_PASSWORD_LENGTH })}
           value={values.newPassword}
           error={touched.newPassword ? errors.newPassword : ''}
           onChange={(e) => handleChange('newPassword', e.target.value)}
           onBlur={() => handleBlur('newPassword')}
         />
         <Input
-          label="გაიმეორეთ ახალი პაროლი"
+          label={t('fields.repeatNewPassword')}
           type="password"
           required
           autoComplete="new-password"
@@ -148,7 +149,7 @@ export default function ResetPassword() {
         />
         <Button type="submit" size="lg" fullWidth loading={saving}>
           <KeyRound className="h-4 w-4" aria-hidden="true" />
-          პაროლის შეცვლა
+          {t('auth.changePassword')}
         </Button>
       </form>
     );
@@ -158,16 +159,16 @@ export default function ResetPassword() {
     <div className="container-page flex justify-center py-10 lg:py-16">
       <div className="w-full max-w-md">
         <div className="rounded-card border border-ink-200 bg-surface p-6 sm:p-8">
-          <h1 className="text-2xl font-bold tracking-tight text-ink-900">ახალი პაროლი</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink-900">{t('auth.newPassword')}</h1>
           <p className="mt-1.5 text-sm text-ink-600">
-            პაროლის შეცვლის შემდეგ ანგარიშიდან ყველა მოწყობილობაზე გამოხვალთ.
+            {t('auth.resetIntro')}
           </p>
 
           {body}
 
           <p className="mt-5 text-center text-sm text-ink-600">
             <Link to="/login" className={LINK_CLASS}>
-              შესვლის გვერდზე დაბრუნება
+              {t('auth.backToLogin')}
             </Link>
           </p>
         </div>

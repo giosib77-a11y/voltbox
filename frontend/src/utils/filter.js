@@ -1,4 +1,5 @@
 import { DEFAULT_SORT, QUERY_KEYS } from '../constants/index.js';
+import { t } from '../i18n/index.js';
 
 /**
  * კატალოგის ფილტრაცია / სორტირება / პაგინაცია და facet-ების დათვლა.
@@ -301,7 +302,7 @@ export function buildFilterChips(filters = {}, categoryFilters = [], formatValue
       id: 'price',
       key: 'price',
       value: filters.price,
-      groupLabel: 'ფასი',
+      groupLabel: t('filters.price'),
       label: `${filters.price[0]} – ${filters.price[1]} ₾`,
     });
   }
