@@ -9,7 +9,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import CategoryDialog from './CategoryDialog.jsx';
@@ -111,5 +111,45 @@ describe('CategoryDialog filters', () => {
       // live specs, and "true" would never match it.
       { key: 'specs.fastCharge', label: 'სწრაფი დატენვა', type: 'toggle', match: true },
     ]);
+  });
+});
+
+/**
+ * The dialog moves focus into itself 30 ms after it opens (Modal.jsx). Typing
+ * before that loses every key after the first to wherever focus went.
+ */
+async function dialogSettled() {
+  const dialog = screen.getByRole('dialog');
+  await waitFor(() => expect(dialog).toContainElement(document.activeElement));
+}
+
+describe('CategoryDialog English name', () => {
+  it('shows the saved English name beside the Georgian and saves the edit', async () => {
+    const update = vi.spyOn(adminApi, 'updateCategory').mockResolvedValue(CATEGORY);
+    renderDialog({ ...CATEGORY, nameEn: 'Phones' });
+    await dialogSettled();
+
+    const nameEn = screen.getByLabelText('სახელი ინგლისურად');
+    expect(nameEn).toHaveValue('Phones');
+    expect(nameEn).not.toBeRequired();
+    expect(nameEn).toHaveAccessibleDescription(/არასავალდებულო/);
+
+    await userEvent.clear(nameEn);
+    await userEvent.type(nameEn, ' Smartphones ');
+    await userEvent.click(screen.getByRole('button', { name: 'შენახვა' }));
+
+    const [, payload] = update.mock.calls[0];
+    expect(payload).toMatchObject({ name: 'ტელეფონები', nameEn: 'Smartphones' });
+  });
+
+  it('creates a category without one, sending it empty', async () => {
+    const create = vi.spyOn(adminApi, 'createCategory').mockResolvedValue(CATEGORY);
+    renderDialog();
+    await dialogSettled();
+
+    await userEvent.type(screen.getByLabelText(/^სახელი\*?$/), 'კაბელები');
+    await userEvent.click(screen.getByRole('button', { name: 'შენახვა' }));
+
+    expect(create.mock.calls[0][0]).toMatchObject({ name: 'კაბელები', nameEn: '' });
   });
 });

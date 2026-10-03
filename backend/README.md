@@ -182,7 +182,8 @@ python scripts/import_products.py products.json             # მერე ჩ�
 
 ### თუ Supabase-ის Table Editor-ით დაამატე
 
-ხელით ჩაწერილ პროდუქტს `search_text` ცარიელი დარჩება. გაასწორე:
+ხელით ჩაწერილ პროდუქტს `search_text` ცარიელი დარჩება — და ხელით შეცვლილი
+სახელი, ინგლისური სახელის (`name_en`) ჩათვლით, ძველ ინდექსში დარჩება. გაასწორე:
 
 ```bash
 python scripts/reindex_search.py

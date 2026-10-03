@@ -36,6 +36,10 @@ class Category(UUIDPrimaryKey, Timestamps, Base):
 
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
+    # The /en storefront's name, optional: empty shows `name` there instead
+    # (app/core/language.py). Also stands in for short_name on /en, since there
+    # is no English short name.
+    name_en: Mapped[str] = mapped_column(String(150), nullable=False, server_default="")
     short_name: Mapped[str] = mapped_column(String(150), nullable=False, server_default="")
     description: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     icon: Mapped[str] = mapped_column(String(50), nullable=False, server_default="Package")
@@ -58,6 +62,9 @@ class Brand(UUIDPrimaryKey, Timestamps, Base):
 
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(150), unique=True, nullable=False)
+    # Optional, and not unique: the brand filter's URL value is `name` in both
+    # languages, so this is display text only.
+    name_en: Mapped[str] = mapped_column(String(150), nullable=False, server_default="")
     country: Mapped[str | None] = mapped_column(String(100))
     logo_url: Mapped[str | None] = mapped_column(Text)
 
@@ -70,8 +77,13 @@ class Product(UUIDPrimaryKey, Timestamps, Base):
     slug: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
     sku: Mapped[str | None] = mapped_column(String(64), unique=True)
     name: Mapped[str] = mapped_column(String(300), nullable=False)
+    # The /en storefront's name and description, both optional: empty shows the
+    # Georgian there instead (app/core/language.py). name_en feeds search_text,
+    # so a product is found by either name.
+    name_en: Mapped[str] = mapped_column(String(300), nullable=False, server_default="")
     short_description: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     description: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    description_en: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
 
     category_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("categories.id", ondelete="RESTRICT"), nullable=False

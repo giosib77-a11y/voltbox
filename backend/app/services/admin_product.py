@@ -56,6 +56,7 @@ async def _refresh_search_text(db: AsyncSession, product: Product) -> None:
     brand = await db.get(Brand, product.brand_id)
     product.search_text = build_search_text(
         name=product.name,
+        name_en=product.name_en,
         brand_name=brand.name if brand else "",
         category_name=category.name if category else "",
         category_slug=category.slug if category else "",
@@ -253,8 +254,10 @@ async def create_product(
         slug=slug,
         sku=sku,
         name=payload["name"],
+        name_en=payload.get("name_en") or "",
         short_description=payload.get("short_description") or "",
         description=payload.get("description") or "",
+        description_en=payload.get("description_en") or "",
         category_id=payload["category_id"],
         brand_id=payload["brand_id"],
         price=payload["price"],
@@ -354,7 +357,15 @@ async def update_product(
 
     # Anything that feeds the index must refresh it. Without this the product
     # stays in the catalogue and quietly stops being findable.
-    if {"name", "short_description", "tags", "specs", "category_id", "brand_id"} & patch.keys():
+    if {
+        "name",
+        "name_en",
+        "short_description",
+        "tags",
+        "specs",
+        "category_id",
+        "brand_id",
+    } & patch.keys():
         await _refresh_search_text(db, product)
 
     await db.flush()
@@ -462,8 +473,12 @@ async def duplicate_product(
         slug=await unique_slug(db, Product.slug, f"{source.slug}-copy", id_column=Product.id),
         sku=await _next_free_sku(db, source.sku),
         name=f"{source.name} (ასლი)",
+        # Verbatim: the copy is told apart by its Georgian name in the panel,
+        # which is all the panel shows, and it starts inactive.
+        name_en=source.name_en,
         short_description=source.short_description,
         description=source.description,
+        description_en=source.description_en,
         category_id=source.category_id,
         brand_id=source.brand_id,
         price=source.price,

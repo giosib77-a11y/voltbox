@@ -78,6 +78,10 @@ export function useRelatedProducts(productId, limit = 4) {
  * კატეგორიების სია.
  * შედეგი იქეშება სესიის განმავლობაში — Header, Footer და Category გვერდი
  * ერთსა და იმავე promise-ს იზიარებენ.
+ *
+ * The names in it are in the page's language, and that is safe to keep for
+ * the page's life: the language never changes under an open page - switching
+ * it loads the page again, which starts this cache empty (i18n/index.js).
  */
 let categoriesPromise = null;
 

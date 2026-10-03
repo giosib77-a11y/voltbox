@@ -15,7 +15,7 @@ import { useCatalogParams } from '../hooks/useQueryParams.js';
 import { useCategories, useProducts } from '../hooks/useProducts.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import { usePageMeta } from '../hooks/usePageMeta.js';
-import { countActiveFilters } from '../utils/filter.js';
+import { countActiveFilters, withFacetLabels } from '../utils/filter.js';
 import { formatCount, formatItemsCount } from '../utils/format.js';
 import { PAGE_SIZE } from '../constants/index.js';
 import { t } from '../i18n/index.js';
@@ -68,10 +68,11 @@ export default function Category() {
   const facets = data?.facets || { values: {}, price: { min: 0, max: 0 } };
   const activeCount = countActiveFilters(filters);
   const items = data?.items || [];
+  const labelledFilters = withFacetLabels(categoryFilters, facets);
 
   const sidebar = (
     <FilterSidebar
-      filters={categoryFilters}
+      filters={labelledFilters}
       facets={facets}
       active={filters}
       onChange={setFilters}
@@ -133,7 +134,7 @@ export default function Category() {
           </div>
 
           <ActiveFilters
-            filters={categoryFilters}
+            filters={labelledFilters}
             active={filters}
             onChange={setFilters}
             onClear={clearFilters}

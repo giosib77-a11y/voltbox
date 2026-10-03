@@ -14,7 +14,7 @@ import SearchBar from '../components/search/SearchBar.jsx';
 import { useCatalogParams } from '../hooks/useQueryParams.js';
 import { useCategories, useProducts } from '../hooks/useProducts.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
-import { countActiveFilters } from '../utils/filter.js';
+import { countActiveFilters, withFacetLabels } from '../utils/filter.js';
 import { formatCount, formatItemsCount } from '../utils/format.js';
 import { PAGE_SIZE, QUERY_KEYS, SORT_OPTIONS } from '../constants/index.js';
 import { t } from '../i18n/index.js';
@@ -33,14 +33,16 @@ export default function SearchResults() {
   const { data: categories } = useCategories();
 
   // ძებნის შედეგები კატეგორიათაშორისია — ფილტრებად კატეგორია და ბრენდი გვრჩება.
-  // `optionLabels` აქცევს ტექნიკურ id-ს ("cables") ქართულ სახელად.
+  // `optionLabels` turns a category's slug - the facet's value and the URL's -
+  // into its name in the page's language. By slug, not id: the API's ids are
+  // UUIDs, and only the mock's ids happen to equal their slugs.
   const searchFilters = useMemo(
     () => [
       {
         key: 'category',
         label: t('search.filterCategory'),
         type: 'checkbox',
-        optionLabels: Object.fromEntries((categories || []).map((c) => [c.id, c.name])),
+        optionLabels: Object.fromEntries((categories || []).map((c) => [c.slug, c.name])),
       },
       { key: 'brand', label: t('search.filterBrand'), type: 'checkbox' },
     ],
@@ -61,10 +63,11 @@ export default function SearchResults() {
 
   const facets = data?.facets || { values: {}, price: { min: 0, max: 0 } };
   const activeCount = countActiveFilters(filters);
+  const labelledFilters = withFacetLabels(searchFilters, facets);
 
   const sidebar = (
     <FilterSidebar
-      filters={searchFilters}
+      filters={labelledFilters}
       facets={facets}
       active={filters}
       onChange={setFilters}
@@ -139,7 +142,7 @@ export default function SearchResults() {
             </div>
 
             <ActiveFilters
-              filters={searchFilters}
+              filters={labelledFilters}
               active={filters}
               onChange={setFilters}
               onClear={clearFilters}

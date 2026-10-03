@@ -140,6 +140,9 @@ async def import_one(db: AsyncSession, row: dict[str, Any], *, allow_create_bran
     # მაგრამ ძებნა მას ვერასდროს იპოვის
     product.search_text = build_search_text(
         name=product.name,
+        # The file carries no English name, so an update keeps the one the admin
+        # gave; a new product has none yet (None until the row is flushed).
+        name_en=product.name_en or "",
         brand_name=brand.name,
         category_name=category.name,
         category_slug=category.slug,

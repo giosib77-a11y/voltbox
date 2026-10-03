@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.language import DEFAULT_LANGUAGE, LanguageQuery
 from app.db.session import get_db
 from app.schemas.catalog import ProductSuggestionOut
 from app.schemas.mappers import product_to_suggestion
@@ -26,10 +27,13 @@ async def search_products(
     db: Annotated[AsyncSession, Depends(get_db)],
     q: Annotated[str, Query(max_length=200, description="Search query")] = "",
     limit: Annotated[int, Query(ge=1, le=20)] = 5,
+    lang: LanguageQuery = DEFAULT_LANGUAGE,
 ) -> list[ProductSuggestionOut]:
     # ქართული ახსნა: ცარიელ query-ზე ბაზას საერთოდ არ ვაწუხებთ — header-ი
     # ველის გასუფთავებისას სწორედ ამას აგზავნის
     if not q.strip():
         return []
+    # What matches is the same in both languages - either name finds a product
+    # (services/search.py); `lang` only picks the name the suggestion shows.
     products = await search.search_products(db, q, limit=limit)
-    return [product_to_suggestion(p) for p in products]
+    return [product_to_suggestion(p, lang=lang) for p in products]

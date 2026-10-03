@@ -19,7 +19,10 @@ keeps a snapshot of the name, price and image so it can draw the cart without
 waiting; storing that here would mean serving a month-old price from the server
 as though it were current. Prices are read back from the catalogue on every
 load, and checked again at checkout - `services/order.py` has never trusted a
-number that arrived from a client.
+number that arrived from a client. The name is read back the same way, in the
+language of the page asking: the merge at every signed-in page load replaces
+the browser's snapshot, so a Georgian name here would overwrite the English
+one on an English page.
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import ValidationError
+from app.core.language import Language, localized
 from app.db.models import MAX_CART_ITEMS, Cart, Product
 
 #: Matches the per-line cap the order schema enforces, so a cart can never hold
@@ -67,7 +71,9 @@ def _clean(items: list[dict[str, Any]] | None) -> dict[uuid.UUID, int]:
     return cleaned
 
 
-async def _resolve(db: AsyncSession, wanted: dict[uuid.UUID, int]) -> list[dict[str, Any]]:
+async def _resolve(
+    db: AsyncSession, wanted: dict[uuid.UUID, int], *, lang: Language
+) -> list[dict[str, Any]]:
     """Turn ids and quantities into lines the storefront can draw.
 
     Everything but the quantity is read from the catalogue: a saved cart is a
@@ -100,7 +106,7 @@ async def _resolve(db: AsyncSession, wanted: dict[uuid.UUID, int]) -> list[dict[
                 "productId": str(product.id),
                 "qty": min(wanted[product.id], MAX_QUANTITY),
                 "snapshot": {
-                    "name": product.name,
+                    "name": localized(product.name, product.name_en, lang),
                     "slug": product.slug,
                     "image": primary,
                     "price": str(product.price),
@@ -112,10 +118,10 @@ async def _resolve(db: AsyncSession, wanted: dict[uuid.UUID, int]) -> list[dict[
     return lines
 
 
-async def get_cart(db: AsyncSession, user_id: uuid.UUID) -> list[dict[str, Any]]:
+async def get_cart(db: AsyncSession, user_id: uuid.UUID, *, lang: Language) -> list[dict[str, Any]]:
     """The saved cart, priced from today's catalogue."""
     stored = await db.scalar(select(Cart).where(Cart.user_id == user_id))
-    return await _resolve(db, _clean(stored.items if stored else []))
+    return await _resolve(db, _clean(stored.items if stored else []), lang=lang)
 
 
 async def _store(db: AsyncSession, user_id: uuid.UUID, wanted: dict[uuid.UUID, int]) -> None:
@@ -140,7 +146,7 @@ async def _store(db: AsyncSession, user_id: uuid.UUID, wanted: dict[uuid.UUID, i
 
 
 async def save_cart(
-    db: AsyncSession, user_id: uuid.UUID, items: list[dict[str, Any]] | None
+    db: AsyncSession, user_id: uuid.UUID, items: list[dict[str, Any]] | None, *, lang: Language
 ) -> list[dict[str, Any]]:
     """Replace the saved cart with what the browser is holding."""
     wanted = _clean(items)
@@ -151,11 +157,11 @@ async def save_cart(
             details={"limit": MAX_CART_ITEMS, "received": len(wanted)},
         )
     await _store(db, user_id, wanted)
-    return await _resolve(db, wanted)
+    return await _resolve(db, wanted, lang=lang)
 
 
 async def merge_cart(
-    db: AsyncSession, user_id: uuid.UUID, items: list[dict[str, Any]] | None
+    db: AsyncSession, user_id: uuid.UUID, items: list[dict[str, Any]] | None, *, lang: Language
 ) -> list[dict[str, Any]]:
     """Fold the browser's cart into the saved one, on signing in.
 
@@ -178,7 +184,7 @@ async def merge_cart(
         merged = dict(list(merged.items())[-MAX_CART_ITEMS:])
 
     await _store(db, user_id, merged)
-    return await _resolve(db, merged)
+    return await _resolve(db, merged, lang=lang)
 
 
 async def clear_cart(db: AsyncSession, user_id: uuid.UUID) -> None:

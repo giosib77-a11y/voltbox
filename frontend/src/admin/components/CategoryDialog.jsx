@@ -7,6 +7,8 @@
  * Notes: the filter shape is not a free-form JSON box on purpose. FilterSidebar
  * resolves `specs.<key>` against a product's specs, and `match` only means
  * something for a toggle - a hand-written JSON blob gets those wrong silently.
+ * The English name is optional and sits beside the Georgian one; on the English
+ * storefront it stands in for the short name too.
  */
 
 import { useState } from 'react';
@@ -43,6 +45,7 @@ export default function CategoryDialog({ category, categories, onClose, onSaved 
   const isEdit = Boolean(category);
   const [values, setValues] = useState({
     name: category?.name || '',
+    nameEn: category?.nameEn || '',
     slug: category?.slug || '',
     shortName: category?.shortName || '',
     description: category?.description || '',
@@ -95,6 +98,7 @@ export default function CategoryDialog({ category, categories, onClose, onSaved 
     try {
       const payload = {
         name: values.name.trim(),
+        nameEn: values.nameEn.trim(),
         shortName: values.shortName.trim() || values.name.trim(),
         description: values.description,
         icon: values.icon.trim() || 'Package',
@@ -150,6 +154,13 @@ export default function CategoryDialog({ category, categories, onClose, onSaved 
             value={values.name}
             error={errors.name}
             onChange={(event) => set('name', event.target.value)}
+          />
+          <Input
+            label="სახელი ინგლისურად"
+            hint="არასავალდებულო. ცარიელზე ინგლისურ საიტზე ქართული ჩანს"
+            lang="en"
+            value={values.nameEn}
+            onChange={(event) => set('nameEn', event.target.value)}
           />
           <Input
             label="Slug"

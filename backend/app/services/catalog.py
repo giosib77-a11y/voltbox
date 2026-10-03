@@ -10,11 +10,12 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Select, Text, and_, cast, func, literal, select, union_all
+from sqlalchemy import Select, Text, and_, case, cast, func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.core.language import Language
 from app.db.models import Brand, Category, Product
 from app.services import search as search_service
 
@@ -231,11 +232,25 @@ def search_condition(term: str) -> Any | None:
     return search_service.search_condition(term)
 
 
+def _label_for(key: str, column: Any, lang: Language) -> Any:
+    """What a facet value is shown as: the value itself, except a brand on /en.
+
+    The brand's value stays `Brand.name` in both languages - it is what the URL
+    carries - so its English name travels beside it as a label rather than
+    replacing it. The CASE is `localized()` in SQL: a blank one falls back.
+    """
+    if key == "brand" and lang == "en":
+        return case((func.btrim(Brand.name_en) != "", Brand.name_en), else_=Brand.name)
+    return column
+
+
 async def compute_facets(
     db: AsyncSession,
     filter_config: list[dict[str, Any]],
     query_params: dict[str, str],
     extra_conditions: list[Any],
+    *,
+    lang: Language,
 ) -> dict[str, Any]:
     """თითოეული ოფციის ხელმისაწვდომი რაოდენობა.
 
@@ -246,6 +261,7 @@ async def compute_facets(
     # Every group is initialised, because a group with no matching rows returns
     # nothing from the query below and the caller expects a key for each filter.
     values: dict[str, dict[str, int]] = {str(c["key"]): {} for c in filter_config}
+    labels: dict[str, dict[str, str]] = {}
 
     # One statement for every group, not one per group. Each carries its own
     # WHERE - the counts for a group deliberately ignore that group's own
@@ -266,6 +282,7 @@ async def compute_facets(
             # UNION cannot open with its own WITH.
             tree = select(_category_tree()).subquery()
             column = tree.c.ancestor_slug
+        label = _label_for(key, column, lang)
 
         stmt = (
             select(
@@ -274,6 +291,7 @@ async def compute_facets(
                 # `specs ->> key` is text while a brand name is varchar.
                 cast(literal(key), Text).label("facet"),
                 cast(column, Text).label("value"),
+                cast(label, Text).label("label"),
                 func.count(Product.id).label("hits"),
             )
             .select_from(Product)
@@ -282,7 +300,9 @@ async def compute_facets(
         )
         if tree is not None:
             stmt = stmt.join(tree, tree.c.category_id == Product.category_id)
-        stmt = stmt.where(Product.is_active.is_(True), column.is_not(None)).group_by(column)
+        # Grouped by the label too, which splits nothing: it is the value itself
+        # or, for a brand, a column of the row the unique name already picks.
+        stmt = stmt.where(Product.is_active.is_(True), column.is_not(None)).group_by(column, label)
         for condition in conditions + extra_conditions:
             stmt = stmt.where(condition)
         parts.append(stmt)
@@ -292,6 +312,8 @@ async def compute_facets(
         for row in (await db.execute(combined)).all():
             if row.value is not None:
                 values[str(row.facet)][str(row.value)] = int(row.hits)
+                if row.label != row.value:
+                    labels.setdefault(str(row.facet), {})[str(row.value)] = str(row.label)
 
     # ფასის საზღვრები: min/max — მთელი (გაფილტრული) ნაკრებისა, სლაიდერის დიაპაზონისთვის;
     # current* — მიმდინარე შედეგისა.
@@ -337,6 +359,7 @@ async def compute_facets(
 
     return {
         "values": values,
+        "labels": labels,
         "price": {
             "min": int(overall_min or 0),
             "max": int(overall_max or 0),
@@ -354,8 +377,13 @@ async def list_products(
     page: int,
     limit: int,
     search_term: str = "",
+    lang: Language,
 ) -> dict[str, Any]:
-    """პროდუქტების სია ფილტრებით, სორტით, პაგინაციითა და facet-ებით."""
+    """პროდუქტების სია ფილტრებით, სორტით, პაგინაციითა და facet-ებით.
+
+    `lang` reaches only the facet labels; the products themselves are localized
+    by the mapper, and what matches a filter or a search is the same in both.
+    """
     category_slugs = [s.strip() for s in query_params.get("category", "").split(",") if s.strip()]
     filter_config = await resolve_filter_config(db, category_slugs, bool(search_term))
 
@@ -388,7 +416,7 @@ async def list_products(
     )
 
     items = (await db.scalars(stmt)).unique().all()
-    facets = await compute_facets(db, filter_config, query_params, extra)
+    facets = await compute_facets(db, filter_config, query_params, extra, lang=lang)
 
     return {"items": list(items), "total": total, "facets": facets}
 

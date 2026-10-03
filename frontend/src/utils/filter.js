@@ -262,6 +262,28 @@ export function paginate(items, page = 1, limit = 12) {
 }
 
 /**
+ * The filter configs, with the labels the API sent for their values.
+ *
+ * A brand's value is its own name in both languages: it is what the URL
+ * carries, and `/en/category/x?brand=ჰოკო` is the same link as the Georgian
+ * one. On an English page its English name comes beside it, as
+ * `facets.labels.brand`. The sidebar and the active-filter chips both read
+ * `optionLabels`, so merging here reaches both. The API's labels win: they are
+ * the page's language, where a config's own may not be.
+ *
+ * The same array comes back when there is nothing to add - a Georgian page.
+ */
+export function withFacetLabels(configs = [], facets = null) {
+  const labels = facets?.labels;
+  if (!labels || Object.keys(labels).length === 0) return configs;
+  return configs.map((config) =>
+    labels[config.key]
+      ? { ...config, optionLabels: { ...config.optionLabels, ...labels[config.key] } }
+      : config,
+  );
+}
+
+/**
  * აქტიური ფილტრების chip-ები — ცალ-ცალკე მოსახსნელად.
  * @returns {{ id:string, key:string, value:*, label:string, groupLabel:string }[]}
  */

@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.language import DEFAULT_LANGUAGE, LanguageQuery
 from app.db.session import get_db
 from app.schemas.catalog import BrandOut, CategoryOut, HomeSectionsOut
 from app.schemas.mappers import brand_to_out, category_to_out, product_to_out
@@ -19,10 +20,12 @@ router = APIRouter(tags=["catalog"])
     description="Categories with product counts and their filter configuration.",
     response_model=list[CategoryOut],
 )
-async def list_categories(db: Annotated[AsyncSession, Depends(get_db)]) -> list[CategoryOut]:
+async def list_categories(
+    db: Annotated[AsyncSession, Depends(get_db)], lang: LanguageQuery = DEFAULT_LANGUAGE
+) -> list[CategoryOut]:
     # ქართული ახსნა: `filters` კონფიგი აქვე მიდის — frontend-ის FilterSidebar
     # მთლიანად მასზეა აგებული და ცალკე გამოძახება ზედმეტი round-trip იქნებოდა
-    return [category_to_out(c, count) for c, count in await catalog.list_categories(db)]
+    return [category_to_out(c, count, lang=lang) for c, count in await catalog.list_categories(db)]
 
 
 @router.get(
@@ -31,8 +34,10 @@ async def list_categories(db: Annotated[AsyncSession, Depends(get_db)]) -> list[
     description="Brands with product counts.",
     response_model=list[BrandOut],
 )
-async def list_brands(db: Annotated[AsyncSession, Depends(get_db)]) -> list[BrandOut]:
-    return [brand_to_out(b, count) for b, count in await catalog.list_brands(db)]
+async def list_brands(
+    db: Annotated[AsyncSession, Depends(get_db)], lang: LanguageQuery = DEFAULT_LANGUAGE
+) -> list[BrandOut]:
+    return [brand_to_out(b, count, lang=lang) for b, count in await catalog.list_brands(db)]
 
 
 @router.get(
@@ -47,14 +52,15 @@ async def list_brands(db: Annotated[AsyncSession, Depends(get_db)]) -> list[Bran
 async def home_sections(
     db: Annotated[AsyncSession, Depends(get_db)],
     limit: Annotated[int, Query(ge=1, le=24)] = 8,
+    lang: LanguageQuery = DEFAULT_LANGUAGE,
 ) -> HomeSectionsOut:
     sections = await catalog.home_sections(db, limit)
     return HomeSectionsOut(
-        new_arrivals=[product_to_out(p) for p in sections["new_arrivals"]],
-        discounted=[product_to_out(p) for p in sections["discounted"]],
-        featured=[product_to_out(p) for p in sections["featured"]],
-        latest=[product_to_out(p) for p in sections["latest"]],
+        new_arrivals=[product_to_out(p, lang=lang) for p in sections["new_arrivals"]],
+        discounted=[product_to_out(p, lang=lang) for p in sections["discounted"]],
+        featured=[product_to_out(p, lang=lang) for p in sections["featured"]],
+        latest=[product_to_out(p, lang=lang) for p in sections["latest"]],
         popular_categories=[
-            category_to_out(c, count) for c, count in sections["popular_categories"]
+            category_to_out(c, count, lang=lang) for c, count in sections["popular_categories"]
         ],
     )

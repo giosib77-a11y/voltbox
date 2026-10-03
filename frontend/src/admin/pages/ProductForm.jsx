@@ -6,7 +6,10 @@
  * Where it fits: /admin/products/new and /admin/products/:id.
  * Notes: stock is editable only on create. On edit it is shown read-only with a
  * link to the inventory adjustment, because every later change has to go
- * through the ledger. Images unlock only after the product exists.
+ * through the ledger. Images unlock only after the product exists. The English
+ * name and description sit beside the Georgian ones and are optional: the
+ * English storefront shows the Georgian where they are empty. The panel itself
+ * stays Georgian.
  *
  * Uses the storefront's form pattern (useState plus explicit validation) rather
  * than a form library: one paradigm in the codebase is worth more than the
@@ -31,6 +34,7 @@ import * as adminApi from '../adminApi.js';
 
 const EMPTY = {
   name: '',
+  nameEn: '',
   slug: '',
   sku: '',
   categoryId: '',
@@ -39,6 +43,7 @@ const EMPTY = {
   oldPrice: '',
   shortDescription: '',
   description: '',
+  descriptionEn: '',
   specs: {},
   tags: '',
   lowStockThreshold: '3',
@@ -58,6 +63,7 @@ const EMPTY = {
  */
 const SHOWN_FIELDS = new Set([
   'name',
+  'nameEn',
   'slug',
   'sku',
   'categoryId',
@@ -118,6 +124,7 @@ export default function ProductForm() {
     setProduct(fetched);
     setValues({
       name: fetched.name,
+      nameEn: fetched.nameEn ?? '',
       slug: fetched.slug,
       sku: fetched.sku || '',
       categoryId: fetched.categoryId,
@@ -126,6 +133,7 @@ export default function ProductForm() {
       oldPrice: fetched.oldPrice === null ? '' : String(fetched.oldPrice),
       shortDescription: fetched.shortDescription,
       description: fetched.description,
+      descriptionEn: fetched.descriptionEn ?? '',
       specs: fetched.specs || {},
       tags: (fetched.tags || []).join(', '),
       lowStockThreshold: String(fetched.lowStockThreshold),
@@ -191,6 +199,9 @@ export default function ProductForm() {
   function payload() {
     const base = {
       name: values.name.trim(),
+      // Always sent, empty included: emptying the box is how the English name
+      // is removed, and leaving it out would keep the old one.
+      nameEn: values.nameEn.trim(),
       categoryId: values.categoryId,
       brandId: values.brandId,
       // Money goes out exactly as typed. Parsing it into a float here is how
@@ -199,6 +210,7 @@ export default function ProductForm() {
       oldPrice: values.oldPrice === '' ? null : values.oldPrice,
       shortDescription: values.shortDescription,
       description: values.description,
+      descriptionEn: values.descriptionEn,
       specs: values.specs,
       tags: values.tags
         .split(',')
@@ -355,10 +367,17 @@ export default function ProductForm() {
               <Input
                 label="სახელი"
                 required
-                containerClassName="sm:col-span-2"
                 value={values.name}
                 error={errors.name}
                 onChange={(event) => set('name', event.target.value)}
+              />
+              <Input
+                label="სახელი ინგლისურად"
+                hint="არასავალდებულო. ცარიელზე ინგლისურ საიტზე ქართული ჩანს"
+                lang="en"
+                value={values.nameEn}
+                error={errors.nameEn}
+                onChange={(event) => set('nameEn', event.target.value)}
               />
               <Input
                 label="Slug"
@@ -424,12 +443,22 @@ export default function ProductForm() {
                 value={values.shortDescription}
                 onChange={(event) => set('shortDescription', event.target.value)}
               />
-              <Textarea
-                label="სრული აღწერა"
-                rows={5}
-                value={values.description}
-                onChange={(event) => set('description', event.target.value)}
-              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Textarea
+                  label="სრული აღწერა"
+                  rows={5}
+                  value={values.description}
+                  onChange={(event) => set('description', event.target.value)}
+                />
+                <Textarea
+                  label="სრული აღწერა ინგლისურად"
+                  hint="არასავალდებულო. ცარიელზე ინგლისურ საიტზე ქართული ჩანს"
+                  lang="en"
+                  rows={5}
+                  value={values.descriptionEn}
+                  onChange={(event) => set('descriptionEn', event.target.value)}
+                />
+              </div>
               <Input
                 label="ტეგები"
                 hint="მძიმით გამოყოფილი"

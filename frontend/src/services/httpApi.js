@@ -8,6 +8,7 @@
  */
 
 import { readJSON, removeKey, writeJSON } from '../utils/storage.js';
+import { DEFAULT_LANGUAGE, currentLanguage } from '../i18n/index.js';
 import { request } from './httpClient.js';
 import { clearSession, readSession, writeSession } from './session.js';
 
@@ -21,46 +22,70 @@ const LEGACY_GUEST_ORDERS_KEY = 'guest-orders:v1';
 /*  კატალოგი                                                                   */
 /* -------------------------------------------------------------------------- */
 
-// GET /products?category=&sort=&page=&limit=&q=&<filters>
+/**
+ * `lang` for every request whose answer names a product, category or brand.
+ *
+ * The API answers in the language asked for, so the shopper downloads only
+ * the text on their screen. An English page sends `lang=en`; a Georgian page
+ * sends nothing, so its requests are exactly the ones it made before English
+ * existed. A query parameter rather than a header: the URL is then the cache
+ * key, and English and Georgian can never be served for each other.
+ *
+ * Read at call time. The page's language is fixed until the next load
+ * (i18n/index.js) - the language switch is a page load - so nothing cached in
+ * memory for a page, like the categories in hooks/useProducts.js, can hold the
+ * other language.
+ */
+function lang() {
+  const language = currentLanguage();
+  return language === DEFAULT_LANGUAGE ? undefined : language;
+}
+
+// GET /products?category=&sort=&page=&limit=&q=&<filters>&lang=
 export async function getProducts({ category, filters, sort, page, limit, q } = {}) {
-  return request('/products', { params: { category, sort, page, limit, q, ...(filters || {}) } });
+  return request('/products', {
+    params: { category, sort, page, limit, q, ...(filters || {}), lang: lang() },
+  });
 }
 
-// GET /products/:slug
+// GET /products/:slug?lang=
 export async function getProductBySlug(slug) {
-  return request(`/products/${encodeURIComponent(slug)}`);
+  return request(`/products/${encodeURIComponent(slug)}`, { params: { lang: lang() } });
 }
 
-// GET /products/by-id/:id
+// GET /products/by-id/:id?lang=
 export async function getProductById(id) {
-  return request(`/products/by-id/${encodeURIComponent(id)}`);
+  return request(`/products/by-id/${encodeURIComponent(id)}`, { params: { lang: lang() } });
 }
 
-// GET /products/:id/related?limit=
+// GET /products/:id/related?limit=&lang=
 export async function getRelatedProducts(id, limit = 4) {
-  return request(`/products/${encodeURIComponent(id)}/related`, { params: { limit } });
+  return request(`/products/${encodeURIComponent(id)}/related`, {
+    params: { limit, lang: lang() },
+  });
 }
 
-// GET /brands
+// GET /brands?lang=
 export async function getBrands() {
-  return request('/brands');
+  return request('/brands', { params: { lang: lang() } });
 }
 
-// GET /categories
+// GET /categories?lang=
 // შენიშვნა: პროდუქტის პასუხში სასურველია `brandCountry` — mock იმპლემენტაცია მას
 // `data/brands.js`-იდან ამატებს, backend-მა კი თავად უნდა დააბრუნოს.
 export async function getCategories() {
-  return request('/categories');
+  return request('/categories', { params: { lang: lang() } });
 }
 
-// GET /home-sections
+// GET /home-sections?lang=
 export async function getHomeSections() {
-  return request('/home-sections');
+  return request('/home-sections', { params: { lang: lang() } });
 }
 
-// GET /search?q=&limit=
+// GET /search?q=&limit=&lang= - matches either name in both languages; `lang`
+// picks the one shown.
 export async function searchProducts(q, limit = 5) {
-  return request('/search', { params: { q, limit } });
+  return request('/search', { params: { q, limit, lang: lang() } });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -255,22 +280,29 @@ function cartPayload(items = []) {
   };
 }
 
-// GET /cart
+// GET /cart?lang=
 export async function getCart() {
-  const { items } = await request('/cart');
+  const { items } = await request('/cart', { params: { lang: lang() } });
   return items;
 }
 
-// PUT /cart
+// PUT /cart?lang=
 export async function saveCart(items) {
-  const { items: saved } = await request('/cart', { method: 'PUT', body: cartPayload(items) });
+  const { items: saved } = await request('/cart', {
+    method: 'PUT',
+    params: { lang: lang() },
+    body: cartPayload(items),
+  });
   return saved;
 }
 
-// POST /cart/merge — for signing in with a basket already in this browser
+// POST /cart/merge?lang= — for signing in with a basket already in this
+// browser, and on every signed-in page load. Its lines replace the ones on
+// screen, names included, so they have to come back in the page's language.
 export async function mergeCart(items) {
   const { items: merged } = await request('/cart/merge', {
     method: 'POST',
+    params: { lang: lang() },
     body: cartPayload(items),
   });
   return merged;

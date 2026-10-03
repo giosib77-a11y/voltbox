@@ -73,7 +73,9 @@
  * @property {number} total
  * @property {number} page
  * @property {number} totalPages
- * @property {{ values: Record<string, Record<string, number>>, price: {min:number,max:number} }} facets
+ * @property {{ values: Record<string, Record<string, number>>, labels?: Record<string, Record<string, string>>, price: {min:number,max:number} }} facets
+ *   `labels` - what to show for a value where it differs from the value: a
+ *   brand's English name on an English page (utils/filter.js withFacetLabels).
  */
 
 /**

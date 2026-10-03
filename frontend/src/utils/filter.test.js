@@ -14,10 +14,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildFilterChips,
   countActiveFilters,
   parseFiltersFromParams,
   paramForFilter,
   serializeFilters,
+  withFacetLabels,
 } from './filter.js';
 
 const CONFIG = [
@@ -98,5 +100,35 @@ describe('countActiveFilters', () => {
 
   it('is zero for nothing chosen', () => {
     expect(countActiveFilters({})).toBe(0);
+  });
+});
+
+describe('withFacetLabels', () => {
+  const BRAND = { key: 'brand', label: 'Brand', type: 'checkbox' };
+  const ENGLISH_FACETS = { values: { brand: { ჰოკო: 2 } }, labels: { brand: { ჰოკო: 'Hoco' } } };
+
+  it("labels a brand by the English name the API sent, keeping the brand's own name as the value", () => {
+    const [brand] = withFacetLabels([BRAND], ENGLISH_FACETS);
+
+    expect(brand.optionLabels).toEqual({ ჰოკო: 'Hoco' });
+    // The chip says Hoco; what it removes, and what the URL carries, is still ჰოკო.
+    const [chip] = buildFilterChips({ brand: ['ჰოკო'] }, [brand]);
+    expect(chip).toMatchObject({ label: 'Hoco', value: 'ჰოკო' });
+  });
+
+  it("lets the page's language win over a label the config already had", () => {
+    const configured = { ...BRAND, optionLabels: { ჰოკო: 'ჰოკო (ჩინეთი)', Apple: 'Apple' } };
+
+    const [brand] = withFacetLabels([configured], ENGLISH_FACETS);
+
+    expect(brand.optionLabels).toEqual({ ჰოკო: 'Hoco', Apple: 'Apple' });
+  });
+
+  it('hands back the very same configs when there is nothing to label - a Georgian page', () => {
+    const configs = [BRAND];
+
+    expect(withFacetLabels(configs, { values: {}, labels: {} })).toBe(configs);
+    expect(withFacetLabels(configs, { values: {} })).toBe(configs);
+    expect(withFacetLabels(configs, null)).toBe(configs);
   });
 });

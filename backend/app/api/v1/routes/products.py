@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.errors import NotFoundError
+from app.core.language import DEFAULT_LANGUAGE, LanguageQuery
 from app.core.pagination import total_pages
 from app.db.session import get_db
 from app.schemas.catalog import ProductListOut, ProductOut
@@ -17,8 +18,9 @@ from app.services import catalog
 router = APIRouter(prefix="/products", tags=["products"])
 
 # ეს პარამეტრები ცალკე მუშავდება; დანარჩენი ყველა query param ფილტრად ითვლება
-# და `categories.filters` კონფიგის მიხედვით იხსნება
-RESERVED_PARAMS = frozenset({"page", "limit", "sort", "q"})
+# და `categories.filters` კონფიგის მიხედვით იხსნება. `lang` among them, or a
+# category with a `specs.lang` filter would read the page's language as one.
+RESERVED_PARAMS = frozenset({"page", "limit", "sort", "q", "lang"})
 
 
 def _filter_params(request: Request) -> dict[str, str]:
@@ -34,7 +36,7 @@ def _filter_params(request: Request) -> dict[str, str]:
     summary="List products",
     description=(
         "Paginated product list with filters, sorting and facet counts. "
-        "Any query parameter that is not page/limit/sort/q is treated as a filter "
+        "Any query parameter that is not page/limit/sort/q/lang is treated as a filter "
         "and resolved against the category filter configuration."
     ),
     response_model=ProductListOut,
@@ -46,6 +48,7 @@ async def list_products(
     limit: Annotated[int, Query(ge=1, le=settings.max_page_size)] = settings.default_page_size,
     sort: Annotated[str, Query()] = catalog.DEFAULT_SORT,
     q: Annotated[str, Query(max_length=200)] = "",
+    lang: LanguageQuery = DEFAULT_LANGUAGE,
 ) -> ProductListOut:
     # ქართული ახსნა: ფილტრები წინასწარ არ არის ჩამოთვლილი, რადგან მათი ნაკრები
     # კატეგორიაზეა დამოკიდებული და ბაზიდან იკითხება — ამიტომ ნედლ query-ს ვიღებთ
@@ -58,10 +61,11 @@ async def list_products(
         page=page,
         limit=limit,
         search_term=q,
+        lang=lang,
     )
 
     return ProductListOut(
-        items=[product_to_out(p) for p in result["items"]],
+        items=[product_to_out(p, lang=lang) for p in result["items"]],
         total=result["total"],
         page=page,
         total_pages=total_pages(result["total"], limit),
@@ -72,20 +76,28 @@ async def list_products(
 
 @router.get("/by-id/{product_id}", summary="Get a product by id", response_model=ProductOut)
 async def get_product_by_id(
-    product_id: UUID, db: Annotated[AsyncSession, Depends(get_db)]
+    product_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    lang: LanguageQuery = DEFAULT_LANGUAGE,
 ) -> ProductOut:
     product = await catalog.get_by_id(db, product_id)
     if product is None:
         raise NotFoundError("Product not found", code="PRODUCT_NOT_FOUND")
-    return product_to_out(product)
+    return product_to_out(product, lang=lang)
 
 
 @router.get("/{slug}", summary="Get a product by slug", response_model=ProductOut)
-async def get_product(slug: str, db: Annotated[AsyncSession, Depends(get_db)]) -> ProductOut:
+async def get_product(
+    slug: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    lang: LanguageQuery = DEFAULT_LANGUAGE,
+) -> ProductOut:
+    # One slug for both languages: the English page asks for the same product
+    # by the same address and gets its English text.
     product = await catalog.get_by_slug(db, slug)
     if product is None:
         raise NotFoundError("Product not found", code="PRODUCT_NOT_FOUND")
-    return product_to_out(product)
+    return product_to_out(product, lang=lang)
 
 
 @router.get(
@@ -97,8 +109,10 @@ async def get_related(
     product_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
     limit: Annotated[int, Query(ge=1, le=24)] = 8,
+    lang: LanguageQuery = DEFAULT_LANGUAGE,
 ) -> list[ProductOut]:
     product = await catalog.get_by_id(db, product_id)
     if product is None:
         raise NotFoundError("Product not found", code="PRODUCT_NOT_FOUND")
-    return [product_to_out(p) for p in await catalog.get_related(db, product, limit)]
+    related = await catalog.get_related(db, product, limit)
+    return [product_to_out(p, lang=lang) for p in related]

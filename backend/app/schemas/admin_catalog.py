@@ -63,6 +63,8 @@ class CategoryFilter(ApiRequest):
 
 class CategoryCreate(ApiRequest):
     name: str = Field(min_length=1, max_length=150)
+    # Optional. Shown on /en, and the Georgian is shown there without it.
+    name_en: str = Field(default="", max_length=150)
     slug: str | None = Field(default=None, max_length=100)
     short_name: str = Field(default="", max_length=150)
     description: str = ""
@@ -77,6 +79,10 @@ class CategoryCreate(ApiRequest):
 
 class CategoryUpdate(ApiRequest):
     name: str | None = Field(default=None, min_length=1, max_length=150)
+    # `str`, not `str | None`, unlike its neighbours: the column is NOT NULL, so
+    # a null has to be a 400 here rather than a database error. Empty clears it.
+    # The default never reaches the row - the route dumps with exclude_unset.
+    name_en: str = Field(default="", max_length=150)
     slug: str | None = Field(default=None, max_length=100)
     short_name: str | None = Field(default=None, max_length=150)
     description: str | None = None
@@ -93,6 +99,7 @@ class CategoryAdminOut(ApiModel):
     id: UUID
     slug: str
     name: str
+    name_en: str
     short_name: str
     description: str
     icon: str
@@ -108,6 +115,8 @@ class CategoryAdminOut(ApiModel):
 
 class BrandCreate(ApiRequest):
     name: str = Field(min_length=1, max_length=150)
+    # Optional. Shown on /en, and the name above is shown there without it.
+    name_en: str = Field(default="", max_length=150)
     slug: str | None = Field(default=None, max_length=100)
     country: str | None = Field(default=None, max_length=100)
     logo_url: str | None = None
@@ -115,6 +124,8 @@ class BrandCreate(ApiRequest):
 
 class BrandUpdate(ApiRequest):
     name: str | None = Field(default=None, min_length=1, max_length=150)
+    # `str`, not `str | None`: NOT NULL column, see CategoryUpdate.name_en.
+    name_en: str = Field(default="", max_length=150)
     slug: str | None = Field(default=None, max_length=100)
     country: str | None = Field(default=None, max_length=100)
     logo_url: str | None = None
@@ -124,6 +135,7 @@ class BrandAdminOut(ApiModel):
     id: UUID
     slug: str
     name: str
+    name_en: str
     country: str | None
     logo_url: str | None
     products_count: int

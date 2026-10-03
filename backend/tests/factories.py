@@ -32,12 +32,18 @@ PHONES_FILTERS: list[dict[str, Any]] = [
 
 
 async def make_category(
-    db: AsyncSession, slug: str = "phones", *, filters: list[dict[str, Any]] | None = None
+    db: AsyncSession,
+    slug: str = "phones",
+    *,
+    filters: list[dict[str, Any]] | None = None,
+    name: str | None = None,
+    name_en: str = "",
 ) -> Category:
     category = Category(
         slug=slug,
-        name=slug,
-        short_name=slug,
+        name=name or slug,
+        name_en=name_en,
+        short_name=name or slug,
         description="",
         icon="Smartphone",
         filters=filters if filters is not None else PHONES_FILTERS,
@@ -47,8 +53,10 @@ async def make_category(
     return category
 
 
-async def make_brand(db: AsyncSession, name: str, country: str | None = "აშშ") -> Brand:
-    brand = Brand(slug=name.lower(), name=name, country=country)
+async def make_brand(
+    db: AsyncSession, name: str, country: str | None = "აშშ", *, name_en: str = ""
+) -> Brand:
+    brand = Brand(slug=name.lower(), name=name, name_en=name_en, country=country)
     db.add(brand)
     await db.flush()
     return brand
@@ -61,6 +69,8 @@ async def make_product(
     *,
     slug: str,
     name: str | None = None,
+    name_en: str = "",
+    description_en: str = "",
     price: str = "1000.00",
     old_price: str | None = None,
     stock: int = 10,
@@ -79,8 +89,10 @@ async def make_product(
     product = Product(
         slug=slug,
         name=name or slug,
+        name_en=name_en,
         short_description=short_description,
         description="სრული აღწერა",
+        description_en=description_en,
         category_id=category.id,
         brand_id=brand.id,
         price=Decimal(price),
@@ -95,6 +107,7 @@ async def make_product(
         created_at=created_at or datetime(2026, 1, 1, tzinfo=UTC),
         search_text=build_search_text(
             name=name or slug,
+            name_en=name_en,
             brand_name=brand.name,
             category_name=category.name,
             category_slug=category.slug,

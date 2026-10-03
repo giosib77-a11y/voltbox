@@ -12,6 +12,12 @@ LIKE-ად რჩება. სვეტი მხოლოდ ჩაწერ�
 
 რანჟირება: სახელის ზუსტი დამთხვევა → სახელის პრეფიქსი → სახელში შემცველობა →
 trigram-მსგავსება → ტეგი/specs; შემდეგ პოპულარობა.
+
+Both of a product's names count, in both languages: the English name is in
+search_text beside the Georgian, and ranking and the typo stage take whichever
+name matches better. The language of the page decides only which name is
+shown. A product without an English name ranks exactly as it did before one
+existed - an empty name matches nothing and scores nothing.
 """
 
 from __future__ import annotations
@@ -51,6 +57,7 @@ def _enrich(value: str) -> list[str]:
 def build_search_text(
     *,
     name: str,
+    name_en: str,
     brand_name: str,
     category_name: str,
     category_slug: str,
@@ -58,13 +65,19 @@ def build_search_text(
     tags: list[str],
     specs: dict[str, Any],
 ) -> str:
-    """პროდუქტის საძებნი ტექსტი. `products.search_text`-ში იწერება."""
+    """პროდუქტის საძებნი ტექსტი. `products.search_text`-ში იწერება.
+
+    `name_en` has no default on purpose: a write path that left it out would
+    rebuild the index without the English name, and that product would stop
+    being found by it with no error anywhere. mypy catches the omission instead.
+    """
     spec_values = " ".join(
         f"{key} {'დიახ' if value is True else 'არა' if value is False else value}"
         for key, value in (specs or {}).items()
     )
     sources = [
         name,
+        name_en,
         brand_name,
         category_name,
         category_slug,
@@ -108,24 +121,35 @@ def _token_condition(token: str) -> Any:
     return or_(*clauses) if len(clauses) > 1 else clauses[0]
 
 
+def _names() -> tuple[Any, Any]:
+    """The product's two names, lowercased - Georgian, then English."""
+    return func.lower(Product.name), func.lower(Product.name_en)
+
+
+def _name_similarity(normalized_query: str) -> Any:
+    """How close the query is to the nearer of the two names."""
+    return func.greatest(*(func.word_similarity(normalized_query, name) for name in _names()))
+
+
 def _relevance(tokens: list[str], normalized_query: str) -> Any:
     """რანჟირების ქულა.
 
     სახელის ზუსტი დამთხვევა უპირობოდ პირველია, შემდეგ პრეფიქსი, შემდეგ
     შემცველობა; ბოლოს trigram-მსგავსება და პოპულარობა წყვეტს ტოლ შემთხვევებს.
+    Each tier is reached by either name. An empty English name equals no query
+    and LIKE never finds a non-empty one in it, so it adds nothing.
     """
-    name_normalized = func.lower(Product.name)
-    similarity = func.word_similarity(normalized_query, name_normalized)
+    names = _names()
     popularity = Product.rating * func.log(10, Product.reviews_count + 10)
 
     return (
         case(
-            (name_normalized == normalized_query, 1000),
-            (name_normalized.like(f"{normalized_query}%"), 500),
-            (name_normalized.like(f"%{normalized_query}%"), 250),
+            (or_(*(name == normalized_query for name in names)), 1000),
+            (or_(*(name.like(f"{normalized_query}%") for name in names)), 500),
+            (or_(*(name.like(f"%{normalized_query}%") for name in names)), 250),
             else_=0,
         )
-        + cast(similarity, Float) * 100
+        + cast(_name_similarity(normalized_query), Float) * 100
         + cast(popularity, Float)
     )
 
@@ -167,9 +191,7 @@ async def _run(
     normalized_query = normalize(query)
 
     if fuzzy:
-        match = func.word_similarity(normalized_query, func.lower(Product.name)) > (
-            WORD_SIMILARITY_THRESHOLD
-        )
+        match = _name_similarity(normalized_query) > WORD_SIMILARITY_THRESHOLD
     else:
         match = and_(*[_token_condition(token) for token in tokens])
 

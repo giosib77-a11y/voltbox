@@ -89,6 +89,8 @@ def _clean_tags(value: list[str] | None) -> list[str]:
 
 class ProductCreate(ApiRequest):
     name: str = Field(min_length=1, max_length=300)
+    # Optional, both. Shown on /en, and the Georgian is shown there without them.
+    name_en: str = Field(default="", max_length=300)
     slug: str | None = Field(default=None, max_length=200)
     sku: str | None = Field(default=None, max_length=64)
     category_id: UUID
@@ -97,6 +99,7 @@ class ProductCreate(ApiRequest):
     old_price: Decimal | None = Field(default=None, ge=0, decimal_places=2, max_digits=12)
     short_description: str = ""
     description: str = ""
+    description_en: str = ""
     specs: dict[str, Any] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
     low_stock_threshold: int = Field(default=3, ge=0)
@@ -128,6 +131,11 @@ class ProductCreate(ApiRequest):
 
 class ProductUpdate(ApiRequest):
     name: str | None = Field(default=None, min_length=1, max_length=300)
+    # `str`, not `str | None`, unlike its neighbours: the column is NOT NULL, so
+    # a null has to be a 400 here rather than a database error. Empty clears it;
+    # description_en below is the same.
+    # The default never reaches the row - the route dumps with exclude_unset.
+    name_en: str = Field(default="", max_length=300)
     slug: str | None = Field(default=None, max_length=200)
     sku: str | None = Field(default=None, max_length=64)
     category_id: UUID | None = None
@@ -136,6 +144,7 @@ class ProductUpdate(ApiRequest):
     old_price: Decimal | None = Field(default=None, ge=0, decimal_places=2, max_digits=12)
     short_description: str | None = None
     description: str | None = None
+    description_en: str = ""
     specs: dict[str, Any] | None = None
     tags: list[str] | None = None
     low_stock_threshold: int | None = Field(default=None, ge=0)
@@ -176,8 +185,10 @@ class ProductAdminOut(ApiModel):
     slug: str
     sku: str | None
     name: str
+    name_en: str
     short_description: str
     description: str
+    description_en: str
     category_id: UUID
     category_name: str
     brand_id: UUID

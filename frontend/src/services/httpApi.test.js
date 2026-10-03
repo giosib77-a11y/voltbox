@@ -9,8 +9,9 @@
  * services/httpApi.js `request()`.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { i18n } from '../i18n/index.js';
 import * as httpApi from './httpApi.js';
 import { request } from './httpClient.js';
 import {
@@ -706,6 +707,72 @@ describe('what the reader is told', () => {
     await expect(httpApi.getProducts()).rejects.toMatchObject({
       status: 502,
       message: 'მოთხოვნის დამუშავება ვერ მოხერხდა',
+    });
+  });
+});
+
+describe('the language the catalogue answers in', () => {
+  /** Every call whose answer names a product, a category or a brand. */
+  const NAMED = [
+    ['getProducts', () => httpApi.getProducts({ category: 'phones', filters: { brand: ['ჰოკო'] } })],
+    ['getProductBySlug', () => httpApi.getProductBySlug('earbuds-pro')],
+    ['getProductById', () => httpApi.getProductById('p1')],
+    ['getRelatedProducts', () => httpApi.getRelatedProducts('p1')],
+    ['getBrands', () => httpApi.getBrands()],
+    ['getCategories', () => httpApi.getCategories()],
+    ['getHomeSections', () => httpApi.getHomeSections()],
+    ['searchProducts', () => httpApi.searchProducts('earbuds')],
+    ['getCart', () => httpApi.getCart()],
+    ['saveCart', () => httpApi.saveCart([])],
+    ['mergeCart', () => httpApi.mergeCart([])],
+  ];
+
+  /** The URL each call requested, with an answer every one of them can read. */
+  async function urlsOf() {
+    const fetchMock = vi.fn(async () => reply({ items: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const urls = {};
+    for (const [name, call] of NAMED) {
+      fetchMock.mockClear();
+      await call();
+      urls[name] = fetchMock.mock.calls[0][0];
+    }
+    return urls;
+  }
+
+  afterEach(() => {
+    i18n.changeLanguage('ka');
+  });
+
+  it('asks for English on an English page, on every call that names something', async () => {
+    i18n.changeLanguage('en');
+
+    const urls = await urlsOf();
+
+    for (const [name, url] of Object.entries(urls)) {
+      expect(new URL(url, 'http://shop').searchParams.get('lang'), name).toBe('en');
+    }
+    // A filter keeps its own parameter beside the language, not under it.
+    expect(new URL(urls.getProducts, 'http://shop').searchParams.get('brand')).toBe('ჰოკო');
+  });
+
+  it('asks on a Georgian page exactly as it did before English existed', async () => {
+    i18n.changeLanguage('ka');
+
+    const urls = await urlsOf();
+
+    expect(urls).toEqual({
+      getProducts: '/api/v1/products?category=phones&brand=%E1%83%B0%E1%83%9D%E1%83%99%E1%83%9D',
+      getProductBySlug: '/api/v1/products/earbuds-pro',
+      getProductById: '/api/v1/products/by-id/p1',
+      getRelatedProducts: '/api/v1/products/p1/related?limit=4',
+      getBrands: '/api/v1/brands',
+      getCategories: '/api/v1/categories',
+      getHomeSections: '/api/v1/home-sections',
+      searchProducts: '/api/v1/search?q=earbuds&limit=5',
+      getCart: '/api/v1/cart',
+      saveCart: '/api/v1/cart',
+      mergeCart: '/api/v1/cart/merge',
     });
   });
 });

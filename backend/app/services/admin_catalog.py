@@ -154,6 +154,7 @@ async def create_category(db: AsyncSession, payload: dict[str, Any]) -> Category
     category = Category(
         slug=slug,
         name=payload["name"],
+        name_en=payload.get("name_en") or "",
         short_name=payload.get("short_name") or payload["name"],
         description=payload.get("description") or "",
         icon=payload.get("icon") or "Package",
@@ -273,6 +274,7 @@ async def create_brand(db: AsyncSession, payload: dict[str, Any]) -> Brand:
     brand = Brand(
         slug=slug,
         name=payload["name"],
+        name_en=payload.get("name_en") or "",
         country=payload.get("country"),
         logo_url=payload.get("logo_url"),
     )

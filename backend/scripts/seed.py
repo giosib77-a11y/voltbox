@@ -163,6 +163,8 @@ async def upsert_products(
         # საძებნი ტექსტი ჩაწერისას ივსება — query-ს დროს გამოთვლა ინდექსს გამორთავდა
         product.search_text = build_search_text(
             name=row["name"],
+            # The mock data has no English names; a re-seeded row keeps its own.
+            name_en=product.name_en or "",
             brand_name=brand.name,
             category_name=category.name,
             category_slug=category.slug,

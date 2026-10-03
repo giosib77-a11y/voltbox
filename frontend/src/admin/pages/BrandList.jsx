@@ -4,7 +4,8 @@
  * What it does: lists brands and edits one inline in a dialog.
  * Where it fits: /admin/brands.
  * Notes: counts come from a single aggregate on the server, so this page stays
- * one request regardless of how many brands there are.
+ * one request regardless of how many brands there are. The English name is
+ * optional: the English storefront shows the name above without it.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -23,6 +24,7 @@ function BrandDialog({ brand, onClose, onSaved }) {
   const isEdit = Boolean(brand?.id);
   const [values, setValues] = useState({
     name: brand?.name || '',
+    nameEn: brand?.nameEn || '',
     slug: brand?.slug || '',
     country: brand?.country || '',
   });
@@ -43,6 +45,7 @@ function BrandDialog({ brand, onClose, onSaved }) {
     try {
       const payload = {
         name: values.name.trim(),
+        nameEn: values.nameEn.trim(),
         country: values.country.trim() || null,
       };
       if (values.slug.trim()) payload.slug = values.slug.trim();
@@ -68,13 +71,22 @@ function BrandDialog({ brand, onClose, onSaved }) {
             {formError.message}
           </p>
         ) : null}
-        <Input
-          label="სახელი"
-          required
-          value={values.name}
-          error={errors.name}
-          onChange={(event) => setValues((c) => ({ ...c, name: event.target.value }))}
-        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            label="სახელი"
+            required
+            value={values.name}
+            error={errors.name}
+            onChange={(event) => setValues((c) => ({ ...c, name: event.target.value }))}
+          />
+          <Input
+            label="სახელი ინგლისურად"
+            hint="არასავალდებულო. ცარიელზე ინგლისურ საიტზე ქართული ჩანს"
+            lang="en"
+            value={values.nameEn}
+            onChange={(event) => setValues((c) => ({ ...c, nameEn: event.target.value }))}
+          />
+        </div>
         <Input
           label="Slug"
           hint="ცარიელი — სახელიდან შეიქმნება"

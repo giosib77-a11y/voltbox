@@ -82,6 +82,12 @@ class Facets(ApiModel):
 
     values: dict[str, dict[str, int]] = Field(default_factory=dict)
     price: PriceFacet
+    # What to show for a value where that differs from the value itself:
+    #     labels["brand"] → {"ჰოკო": "Hoco"}
+    # The value stays the brand's own name in both languages, because it is what
+    # the URL carries (`?brand=ჰოკო`) and the URL is the same in both. Only an
+    # English page with an English brand name gets an entry; Georgian gets none.
+    labels: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
 class ProductListOut(ApiModel):

@@ -30,6 +30,7 @@ async def main() -> None:
         for product in products:
             fresh = build_search_text(
                 name=product.name,
+                name_en=product.name_en,
                 brand_name=product.brand.name,
                 category_name=product.category.name,
                 category_slug=product.category.slug,

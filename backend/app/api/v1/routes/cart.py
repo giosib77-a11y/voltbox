@@ -8,11 +8,14 @@ this is the copy that survives a different device or a cleared browser.
 `PUT` replaces, `POST /merge` folds in. The difference matters exactly once: at
 sign-in, when the person may have a basket in this browser *and* one saved from
 somewhere else, and replacing would throw one of them away without asking.
+
+Each answer names its products in the page's `lang`, like the catalogue does.
 """
 
 from fastapi import APIRouter, status
 
 from app.core.deps import CurrentUser, Db
+from app.core.language import DEFAULT_LANGUAGE, LanguageQuery
 from app.schemas.cart import CartOut, CartRequest
 from app.services import cart as cart_service
 
@@ -33,8 +36,8 @@ def _payload(items: CartRequest) -> list[dict[str, object]]:
     ),
     response_model=CartOut,
 )
-async def read_cart(db: Db, user: CurrentUser) -> CartOut:
-    return CartOut(items=await cart_service.get_cart(db, user.id))
+async def read_cart(db: Db, user: CurrentUser, lang: LanguageQuery = DEFAULT_LANGUAGE) -> CartOut:
+    return CartOut(items=await cart_service.get_cart(db, user.id, lang=lang))
 
 
 @router.put(
@@ -43,8 +46,10 @@ async def read_cart(db: Db, user: CurrentUser) -> CartOut:
     description="The browser is the source of truth while shopping; this stores what it holds.",
     response_model=CartOut,
 )
-async def replace_cart(db: Db, user: CurrentUser, payload: CartRequest) -> CartOut:
-    items = await cart_service.save_cart(db, user.id, _payload(payload))
+async def replace_cart(
+    db: Db, user: CurrentUser, payload: CartRequest, lang: LanguageQuery = DEFAULT_LANGUAGE
+) -> CartOut:
+    items = await cart_service.save_cart(db, user.id, _payload(payload), lang=lang)
     await db.commit()
     return CartOut(items=items)
 
@@ -59,8 +64,10 @@ async def replace_cart(db: Db, user: CurrentUser, payload: CartRequest) -> CartO
     ),
     response_model=CartOut,
 )
-async def merge_cart(db: Db, user: CurrentUser, payload: CartRequest) -> CartOut:
-    items = await cart_service.merge_cart(db, user.id, _payload(payload))
+async def merge_cart(
+    db: Db, user: CurrentUser, payload: CartRequest, lang: LanguageQuery = DEFAULT_LANGUAGE
+) -> CartOut:
+    items = await cart_service.merge_cart(db, user.id, _payload(payload), lang=lang)
     await db.commit()
     return CartOut(items=items)
 

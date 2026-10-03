@@ -27,6 +27,9 @@ const CATEGORIES = [
 ];
 const BRANDS = [{ id: 'brand-1', name: 'Apple' }];
 
+/** The Georgian name's box - not "სახელი ინგლისურად" beside it. `*` marks it required. */
+const GEORGIAN_NAME = /^სახელი\*?$/;
+
 /**
  * A data router, not MemoryRouter: ProductForm uses useBlocker to warn about
  * unsaved changes, and that hook only exists inside a data router.
@@ -62,7 +65,7 @@ describe('ProductForm validation', () => {
     renderForm();
     await screen.findByLabelText(/კატეგორია/);
 
-    await userEvent.type(screen.getByLabelText(/სახელი/), 'ტესტი');
+    await userEvent.type(screen.getByLabelText(GEORGIAN_NAME), 'ტესტი');
     await userEvent.type(screen.getByLabelText(/^ფასი/), '100');
     await userEvent.type(screen.getByLabelText(/ძველი ფასი/), '90');
     await userEvent.click(screen.getByRole('button', { name: 'შენახვა' }));
@@ -119,7 +122,7 @@ describe('ProductForm server errors', () => {
     renderForm();
     await screen.findByLabelText(/კატეგორია/);
 
-    await userEvent.type(screen.getByLabelText(/სახელი/), 'ტესტი');
+    await userEvent.type(screen.getByLabelText(GEORGIAN_NAME), 'ტესტი');
     await userEvent.type(screen.getByLabelText(/^ფასი/), '10');
     await userEvent.selectOptions(screen.getByLabelText(/კატეგორია/), 'cat-1');
     await userEvent.selectOptions(screen.getByLabelText(/ბრენდი/), 'brand-1');
@@ -129,8 +132,8 @@ describe('ProductForm server errors', () => {
   });
 
   it('never swallows a rejection whose field the form cannot show', async () => {
-    // The form draws an error slot for seven fields. The API validates more
-    // than seven - a negative stock threshold, an over-long spec value, too
+    // The form draws an error slot for eight fields. The API validates more
+    // than eight - a negative stock threshold, an over-long spec value, too
     // many tags. Mapping one of those onto `errors.lowStockThreshold` puts the
     // message somewhere nothing renders, and if that also counted as "handled"
     // the save would fail in silence: no message, no navigation, nothing.
@@ -148,7 +151,7 @@ describe('ProductForm server errors', () => {
     renderForm();
     await screen.findByLabelText(/კატეგორია/);
 
-    await userEvent.type(screen.getByLabelText(/სახელი/), 'ტესტი');
+    await userEvent.type(screen.getByLabelText(GEORGIAN_NAME), 'ტესტი');
     await userEvent.type(screen.getByLabelText(/^ფასი/), '10');
     await userEvent.selectOptions(screen.getByLabelText(/კატეგორია/), 'cat-1');
     await userEvent.selectOptions(screen.getByLabelText(/ბრენდი/), 'brand-1');
@@ -172,7 +175,7 @@ describe('ProductForm server errors', () => {
     renderForm();
     await screen.findByLabelText(/კატეგორია/);
 
-    await userEvent.type(screen.getByLabelText(/სახელი/), 'ტესტი');
+    await userEvent.type(screen.getByLabelText(GEORGIAN_NAME), 'ტესტი');
     await userEvent.type(screen.getByLabelText(/^ფასი/), '10');
     await userEvent.selectOptions(screen.getByLabelText(/კატეგორია/), 'cat-1');
     await userEvent.selectOptions(screen.getByLabelText(/ბრენდი/), 'brand-1');
@@ -195,7 +198,7 @@ describe('ProductForm server errors', () => {
     renderForm();
     await screen.findByLabelText(/კატეგორია/);
 
-    await userEvent.type(screen.getByLabelText(/სახელი/), 'ტესტი');
+    await userEvent.type(screen.getByLabelText(GEORGIAN_NAME), 'ტესტი');
     await userEvent.type(screen.getByLabelText(/^ფასი/), '10.10');
     await userEvent.selectOptions(screen.getByLabelText(/კატეგორია/), 'cat-1');
     await userEvent.selectOptions(screen.getByLabelText(/ბრენდი/), 'brand-1');
@@ -204,5 +207,118 @@ describe('ProductForm server errors', () => {
     await waitFor(() => expect(create).toHaveBeenCalled());
     // Parsing it here is how 10.10 becomes 10.099999999999999.
     expect(create.mock.calls[0][0].price).toBe('10.10');
+  });
+});
+
+describe('ProductForm English name and description', () => {
+  const SAVED = {
+    id: 'p-1',
+    name: 'პორტატული დინამიკი',
+    nameEn: 'Portable Speaker',
+    slug: 'portatuli-dinamiki',
+    sku: null,
+    categoryId: 'cat-1',
+    brandId: 'brand-1',
+    price: '199.00',
+    oldPrice: null,
+    shortDescription: '',
+    description: 'წყალგამძლე.',
+    descriptionEn: 'Waterproof.',
+    specs: {},
+    tags: [],
+    lowStockThreshold: 3,
+    stock: 4,
+    isActive: true,
+    isFeatured: false,
+    isNew: false,
+    archivedAt: null,
+    images: [],
+    rating: 0,
+    reviewsCount: 0,
+  };
+
+  function renderEdit() {
+    const router = createMemoryRouter(
+      [{ path: '/admin/products/:id', element: <ProductForm /> }],
+      { initialEntries: ['/admin/products/p-1'] },
+    );
+    return render(<RouterProvider router={router} />);
+  }
+
+  it('sits beside the Georgian, says it is optional, and does not block a save', async () => {
+    renderForm();
+    await screen.findByLabelText(/კატეგორია/);
+
+    const nameEn = screen.getByLabelText('სახელი ინგლისურად');
+    const descriptionEn = screen.getByLabelText('სრული აღწერა ინგლისურად');
+    for (const field of [nameEn, descriptionEn]) {
+      expect(field).not.toBeRequired();
+      expect(field).toHaveAccessibleDescription(/არასავალდებულო/);
+      expect(field).toHaveAttribute('lang', 'en');
+    }
+
+    // Georgian only, English left empty: the form still saves.
+    const create = vi
+      .spyOn(adminApi, 'createProduct')
+      .mockRejectedValue(Object.assign(new Error('offline'), { status: 0 }));
+    await userEvent.type(screen.getByLabelText(GEORGIAN_NAME), 'დინამიკი');
+    await userEvent.type(screen.getByLabelText(/^ფასი/), '10');
+    await userEvent.selectOptions(screen.getByLabelText(/კატეგორია/), 'cat-1');
+    await userEvent.selectOptions(screen.getByLabelText(/ბრენდი/), 'brand-1');
+    await userEvent.click(screen.getByRole('button', { name: 'შენახვა' }));
+
+    await waitFor(() => expect(create).toHaveBeenCalled());
+    expect(create.mock.calls[0][0]).toMatchObject({ nameEn: '', descriptionEn: '' });
+  });
+
+  it('saves both names and both descriptions on create', async () => {
+    // Rejected for the same reason as the money test above: the payload is the
+    // point, and a resolved create would navigate.
+    const create = vi
+      .spyOn(adminApi, 'createProduct')
+      .mockRejectedValue(Object.assign(new Error('offline'), { status: 0 }));
+    renderForm();
+    await screen.findByLabelText(/კატეგორია/);
+
+    await userEvent.type(screen.getByLabelText(GEORGIAN_NAME), 'პორტატული დინამიკი');
+    await userEvent.type(screen.getByLabelText('სახელი ინგლისურად'), '  Portable Speaker ');
+    await userEvent.type(screen.getByLabelText('სრული აღწერა'), 'წყალგამძლე.');
+    await userEvent.type(screen.getByLabelText('სრული აღწერა ინგლისურად'), 'Waterproof.');
+    await userEvent.type(screen.getByLabelText(/^ფასი/), '199');
+    await userEvent.selectOptions(screen.getByLabelText(/კატეგორია/), 'cat-1');
+    await userEvent.selectOptions(screen.getByLabelText(/ბრენდი/), 'brand-1');
+    await userEvent.click(screen.getByRole('button', { name: 'შენახვა' }));
+
+    await waitFor(() => expect(create).toHaveBeenCalled());
+    expect(create.mock.calls[0][0]).toMatchObject({
+      name: 'პორტატული დინამიკი',
+      nameEn: 'Portable Speaker',
+      description: 'წყალგამძლე.',
+      descriptionEn: 'Waterproof.',
+    });
+  });
+
+  it('reloads both, and saves an emptied English name as empty rather than keeping it', async () => {
+    vi.spyOn(adminApi, 'getProduct').mockResolvedValue(SAVED);
+    const update = vi
+      .spyOn(adminApi, 'updateProduct')
+      .mockImplementation(async (id, patch) => ({ ...SAVED, ...patch }));
+    renderEdit();
+
+    const nameEn = await screen.findByLabelText('სახელი ინგლისურად');
+    expect(screen.getByLabelText(GEORGIAN_NAME)).toHaveValue('პორტატული დინამიკი');
+    expect(nameEn).toHaveValue('Portable Speaker');
+    expect(screen.getByLabelText('სრული აღწერა')).toHaveValue('წყალგამძლე.');
+    expect(screen.getByLabelText('სრული აღწერა ინგლისურად')).toHaveValue('Waterproof.');
+
+    await userEvent.clear(nameEn);
+    await userEvent.click(screen.getByRole('button', { name: 'შენახვა' }));
+
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    expect(update.mock.calls[0][0]).toBe('p-1');
+    expect(update.mock.calls[0][1]).toMatchObject({ nameEn: '', descriptionEn: 'Waterproof.' });
+    // What the server answered is what the form shows next.
+    await waitFor(() => expect(screen.getByLabelText('სახელი ინგლისურად')).toHaveValue(''));
+    expect(screen.getByLabelText('სრული აღწერა ინგლისურად')).toHaveValue('Waterproof.');
   });
 });
