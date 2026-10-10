@@ -10,6 +10,15 @@ on:
       # frontend-only change that removed one would not have run this job, and
       # the guard would have been silent about exactly the change it exists for.
       - "frontend/src/services/httpClient.js"
+      # The rest of what the backend tests open in frontend/src (grep
+      # "frontend" backend/tests): the Georgian words for every error code and
+      # the order email's contact copy, the payment methods and info-page paths
+      # the shop offers, and the admin's payment labels. A frontend-only change
+      # to any of them would otherwise reach main without this job, and turn
+      # main red on the next unrelated backend commit.
+      - "frontend/src/i18n/ka.json"
+      - "frontend/src/constants/index.js"
+      - "frontend/src/admin/statuses.jsx"
       # The audit step below installs pip-audit from this lock. Without this
       # line, a Dependabot pull request that bumps it would run no CI at all,
       # and the first run to use the new lock would be on main.

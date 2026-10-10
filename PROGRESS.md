@@ -98,7 +98,7 @@ re-checked in the code before it was written here. Order = suggested order.
   Fix: write the same start row in `place_order`'s transaction; update
   `tests/test_inventory.py:162`.
 
-- [ ] **T11 · should-fix · Backend CI skips frontend files its tests read.**
+- [x] **T11 · should-fix · Backend CI skips frontend files its tests read.**
   `.github/workflows/backend.yml` paths list only `httpClient.js`; tests also read
   `frontend/src/i18n/ka.json`, `frontend/src/constants/index.js`,
   `frontend/src/admin/statuses.jsx`. A frontend-only PR can turn main red.
@@ -177,4 +177,4 @@ Unverified (check before acting):
   http build — green. Backend `pytest` not run: Docker was not running (needs
   `voltbox-pg` on :55432).
 - Known issues / blockers: live-DB questions in PROJECT.md Open Questions.
-- Next: T11.
+- Next: T12.

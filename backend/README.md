@@ -40,7 +40,7 @@ uvicorn app.main:app --reload
 
 ```bash
 ruff check . && ruff format --check .
-mypy app scripts
+mypy app scripts tests
 pytest -q
 ```
 

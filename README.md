@@ -120,8 +120,8 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 
 | | ბრძანება |
 |---|---|
-| frontend | `cd frontend && npm run build` |
-| backend | `cd backend && ruff check . && ruff format --check . && mypy app scripts && pytest -q` |
+| frontend | `cd frontend && npm run lint && npm test && npm run build` (CI აშენებს `VITE_API_MODE=mock`-ითაც და `http`-ითაც) |
+| backend | `cd backend && ruff check . && ruff format --check . && mypy app scripts tests && pytest -q` |
 | backend-ის იმიჯი | `cd backend && docker build -t voltbox-api:check .` |
 
 იგივეს ამოწმებს CI — [`.github/workflows/`](./.github/workflows/). frontend
