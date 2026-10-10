@@ -273,6 +273,12 @@ Nits:
   Correction: an earlier note here named #12 as postcss-selector-parser and said backend `pip-audit` was
   clean; #12 is brace-expansion, and Mako (#13, #14) was in the backend locks — pip-audit missed it.
   Mako is fixed (1.4.1 -> 1.4.3 in `requirements.txt` and `requirements-dev.txt`).
+- pip-ის პაკეტების ეტაპობრივი განახლება --upgrade-package-ით (fastapi, starlette, sqlalchemy 2.1 ცალკე).
+  The Dependabot pip group (16 packages) was closed, 2026-10-10: its lock bumped `pydantic-core` to 2.49.0
+  while pydantic 2.13.5 pins `pydantic-core==2.46.5`, and `sqlalchemy` 2.0 -> 2.1 is a minor on a core
+  dependency. Do it in the Linux container (backend/README.md), one package or one family per commit.
+- React 19 — როცა საჭირო გახდება, ერთად react + react-dom (და ორივე @types). The two Dependabot
+  PRs were closed, 2026-10-10: react 19 with react-dom 18 does not work, so they cannot merge one by one.
 - Profile.jsx:92 inline current-password error never shows in http mode (`details.code`, not `details.currentPassword`; same in ChangePassword.jsx:54); only the toast appears.
 - Partial add to a full-ish cart (8 + 5) shows only the error toast although 2 were added.
 - Over-20 carts are cut silently, and differently: frontend `sanitize` keeps the first 20, backend `merge_cart` the last 20.
