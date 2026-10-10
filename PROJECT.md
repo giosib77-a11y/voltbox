@@ -58,10 +58,10 @@ Deployment state, as far as the repository shows (2026-10-10):
 2. Cart in the browser; for a signed-in customer also saved on the server.
 3. Checkout (guest or customer) → `POST /orders` with a mandatory
    `Idempotency-Key` → server prices every line from the database, decrements
-   stock and writes inventory movements in one transaction → order number
-   `VB-...`; Telegram notice to the owner; email confirmation when email is
-   configured. (Checkout writes no status-history row today; migration 0004
-   backfilled a `pending → pending` start row for older orders — PROGRESS.md.)
+   stock, writes inventory movements and the timeline's first row (`pending →
+   pending`, as migration 0004 did for older orders) in one transaction → order
+   number `VB-...`; Telegram notice to the owner; email confirmation when email
+   is configured.
 4. Admin moves the order through the status machine; cancellation returns stock.
 5. Auth: register / login (Argon2, account lockout) → short-lived access JWT +
    rotating refresh token in an httpOnly cookie (family reuse detection) →

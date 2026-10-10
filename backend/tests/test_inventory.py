@@ -159,7 +159,10 @@ async def test_cancelling_is_recorded_in_the_status_history(db: AsyncSession) ->
     await order_service.cancel(db, order)
 
     entries = await order_status.history(db, order.id)
-    assert [(e.from_status, e.to_status) for e in entries] == [("pending", "cancelled")]
+    assert [(e.from_status, e.to_status) for e in entries] == [
+        ("pending", "pending"),  # the order being placed
+        ("pending", "cancelled"),
+    ]
 
 
 async def test_cancelling_twice_does_not_restock_twice(db: AsyncSession) -> None:

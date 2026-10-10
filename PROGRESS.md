@@ -91,7 +91,7 @@ re-checked in the code before it was written here. Order = suggested order.
   Fix: recompute `search_text` for the affected products in the same transaction
   when `name`/`slug` changes; test.
 
-- [ ] **T10 · should-fix · Checkout writes no status-history start row.**
+- [x] **T10 · should-fix · Checkout writes no status-history start row.**
   Only `order_status.transition` writes `OrderStatusHistory`; migration 0004
   backfilled `pending → pending` so every order has a timeline start. New orders
   show an empty history in the admin until the first transition.
@@ -177,4 +177,4 @@ Unverified (check before acting):
   http build — green. Backend `pytest` not run: Docker was not running (needs
   `voltbox-pg` on :55432).
 - Known issues / blockers: live-DB questions in PROJECT.md Open Questions.
-- Next: T10.
+- Next: T11.

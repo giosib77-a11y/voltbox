@@ -151,6 +151,28 @@ async def test_the_detail_response_tells_the_ui_what_is_allowed(
     assert body["items"][0]["productName"]
 
 
+async def test_a_placed_order_starts_its_timeline(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+) -> None:
+    """Orders from before the timeline got a `pending -> pending` start row from
+    migration 0004, so every order has an origin. New ones have to match, or the
+    panel shows an empty history until somebody moves the order."""
+    order = await _order(db, slug="timeline-start")
+
+    detail = await client.get(f"{ADMIN}/orders/{order.id}", headers=headers)
+    moved = await client.post(
+        f"{ADMIN}/orders/{order.id}/status", headers=headers, json={"to": "confirmed"}
+    )
+
+    first = detail.json()["history"]
+    assert [(e["fromStatus"], e["toStatus"]) for e in first] == [("pending", "pending")]
+    after = moved.json()["history"]
+    assert [(e["fromStatus"], e["toStatus"]) for e in after] == [
+        ("pending", "pending"),
+        ("pending", "confirmed"),
+    ]
+
+
 async def test_changing_status_records_history_and_an_audit_row(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:

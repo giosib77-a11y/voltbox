@@ -142,8 +142,13 @@ export default function OrderDetail() {
                 <li key={index} className="flex flex-wrap items-baseline gap-2">
                   <span className="text-ink-500">{dateTime(entry.createdAt)}</span>
                   <span className="text-ink-900">
-                    {ORDER_STATUSES[entry.fromStatus]?.label || entry.fromStatus} →{' '}
-                    {ORDER_STATUSES[entry.toStatus]?.label || entry.toStatus}
+                    {entry.fromStatus === entry.toStatus
+                      ? // The line every order starts with (pending -> pending): the order
+                        // being placed, not a move from a status to itself.
+                        'შეკვეთა გაფორმდა'
+                      : `${ORDER_STATUSES[entry.fromStatus]?.label || entry.fromStatus} → ${
+                          ORDER_STATUSES[entry.toStatus]?.label || entry.toStatus
+                        }`}
                   </span>
                   {entry.note ? <span className="text-ink-600">— {entry.note}</span> : null}
                 </li>

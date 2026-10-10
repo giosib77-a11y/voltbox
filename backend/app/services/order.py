@@ -33,6 +33,7 @@ from app.db.models import (
     REASON_ORDER_PLACED,
     Order,
     OrderItem,
+    OrderStatusHistory,
     Product,
     User,
 )
@@ -354,6 +355,9 @@ async def place_order(
     for item in order_items:
         item.order_id = order.id
     db.add_all(order_items)
+    # The timeline's first line, as migration 0004 wrote one for every order that
+    # existed before it: from_status is NOT NULL, so "placed" is pending -> pending.
+    db.add(OrderStatusHistory(order_id=order.id, from_status="pending", to_status="pending"))
     await db.flush()
     await db.refresh(order, ["items"])
 
