@@ -87,7 +87,7 @@ lock-ში **gunicorn-ი არ იქნება**. იმიჯი აე�
 
 ```bash
 cd backend
-MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd)":/src -w /src python:3.14.7-slim-trixie@sha256:ef30e8ee3a7f227b0b5b39669b2e656f35b56b918c6631820357c2a55ff5a428 sh -c '
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd)":/src -w /src python:3.14.7-slim-trixie@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d sh -c '
   pip install --quiet --root-user-action=ignore pip-tools==7.6.1 &&
   pip-compile --generate-hashes --allow-unsafe --strip-extras \
     --output-file requirements.txt pyproject.toml &&

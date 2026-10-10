@@ -16,7 +16,7 @@
 # cooldown-ით). ლოდინი თუ არ შეიძლება, ხელით — Digest და PYTHON_VERSION აქედან:
 #   docker buildx imagetools inspect python:3.14-slim
 #   docker buildx imagetools inspect python:3.14-slim --format '{{json (index .Image "linux/amd64").Config.Env}}'
-FROM python:3.14.7-slim-trixie@sha256:ef30e8ee3a7f227b0b5b39669b2e656f35b56b918c6631820357c2a55ff5a428 AS builder
+FROM python:3.14.7-slim-trixie@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1
 WORKDIR /build
@@ -48,7 +48,7 @@ RUN /opt/build/bin/pip wheel --no-deps --no-build-isolation --check-build-depend
     && /opt/venv/bin/pip install --no-deps /wheels/*.whl \
     && /opt/venv/bin/pip check
 
-FROM python:3.14.7-slim-trixie@sha256:ef30e8ee3a7f227b0b5b39669b2e656f35b56b918c6631820357c2a55ff5a428 AS runtime
+FROM python:3.14.7-slim-trixie@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
