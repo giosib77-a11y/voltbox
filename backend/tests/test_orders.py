@@ -279,6 +279,44 @@ async def test_a_key_cannot_be_used_to_read_somebody_elses_order(
     assert "ბერიძე" not in response.text
 
 
+async def test_a_checkout_with_a_dead_token_is_refused_and_not_made_a_guest_order(
+    client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+) -> None:
+    """A shopper whose 30-minute token ran out while they filled in the form.
+
+    Treating the dead token as no token saved the order with no account: absent
+    from "my orders", no confirmation email. The 401 makes the client refresh and
+    send the same request again, with the same Idempotency-Key.
+    """
+    user = await make_user(db, email="slow@voltbox.ge")
+    stale = auth_header(user)
+    user.token_version += 1  # a password change or sign-out everywhere since
+    await db.flush()
+    items = [{"productId": str(shop["cheap"].id), "qty": 1}]
+    before = await _order_count(db)
+
+    revoked = await _place(client, items, headers=stale)
+    garbage = await _place(client, items, headers={"Authorization": "Bearer not-a-token"})
+
+    assert revoked.status_code == garbage.status_code == 401
+    assert revoked.json()["error"]["code"] == "INVALID_TOKEN"
+    assert await _order_count(db) == before
+    await db.refresh(shop["cheap"])
+    assert shop["cheap"].stock == 5
+
+
+async def test_no_authorization_header_is_still_a_guest_checkout(
+    client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+) -> None:
+    response = await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}])
+
+    assert response.status_code == 201
+    order = await db.scalar(
+        select(Order).where(Order.order_number == response.json()["orderNumber"])
+    )
+    assert order is not None and order.user_id is None
+
+
 async def test_a_guest_cannot_replay_an_order_placed_while_signed_in(
     client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
 ) -> None:

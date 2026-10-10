@@ -44,7 +44,7 @@ re-checked in the code before it was written here. Order = suggested order.
   session ends at 30 minutes (admin form included), and logout cannot revoke anything.
   Fix: send credentials on API requests (at least the auth calls) + a test asserting it.
 
-- [ ] **T4 · should-fix · Checkout with an expired token silently becomes a guest order.**
+- [x] **T4 · should-fix · Checkout with an expired token silently becomes a guest order.**
   `core/deps.py:73` `get_optional_user` returns `None` for an invalid Bearer token;
   the client refreshes only on 401. The order is saved with `user_id = NULL`: missing
   from "my orders", no confirmation email.
@@ -177,4 +177,4 @@ Unverified (check before acting):
   http build — green. Backend `pytest` not run: Docker was not running (needs
   `voltbox-pg` on :55432).
 - Known issues / blockers: live-DB questions in PROJECT.md Open Questions.
-- Next: T4.
+- Next: T5.

@@ -73,10 +73,19 @@ async def get_current_user(credentials: Credentials, db: Db) -> User:
 async def get_optional_user(credentials: Credentials, db: Db) -> User | None:
     """არასავალდებულო ავტორიზაცია.
 
-    სტუმრის checkout-ისთვის: ტოკენის არარსებობა ან უვარგისობა შეცდომა არაა —
-    შეკვეთა ორივე შემთხვევაში უნდა გაფორმდეს.
+    სტუმრის checkout-ისთვის: Authorization header-ის არარსებობა სტუმარია.
+    თუ header არის, მაგრამ ტოკენი უვარგისია (ვადაგასული, გაუქმებული, გაყალბებული),
+    ეს 401-ია და არა სტუმარი: ვადაგასული ტოკენით შესული მომხმარებლის შეკვეთა
+    `user_id = NULL`-ით დაიწერებოდა — "ჩემს შეკვეთებში" არ ჩანდეს, დასტურის
+    წერილი არ გაჰყვეს. 401-ზე კლიენტი ტოკენს ანახლებს და მოთხოვნას იმავე
+    Idempotency-Key-ით იმეორებს; შეკვეთა ჯერ არ შექმნილა, დუბლიკატი არ იქნება.
     """
-    return await _user_from_credentials(credentials, db)
+    if credentials is None or not credentials.credentials:
+        return None
+    user = await _user_from_credentials(credentials, db)
+    if user is None:
+        raise UnauthorizedError("Invalid or expired token", code="INVALID_TOKEN")
+    return user
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
