@@ -9,7 +9,7 @@ from pydantic import ValidationError as BodyInvalid
 from app.core.config import settings
 from app.core.deps import CurrentUser, Db, OptionalUser
 from app.core.errors import ValidationError
-from app.core.rate_limit import LOOKUP_RATE_LIMIT, limiter
+from app.core.rate_limit import LOOKUP_RATE_LIMIT, ORDER_RATE_LIMIT, limiter
 from app.db.models import Order, User
 from app.schemas.order import (
     CreateOrderRequest,
@@ -96,7 +96,9 @@ def _to_out(order: Order) -> OrderOut:
     status_code=status.HTTP_201_CREATED,
     response_model=PlacedOrderOut,
 )
+@limiter.limit(ORDER_RATE_LIMIT)
 async def create_order(
+    request: Request,
     db: Db,
     user: OptionalUser,
     payload: CreateOrderRequest,

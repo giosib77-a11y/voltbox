@@ -65,7 +65,7 @@ re-checked in the code before it was written here. Order = suggested order.
   Fix: require and verify `currentPassword` when the email actually changes; delete
   the account's `password_reset_tokens` row. Frontend `Profile.jsx` asks for it only then.
 
-- [ ] **T7 · should-fix · `POST /orders` has only the 60/min default limit.**
+- [x] **T7 · should-fix · `POST /orders` has only the 60/min default limit.**
   One IP can place ~60 guest orders a minute (50 lines × 99 units), holding the whole
   catalogue out of stock and flooding the owner's Telegram; `INSUFFICIENT_STOCK`
   returns the exact `available`. Fix: dedicated `ORDER_RATE_LIMIT` (e.g.
@@ -177,4 +177,4 @@ Unverified (check before acting):
   http build — green. Backend `pytest` not run: Docker was not running (needs
   `voltbox-pg` on :55432).
 - Known issues / blockers: live-DB questions in PROJECT.md Open Questions.
-- Next: T7.
+- Next: T8.

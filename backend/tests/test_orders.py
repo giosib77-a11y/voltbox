@@ -16,8 +16,9 @@ import httpx
 import pytest
 from app.core.config import settings
 from app.core.logging import JsonFormatter
-from app.core.rate_limit import LOOKUP_RATE_LIMIT, limiter
+from app.core.rate_limit import LOOKUP_RATE_LIMIT, ORDER_RATE_LIMIT, limiter
 from app.db.models import ROLE_ADMIN, Order, Product, ProductImage
+from limits import parse_many
 from pydantic import SecretStr
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -705,6 +706,34 @@ async def test_the_guest_lookup_is_rate_limited(
     # Every attempt is a wrong token, so a 404 each until the limit bites.
     assert statuses[:-1] == [404] * (len(statuses) - 1)
     assert statuses[-1] == 429
+
+
+async def test_checkout_is_rate_limited_per_address(
+    client: httpx.AsyncClient, shop: dict[str, Product]
+) -> None:
+    """One address cannot hold the catalogue out of stock or flood the owner.
+
+    A guest order needs no account, takes stock the moment it is `pending`, and
+    tells the owner on Telegram. Sixty a minute - the default - was enough to
+    hold every product from one script.
+    """
+    per_minute = int(ORDER_RATE_LIMIT.split(";")[0].split("/")[0])
+    item = [{"productId": str(shop["cheap"].id), "qty": 1}]
+
+    limiter.enabled = True
+    limiter.reset()
+    try:
+        statuses = [(await _place(client, item)).status_code for _ in range(per_minute + 1)]
+    finally:
+        limiter.reset()
+        limiter.enabled = False
+
+    assert statuses == [201] * per_minute + [429]
+
+
+def test_checkout_also_has_a_daily_ceiling() -> None:
+    """The per-minute limit alone lets a patient script take a catalogue in an hour."""
+    assert {item.GRANULARITY.name for item in parse_many(ORDER_RATE_LIMIT)} == {"minute", "day"}
 
 
 async def test_the_limit_does_not_reach_the_signed_in_path(

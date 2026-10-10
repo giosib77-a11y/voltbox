@@ -72,6 +72,15 @@ LOOKUP_RATE_LIMIT = "10/minute"
 #: produces and far less than a flood.
 CLIENT_ERROR_RATE_LIMIT = "20/minute"
 
+#: Checkout. A guest needs no account, an order takes its stock at once (it is
+#: `pending` until an admin acts), the owner gets a Telegram message for each,
+#: and the confirmation email goes to whatever address was typed. At the default
+#: sixty a minute one address could place orders for the whole catalogue before
+#: anyone looked. Five a minute leaves a shopper who retries or buys twice
+#: untouched; the daily ceiling stops the same script going slowly. An
+#: Idempotency-Key replay counts as a request like any other.
+ORDER_RATE_LIMIT = "5/minute;30/day"
+
 DEFAULT_LIMIT = "60/minute"
 
 #: What slowapi gets when no Redis is configured: counters in this process only.
