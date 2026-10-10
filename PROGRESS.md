@@ -78,7 +78,7 @@ re-checked in the code before it was written here. Order = suggested order.
   must stop offering more than 10 per line / 20 lines (check `QuantityStepper`, cart
   reducer) and say why; update `PROJECT.md` Business Rules; tests at 20/21 and 10/11.
 
-- [ ] **T8 · should-fix · No request body size limit.**
+- [x] **T8 · should-fix · No request body size limit.**
   Nothing caps the body before JSON parsing; a 24 MB unauthenticated body measured
   ~250 MB of worker memory locally (validation 400 comes after). Render free has
   512 MB for two workers. Fix: ASGI middleware → 413 above ~64 KB (counting chunked
@@ -177,4 +177,4 @@ Unverified (check before acting):
   http build — green. Backend `pytest` not run: Docker was not running (needs
   `voltbox-pg` on :55432).
 - Known issues / blockers: live-DB questions in PROJECT.md Open Questions.
-- Next: T8.
+- Next: T9.

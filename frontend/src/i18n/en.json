@@ -339,6 +339,7 @@
     "timeout": "The server didn't respond in time. Please try again.",
     "network": "Couldn't connect to the server",
     "RATE_LIMITED": "Too many attempts. Wait a minute and try again.",
+    "PAYLOAD_TOO_LARGE": "The request is too large. Shorten the text and try again.",
     "ADMIN_REQUIRED": "Only an administrator can access this page.",
     "ACCOUNT_DISABLED": "This account is blocked. Please contact the shop.",
     "INVALID_TOKEN": "Your session has expired. Please sign in again.",

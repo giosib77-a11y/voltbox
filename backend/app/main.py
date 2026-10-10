@@ -10,10 +10,12 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from starlette.types import Scope
 
 from app import __version__
 from app.api.v1.router import api_router
 from app.api.v1.routes import sitemap
+from app.core.body_limit import MULTIPART_OVERHEAD, BodySizeLimitMiddleware
 from app.core.config import settings
 from app.core.errors import error_body, register_exception_handlers
 from app.core.headers import SecurityHeadersMiddleware
@@ -31,6 +33,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     order_email.log_configuration()
     yield
     await engine.dispose()
+
+
+def _body_limit_for(scope: Scope) -> int:
+    """The largest body this request may carry: an image upload gets the image limit."""
+    path = scope["path"]
+    uploading = (
+        scope["method"] == "POST"
+        and path.startswith(f"{settings.api_v1_prefix}/admin/products/")
+        and path.endswith("/images")
+    )
+    if uploading:
+        return settings.max_image_bytes + MULTIPART_OVERHEAD
+    return settings.max_request_body_bytes
 
 
 def create_app() -> FastAPI:
@@ -57,6 +72,12 @@ def create_app() -> FastAPI:
 
     # middleware-ის რიგი მნიშვნელოვანია: request_id ყველაზე გარეთ უნდა იყოს,
     # რომ CORS-ისა და შეცდომების პასუხებსაც მოხვდეს
+    # Innermost of all, around the router itself. A body over the limit stops the
+    # request while a chunked body is being read, by raising from `receive`; that
+    # exception has to reach FastAPI as it left. The two BaseHTTPMiddleware layers
+    # further out (rate limit, request context) pass it through an anyio task
+    # group, which gives FastAPI an ExceptionGroup that it rewrites to a 400.
+    app.add_middleware(BodySizeLimitMiddleware, limit_for=_body_limit_for)
     # Compression. Measured on this catalogue: a page of 48 products is 55 KB
     # uncompressed and 10 KB gzipped, and nothing was compressing it - the
     # browser asked and the API answered in full every time. Added innermost so

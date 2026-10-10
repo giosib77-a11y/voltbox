@@ -194,6 +194,13 @@ class Settings(BaseSettings):
     store_timezone: str = "Asia/Tbilisi"
 
     max_image_bytes: int = 5 * 1024 * 1024
+    #: The largest request body the API reads before answering, anywhere but the
+    #: image upload (which gets `max_image_bytes` plus a margin). Nothing else
+    #: here is large: an order is a few KB, and 256 KB holds a product page's
+    #: worth of Georgian text (three bytes a letter). It exists because a body is
+    #: read whole and parsed before validation can say no - measured, a 24 MB
+    #: body from a stranger cost a worker about 250 MB.
+    max_request_body_bytes: int = 256 * 1024
 
     # What one upload may cost to decode - not what the file may weigh.
     #

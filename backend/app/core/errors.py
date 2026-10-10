@@ -134,6 +134,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             403: "FORBIDDEN",
             404: "NOT_FOUND",
             405: "METHOD_NOT_ALLOWED",
+            413: "PAYLOAD_TOO_LARGE",
             429: "RATE_LIMITED",
         }.get(exc.status_code, "HTTP_ERROR")
         response = JSONResponse(
