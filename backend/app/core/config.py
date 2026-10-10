@@ -126,8 +126,12 @@ class Settings(BaseSettings):
     # the API under a different external prefix, set this to that prefix -
     # otherwise the cookie is sent on the wrong paths, or on none.
     refresh_cookie_path: str = ""
-    # Same-origin deployment (the frontend proxies /api to the backend), so the
-    # strictest setting costs nothing. `none` would need CSRF protection.
+    # Same-site deployment (voltbox.ge and api.voltbox.ge), so the strictest
+    # setting costs nothing. `none` would need CSRF protection. Not same-site on
+    # onrender.com: it is on the Public Suffix List, so the storefront and the
+    # API there are different sites and the browser neither stores nor sends a
+    # strict cookie between them - sessions last 30 minutes until the domain
+    # (PROJECT.md, Accepted Risks).
     refresh_cookie_samesite: Literal["strict", "lax", "none"] = "strict"
     # None means "secure unless this is local development or a test run". A
     # Secure cookie is dropped outright over plain http, which would make every

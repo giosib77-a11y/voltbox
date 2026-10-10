@@ -37,7 +37,7 @@ re-checked in the code before it was written here. Order = suggested order.
   ever applied to Supabase, the owner runs the generated `public.`-qualified SQL and
   sees it first — never `alembic upgrade` from here.
 
-- [ ] **T3 · should-fix · Login/register/logout requests omit `credentials: 'include'`.**
+- [x] **T3 · should-fix · Login/register/logout requests omit `credentials: 'include'`.**
   `frontend/src/services/httpClient.js:172` uses fetch's default (`same-origin`).
   The storefront calls the API cross-origin (onrender today, `voltbox.ge` →
   `api.voltbox.ge` later), so the refresh cookie from login is never stored, every
@@ -177,4 +177,4 @@ Unverified (check before acting):
   http build — green. Backend `pytest` not run: Docker was not running (needs
   `voltbox-pg` on :55432).
 - Known issues / blockers: live-DB questions in PROJECT.md Open Questions.
-- Next: T3.
+- Next: T4.

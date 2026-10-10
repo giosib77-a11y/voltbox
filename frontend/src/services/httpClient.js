@@ -171,6 +171,12 @@ export async function request(path, options = {}) {
   try {
     response = await fetch(url, {
       method,
+      // Not fetch's default (`same-origin`): the API is on another origin until
+      // the shop and the API share a site, and the browser then drops the
+      // Set-Cookie of login and register - no refresh cookie, a session that
+      // ends with its 30-minute access token, and a logout that revokes nothing.
+      // The cookie's Path keeps it off everything but /auth.
+      credentials: 'include',
       // A caller's own signal wins. Otherwise a default deadline, because
       // `fetch` has none: a server that accepts the connection and then never
       // answers leaves the spinner turning for as long as the tab is open, with

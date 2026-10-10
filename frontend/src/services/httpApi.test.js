@@ -33,6 +33,26 @@ beforeEach(() => {
   localStorage.clear();
 });
 
+describe('credentials', () => {
+  it('sends them on every request, so the refresh cookie from login is stored cross-origin', async () => {
+    // fetch defaults to `same-origin`: when the API is on another origin the
+    // browser then ignores the Set-Cookie of login and register, no refresh
+    // cookie exists, and every session ends with its 30-minute access token.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(reply({ token: 't', user: { id: 'u1', email: 'a@b.ge' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await httpApi.login({ email: 'a@b.ge', password: 'secret123' });
+    await httpApi.logout();
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init.credentials).toBe('include');
+    }
+  });
+});
+
 describe('access token refresh', () => {
   it('refreshes once for three concurrent 401s and retries each request', async () => {
     writeSession({ user: { id: 'u1' }, token: 'old', refreshToken: 'r1' });
