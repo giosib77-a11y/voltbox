@@ -5,12 +5,20 @@
 განსხვავება ორ მხარეს შორის მდუმარე ბაგია, ამიტომ მნიშვნელობები აქ ერთადაა.
 """
 
+import os
 from functools import lru_cache
 from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: `backend/.env` normally points at the live Supabase project, and `Settings`
+#: reads it from the working directory - so any process started in `backend/`
+#: (a test run, a probe, a one-off script) would load the live URL and keys.
+#: `VOLTBOX_NO_DOTENV=1` turns the file off; the test suite sets it before its
+#: first import. Unset, the server and the CLI scripts read `.env` as before.
+_ENV_FILE = None if os.environ.get("VOLTBOX_NO_DOTENV") == "1" else ".env"
 
 #: The port a browser leaves out of an Origin header, because it is the scheme's.
 _DEFAULT_PORTS = {"http": 80, "https": 443}
@@ -67,7 +75,7 @@ class Settings(BaseSettings):
     # input from every field's error; the field name and what is wrong with it
     # remain.
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,

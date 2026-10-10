@@ -15,7 +15,11 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 import pytest
 
 # Settings-ის იმპორტამდე უნდა დაიწეროს — `lru_cache` ერთხელ იკითხავს
+# The suite never reads backend/.env: it holds the live Supabase URL and keys,
+# and Settings opens it from the working directory (app/core/config.py).
+os.environ["VOLTBOX_NO_DOTENV"] = "1"
 os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("JWT_SECRET", "test-only-secret-value-that-is-long-enough-32")
 os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://voltbox:voltbox@localhost:55432/voltbox_test"
 )
