@@ -137,10 +137,15 @@ def register_exception_handlers(app: FastAPI) -> None:
             413: "PAYLOAD_TOO_LARGE",
             429: "RATE_LIMITED",
         }.get(exc.status_code, "HTTP_ERROR")
-        response = JSONResponse(
-            status_code=exc.status_code,
-            content=error_body(code, str(exc.detail)),
-        )
+        if isinstance(exc.detail, dict) and "code" in exc.detail:
+            # The body-size middleware carries its own code and details (an
+            # oversized image upload says IMAGE_TOO_LARGE with the limit).
+            content = error_body(
+                exc.detail["code"], exc.detail["message"], exc.detail.get("details")
+            )
+        else:
+            content = error_body(code, str(exc.detail))
+        response = JSONResponse(status_code=exc.status_code, content=content)
         return _finish(response, request)
 
     @app.exception_handler(Exception)

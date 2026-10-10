@@ -77,3 +77,46 @@ async def test_an_image_may_be_as_large_as_the_image_limit_allows(
 
     assert allowed.status_code != 413  # refused for lack of an admin, not for size
     assert too_big.status_code == 413
+
+
+def _assert_image_too_large(response: httpx.Response) -> None:
+    assert response.status_code == 413, response.text
+    error = response.json()["error"]
+    assert error["code"] == "IMAGE_TOO_LARGE"
+    # The panel turns this into "photo is over N MB"; it is the same shape the
+    # upload route's own IMAGE_TOO_LARGE carries.
+    assert error["details"] == {"maxBytes": settings.max_image_bytes}
+
+
+async def test_an_oversized_photo_is_told_it_is_too_large_by_declared_length(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.post(
+        IMAGES,
+        content=b"a" * (settings.max_image_bytes + 70 * 1024),
+        headers={"Content-Type": "multipart/form-data; boundary=x"},
+    )
+
+    _assert_image_too_large(response)
+
+
+async def test_an_oversized_chunked_photo_is_told_it_is_too_large_too(
+    client: httpx.AsyncClient,
+) -> None:
+    # Valid multipart framing first, or the form parser objects to the bytes
+    # before the limit is reached.
+    opening = (
+        b'--x\r\nContent-Disposition: form-data; name="file"; filename="a.jpg"\r\n'
+        b"Content-Type: image/jpeg\r\n\r\n"
+    )
+
+    async def chunks() -> AsyncIterator[bytes]:
+        yield opening
+        for _ in range((settings.max_image_bytes + 70 * 1024) // 8192 + 1):
+            yield b"a" * 8192
+
+    response = await client.post(
+        IMAGES, content=chunks(), headers={"Content-Type": "multipart/form-data; boundary=x"}
+    )
+
+    _assert_image_too_large(response)

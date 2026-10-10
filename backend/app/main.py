@@ -15,7 +15,7 @@ from starlette.types import Scope
 from app import __version__
 from app.api.v1.router import api_router
 from app.api.v1.routes import sitemap
-from app.core.body_limit import MULTIPART_OVERHEAD, BodySizeLimitMiddleware
+from app.core.body_limit import MULTIPART_OVERHEAD, BodyLimit, BodySizeLimitMiddleware
 from app.core.config import settings
 from app.core.errors import error_body, register_exception_handlers
 from app.core.headers import SecurityHeadersMiddleware
@@ -35,8 +35,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await engine.dispose()
 
 
-def _body_limit_for(scope: Scope) -> int:
-    """The largest body this request may carry: an image upload gets the image limit."""
+def _body_limit_for(scope: Scope) -> BodyLimit:
+    """The largest body this request may carry: an image upload gets the image limit.
+
+    A body over the upload limit is answered with the route's own IMAGE_TOO_LARGE
+    code and `maxBytes`, as storage.py does, so a phone photo gets the same advice
+    whether it is far over the limit or just over it.
+    """
     path = scope["path"]
     uploading = (
         scope["method"] == "POST"
@@ -44,8 +49,14 @@ def _body_limit_for(scope: Scope) -> int:
         and path.endswith("/images")
     )
     if uploading:
-        return settings.max_image_bytes + MULTIPART_OVERHEAD
-    return settings.max_request_body_bytes
+        limit_mb = settings.max_image_bytes // (1024 * 1024)
+        return BodyLimit(
+            settings.max_image_bytes + MULTIPART_OVERHEAD,
+            code="IMAGE_TOO_LARGE",
+            message=f"The image must be at most {limit_mb} MB",
+            details={"maxBytes": settings.max_image_bytes},
+        )
+    return BodyLimit(settings.max_request_body_bytes)
 
 
 def create_app() -> FastAPI:

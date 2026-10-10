@@ -104,7 +104,7 @@ re-checked in the code before it was written here. Order = suggested order.
   `frontend/src/admin/statuses.jsx`. A frontend-only PR can turn main red.
   Fix: add the three paths (and the README gates line, see Backlog nit).
 
-- [ ] **T13 · should-fix · T8 turned an oversized photo's message into "request too large, shorten the text".**
+- [x] **T13 · should-fix · T8 turned an oversized photo's message into "request too large, shorten the text".**
   `core/body_limit.py` answers 413 `PAYLOAD_TOO_LARGE` for an image upload past
   `max_image_bytes + 64 KB` (declared length and chunked), so the route's `IMAGE_TOO_LARGE`
   with `maxBytes` (`services/storage.py:178`, `httpClient.js:92`) is reached only inside the
@@ -189,7 +189,7 @@ Unverified (check before acting):
 
 ## Run State
 - Finish-check this stage: done
-- Fix rounds this stage: 0/2
+- Fix rounds this stage: 1/2
 - Failed attempts: —
 
 ## Last Session
