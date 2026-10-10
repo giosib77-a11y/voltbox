@@ -26,7 +26,7 @@ re-checked in the code before it was written here. Order = suggested order.
   persisting the claim of a disabled account (`services/auth.py:364`); a test whose
   `get_db` override rolls back on exception, proving the family stays revoked.
 
-- [ ] **T2 · should-fix · No migration enables RLS on `carts` and `alembic_version`.**
+- [x] **T2 · should-fix · No migration enables RLS on `carts` and `alembic_version`.**
   `0009_saved_cart.py` creates `carts` without RLS; `alembic_version` is created by
   Alembic itself. A database built with `alembic upgrade head` exposes both through
   Supabase's public Data API. Nothing tests for it.
@@ -177,4 +177,4 @@ Unverified (check before acting):
   http build — green. Backend `pytest` not run: Docker was not running (needs
   `voltbox-pg` on :55432).
 - Known issues / blockers: live-DB questions in PROJECT.md Open Questions.
-- Next: T2.
+- Next: T3.

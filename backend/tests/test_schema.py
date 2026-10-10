@@ -173,3 +173,23 @@ async def test_the_status_graph_and_the_database_agree(db: AsyncSession) -> None
     # A target that is not also a key would be a status with no row of its own:
     # `transition` would refuse it as unknown, while the graph advertised it.
     assert reachable == set(TRANSITIONS)
+
+
+async def test_every_table_in_public_has_row_level_security(db: AsyncSession) -> None:
+    """Supabase's Data API is public, and a table without RLS is open to the anon key.
+
+    The schema here is built from the migrations (see conftest), so a revision
+    that creates a table and forgets this shows up as a name in the list.
+    """
+    rows = await db.execute(
+        text(
+            """
+            select c.relname from pg_class c
+            join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'public' and c.relkind in ('r', 'p') and not c.relrowsecurity
+            order by 1
+            """
+        )
+    )
+
+    assert [name for (name,) in rows] == []

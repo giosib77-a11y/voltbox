@@ -55,6 +55,13 @@ QUERIES = {
         select conrelid::regclass||' '||conname||' '||pg_get_constraintdef(oid)
         from pg_constraint where connamespace='public'::regnamespace order by 1
     """,
+    # A restore that drops ENABLE ROW LEVEL SECURITY leaves the table open to the
+    # Data API's anon key and nothing else changes shape.
+    "rls": """
+        select c.relname||' enabled='||c.relrowsecurity||' forced='||c.relforcerowsecurity
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind in ('r', 'p') order by 1
+    """,
     "sequences": """
         select sequence_name from information_schema.sequences
         where sequence_schema='public' order by 1
