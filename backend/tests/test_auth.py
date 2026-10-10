@@ -338,6 +338,74 @@ async def test_a_replayed_token_ends_the_session_it_belonged_to(
     assert all(revoked for _, revoked in await _families(db, "nino@example.ge"))
 
 
+def _roll_back_on_error_like_production(db: AsyncSession) -> None:
+    """Swap in a `get_db` that rolls back when the request raises, as the real one does.
+
+    The suite's own override hands every request the same session and never rolls
+    back, so a write that a failing request forgot to commit is still visible to
+    the next request. That hid a reuse detection which production threw away.
+    """
+
+    async def get_db_like_production() -> AsyncIterator[AsyncSession]:
+        try:
+            yield db
+        except Exception:
+            await db.rollback()
+            raise
+
+    app.dependency_overrides[get_db] = get_db_like_production
+
+
+async def test_reuse_detection_is_kept_when_the_request_answers_401(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """The family revoke is written by a request that then fails with 401.
+
+    `get_db` rolls back on an exception, so unless the route commits before
+    raising, the revoke vanishes and the thief's session lives on.
+    """
+    _roll_back_on_error_like_production(db)
+    await _register(client)
+    stolen = client.cookies.get(COOKIE)
+    assert (await client.post("/api/v1/auth/refresh")).status_code == 200
+    await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.revoked_at.is_not(None))
+        .values(revoked_at=datetime.now(UTC) - timedelta(minutes=5))
+    )
+    await db.flush()
+
+    replay = await client.post("/api/v1/auth/refresh", headers={"Cookie": f"{COOKIE}={stolen}"})
+
+    assert replay.status_code == 401
+    assert all(revoked for _, revoked in await _families(db, "nino@example.ge"))
+
+
+async def test_a_disabled_account_keeps_the_sessions_it_had(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """The one 401 on this route that must still roll back.
+
+    Refreshing a suspended account's token claims the token first; the
+    suspension is checked after. Committing that claim would sign out an
+    account that is later re-enabled.
+    """
+    _roll_back_on_error_like_production(db)
+    await _register(client)
+    cookie = client.cookies.get(COOKIE)
+    await db.execute(update(User).where(User.email == "nino@example.ge").values(is_active=False))
+    await db.flush()
+
+    refused = await client.post("/api/v1/auth/refresh", headers={"Cookie": f"{COOKIE}={cookie}"})
+    assert refused.status_code == 401
+    assert refused.json()["error"]["code"] == "ACCOUNT_DISABLED"
+
+    await db.execute(update(User).where(User.email == "nino@example.ge").values(is_active=True))
+    await db.flush()
+    again = await client.post("/api/v1/auth/refresh", headers={"Cookie": f"{COOKIE}={cookie}"})
+    assert again.status_code == 200
+
+
 async def test_a_lost_response_is_a_retry_and_not_a_theft(
     client: httpx.AsyncClient, db: AsyncSession
 ) -> None:

@@ -9,7 +9,7 @@ re-checked in the code before it was written here. Order = suggested order.
 
 ## Tasks
 
-- [ ] **T0 · config · Nothing but a deliberate opt-in may read `backend/.env`.**
+- [x] **T0 · config · Nothing but a deliberate opt-in may read `backend/.env`.**
   Owner's rule (2026-10-10): tests and probes never read `backend/.env`. `Settings`
   (`app/core/config.py:70`) reads `.env` from the cwd, so every `pytest` run and every
   probe started in `backend/` loads the live Supabase URL and keys into the process.
@@ -17,7 +17,7 @@ re-checked in the code before it was written here. Order = suggested order.
   first import; a test that fails if `Settings` would open a `.env` under pytest.
   CLAUDE.md already states the rule.
 
-- [ ] **T1 · critical · Refresh-token reuse detection is rolled back.**
+- [x] **T1 · critical · Refresh-token reuse detection is rolled back.**
   `routes/auth.py` `refresh` raises without committing; `get_db` rolls back, so
   `_handle_possible_reuse`'s family revoke (`services/auth.py:263`) never persists.
   A stolen refresh cookie used first keeps its family alive. Tests pass only because
@@ -177,4 +177,4 @@ Unverified (check before acting):
   http build — green. Backend `pytest` not run: Docker was not running (needs
   `voltbox-pg` on :55432).
 - Known issues / blockers: live-DB questions in PROJECT.md Open Questions.
-- Next: T1.
+- Next: T2.

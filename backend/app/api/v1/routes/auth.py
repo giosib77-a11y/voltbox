@@ -135,7 +135,17 @@ async def refresh(
         # cookie was sent is not information worth handing out.
         _clear_refresh_cookie(response)
         raise auth_service.invalid_refresh_token()
-    session = await auth_service.refresh(db, raw_token=refresh_token)
+    try:
+        session = await auth_service.refresh(db, raw_token=refresh_token)
+    except UnauthorizedError as error:
+        # A spent token coming back revokes its whole family before this 401, and
+        # `get_db` rolls back on an exception: without this commit the revoke is
+        # discarded and the thief's session keeps renewing itself. Only this
+        # code - ACCOUNT_DISABLED must still roll back, so a suspended account
+        # that is re-enabled keeps the sessions it had.
+        if error.code == "INVALID_REFRESH_TOKEN":
+            await db.commit()
+        raise
     await db.commit()
     return _session(session, response)
 
