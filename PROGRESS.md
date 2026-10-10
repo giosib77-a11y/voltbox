@@ -1,7 +1,7 @@
 # Progress
 
 ## Current Stage
-Stage 1 — Audit fixes
+Stage 1 — Audit fixes (closed by the owner 2026-10-10; T0–T14 done)
 
 Source: full audit 2026-10-10 (standard-reviewer, three slices: auth/authz/privacy;
 money/stock/data/Supabase; frontend/config/CI/Docker). Every task below was
@@ -147,9 +147,123 @@ Before going live on `voltbox.ge` (owner's list):
 - Supabase Dashboard: remove `public` from the Data API exposed schemas (D2).
 - Plan 0.5c-512mb and the refresh-token prune cron back (docs/deployment.md §2).
 
-Deploy plan (owner runs; not done from here): see the list above plus, after each
-fix that changes behaviour, a push to `main` triggers Render's autoDeploy of the
-storefront — nothing is pushed without approval.
+Deploy plan (owner runs; nothing here was run against live — no alembic, no SQL, no push, no Render call).
+Prepared 2026-10-10 for Stage 1 (code at `7a867fb`).
+
+**1. Migrations on the live Supabase database**
+- Stage 1 added exactly one migration: `0015` (RLS on `public.carts` and `public.alembic_version`).
+  Live already shows RLS on 15/15 tables (advisor, owner), so on live it changes nothing but the
+  recorded head. The backend works the same without it; run it so live and `alembic upgrade head`
+  agree and a rebuilt database matches.
+- The live head is **not known to me** (reading it was denied by the permission classifier;
+  PROJECT.md Open Questions still asks it). Find it first in the SQL Editor:
+  `select version_num from public.alembic_version;`
+  Then run, in order, only the blocks **above** that value. Each block's last `UPDATE` checks the old
+  value, so a block run on the wrong head updates 0 rows — look for `UPDATE 1`.
+- The SQL below is `alembic upgrade A:B --sql` output per step (generated offline, 0010–0015), with every
+  name hand-qualified with `public.` (Supabase has its own `auth.refresh_tokens`; the generated text is
+  unqualified). Statement counts, to check a paste: 0010 = 3, 0011 = 2, 0012 = 4, 0013 = 2, 0014 = 5,
+  0015 = 3, each between BEGIN and COMMIT.
+
+```sql
+-- 0009 -> 0010   (changes data: an order whose payment_method is not cash/card_on_delivery becomes 'cash')
+BEGIN;
+UPDATE public.orders SET payment_method = 'cash' WHERE payment_method NOT IN ('cash','card_on_delivery');
+ALTER TABLE public.orders ADD CONSTRAINT ck_orders_payment_method_allowed CHECK (payment_method IN ('cash','card_on_delivery'));
+UPDATE public.alembic_version SET version_num='0010' WHERE version_num = '0009';
+COMMIT;
+
+-- 0010 -> 0011
+BEGIN;
+CREATE INDEX ix_refresh_tokens_expires_at ON public.refresh_tokens (expires_at);
+UPDATE public.alembic_version SET version_num='0011' WHERE version_num = '0010';
+COMMIT;
+
+-- 0011 -> 0012
+BEGIN;
+CREATE TABLE public.password_reset_tokens (
+    user_id UUID NOT NULL,
+    token_hash VARCHAR(64) NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    CONSTRAINT pk_password_reset_tokens PRIMARY KEY (user_id),
+    CONSTRAINT fk_password_reset_tokens_user_id_users FOREIGN KEY(user_id) REFERENCES public.users (id) ON DELETE CASCADE,
+    CONSTRAINT uq_password_reset_tokens_token_hash UNIQUE (token_hash)
+);
+ALTER TABLE public.password_reset_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.password_reset_tokens FORCE ROW LEVEL SECURITY;
+UPDATE public.alembic_version SET version_num='0012' WHERE version_num = '0011';
+COMMIT;
+
+-- 0012 -> 0013
+BEGIN;
+ALTER TABLE public.orders ADD COLUMN lookup_token_hash VARCHAR(64);
+UPDATE public.alembic_version SET version_num='0013' WHERE version_num = '0012';
+COMMIT;
+
+-- 0013 -> 0014
+BEGIN;
+ALTER TABLE public.categories ADD COLUMN name_en VARCHAR(150) DEFAULT '' NOT NULL;
+ALTER TABLE public.brands ADD COLUMN name_en VARCHAR(150) DEFAULT '' NOT NULL;
+ALTER TABLE public.products ADD COLUMN name_en VARCHAR(300) DEFAULT '' NOT NULL;
+ALTER TABLE public.products ADD COLUMN description_en TEXT DEFAULT '' NOT NULL;
+UPDATE public.alembic_version SET version_num='0014' WHERE version_num = '0013';
+COMMIT;
+
+-- 0014 -> 0015   (the only one Stage 1 added; RLS is already on live, so no visible change)
+BEGIN;
+ALTER TABLE public.carts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.alembic_version ENABLE ROW LEVEL SECURITY;
+UPDATE public.alembic_version SET version_num='0015' WHERE version_num = '0014';
+COMMIT;
+```
+- Check after: `select version_num from public.alembic_version;` → `0015`; and
+  `select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and not c.relrowsecurity;` → no rows.
+- 0010–0014 predate Stage 1. If live is already at 0014 (as PROJECT.md guesses), only the last block is left.
+
+**2. Order**
+1. Migrations (additive or no-ops for running code: new columns have defaults, RLS with no policy does not
+   affect the backend role) — before any code that reads `lookup_token_hash`, `name_en` or `password_reset_tokens`.
+2. Backend (`voltbox-api`).
+3. Frontend (`voltbox-storefront`).
+Why backend first: the new storefront sends `currentPassword` and caps lines at 10 units; the old API would
+reject the unknown `currentPassword` field (email change fails), while the new API with the old storefront
+refuses only an email change without a password and a cart line over 10. Either order has a window of a few
+minutes; backend-first keeps browsing and checkout working in it.
+Caveat: `render.yaml` has no `autoDeploy` key, so one push to `main` starts both services (each has its own
+`buildFilter`) and the static site usually finishes first. For a strict order, turn auto-deploy off for the
+storefront in the Render dashboard and trigger it after the API is healthy. I did not check that dashboard
+setting. Nothing is pushed from here.
+
+**3. Environment variables on Render**
+- None new, none changed. `MAX_REQUEST_BODY_BYTES` (default 256 KB) is optional; `ORDER_RATE_LIMIT`
+  (`5/minute;30/day`) is a constant in `core/rate_limit.py`, not an env variable. `VOLTBOX_NO_DOTENV` is for
+  tests and probes only — do not set it on Render.
+- Still true: `CORS_ORIGINS` must hold the exact storefront origin, because the storefront now sends
+  credentials (T3); `FORWARDED_ALLOW_IPS` is still "Unverified" in the Backlog.
+
+**4. D2 — remove `public` from Supabase's Data API (Dashboard → Settings → Data API → Exposed schemas)**
+- Needed before public launch, not for this deploy. The backend does not use the Data API (no `rest/v1`,
+  anon key or Supabase JS client in the repo — checked in the repo only, not in Render's env); Storage goes
+  through the service-role key, a different API. RLS is already on every table, so today's exposure is
+  "no policy, no rows".
+- When: after migrations, backend and frontend are deployed and the checklist below passes. Then it is a
+  separate, easily reverted step, and a failure after it is not confused with a failure of the deploy.
+  Repeat checklist items 3, 6 and 7 after it.
+
+**5. After the deploy (by hand)**
+1. `GET <api>/api/v1/health/live` and `/health` → 200.
+2. Sign in on the storefront; the login response sets a refresh cookie (DevTools → Application → Cookies).
+   On onrender.com the session still ends after 30 minutes (Accepted Risk) — expected.
+3. Guest order with one product × 10 → created; × 11 → refused; a 21st different product in the cart →
+   the "at most 20 different products" message. The new order shows a started status timeline in the admin (T10).
+4. Signed-in checkout, repeated with the same Idempotency-Key (double click / retry) → no error page.
+5. Profile: change email without the current password → refused; with it → works.
+6. Admin: upload a photo over 5 MB → "photo is over 5 MB" (T13); a normal photo → saved.
+7. Admin: rename a brand → its products are found by the new name in search (T9).
+8. Rate limit: the 6th order within a minute from one IP → 429 (use a test product and delete the test
+   orders by hand in the admin afterwards).
+9. Supabase Dashboard → Advisors: no new "RLS disabled" warning.
 
 Nits:
 - Profile.jsx:92 inline current-password error never shows in http mode (`details.code`, not `details.currentPassword`; same in ChangePassword.jsx:54); only the toast appears.
