@@ -65,6 +65,8 @@ class UpdateProfileRequest(ApiRequest):
     last_name: str | None = Field(default=None, min_length=2, max_length=100)
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=32)
+    # Required only when `email` actually changes - see auth.update_profile.
+    current_password: str | None = Field(default=None, max_length=128)
 
 
 class UserOut(ApiModel):

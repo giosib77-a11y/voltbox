@@ -556,6 +556,7 @@
     "viewDetails": "View details",
     "profileUpdated": "Profile updated",
     "personal": "Personal details",
-    "personalHint": "These details are filled in for you at checkout."
+    "personalHint": "These details are filled in for you at checkout.",
+    "emailChangeNeedsPassword": "To change your email, enter your current password."
   }
 }

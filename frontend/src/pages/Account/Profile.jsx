@@ -11,13 +11,22 @@ import { t } from '../../i18n/index.js';
 
 const FIELDS = ['firstName', 'lastName', 'email'];
 
+// Same normalisation the server applies before it compares addresses.
+const normalizeEmail = (value) => value.trim().toLowerCase();
+
 export default function Profile() {
   useDocumentTitle(t('nav.profile'));
 
   const { user, updateProfile } = useAuth();
   const toast = useToast();
 
-  const [values, setValues] = useState({ firstName: '', lastName: '', email: '', phone: '' });
+  const [values, setValues] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    currentPassword: '',
+  });
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [saving, setSaving] = useState(false);
@@ -29,8 +38,13 @@ export default function Profile() {
       lastName: user.lastName || '',
       email: user.email || '',
       phone: user.phone ? formatPhone(user.phone) : '',
+      currentPassword: '',
     });
   }, [user]);
+
+  // Changing the address changes who can reset the password, so the server
+  // wants the current one; saving anything else does not.
+  const emailChanged = Boolean(user) && normalizeEmail(values.email) !== normalizeEmail(user.email || '');
 
   function handleChange(name, rawValue) {
     const value = name === 'phone' ? formatPhone(rawValue) : rawValue;
@@ -55,9 +69,12 @@ export default function Profile() {
     event.preventDefault();
     const nextErrors = validateForm(values, FIELDS);
     if (values.phone && !isValidPhone(values.phone)) nextErrors.phone = MESSAGES.phone;
+    if (emailChanged && !values.currentPassword) {
+      nextErrors.currentPassword = MESSAGES.required;
+    }
 
     setErrors(nextErrors);
-    setTouched({ firstName: true, lastName: true, email: true, phone: true });
+    setTouched({ firstName: true, lastName: true, email: true, phone: true, currentPassword: true });
     if (Object.keys(nextErrors).length > 0) return;
 
     setSaving(true);
@@ -65,12 +82,16 @@ export default function Profile() {
       await updateProfile({
         firstName: values.firstName.trim(),
         lastName: values.lastName.trim(),
-        email: values.email.trim().toLowerCase(),
+        email: normalizeEmail(values.email),
         phone: digitsOnly(values.phone),
+        ...(emailChanged ? { currentPassword: values.currentPassword } : {}),
       });
       toast.success(t('account.profileUpdated'));
     } catch (error) {
       toast.error(error?.message || t('account.saveFailed'));
+      if (error?.details?.currentPassword) {
+        setErrors((c) => ({ ...c, currentPassword: error.message }));
+      }
     } finally {
       setSaving(false);
     }
@@ -122,6 +143,19 @@ export default function Profile() {
           onBlur={() => handleBlur('phone')}
           autoComplete="tel"
         />
+        {emailChanged && (
+          <Input
+            label={t('account.currentPassword')}
+            type="password"
+            required
+            hint={t('account.emailChangeNeedsPassword')}
+            value={values.currentPassword}
+            error={touched.currentPassword ? errors.currentPassword : ''}
+            onChange={(e) => handleChange('currentPassword', e.target.value)}
+            onBlur={() => handleBlur('currentPassword')}
+            autoComplete="current-password"
+          />
+        )}
       </div>
 
       <Button type="submit" className="mt-6" loading={saving}>

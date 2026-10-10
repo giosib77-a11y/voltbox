@@ -58,7 +58,7 @@ re-checked in the code before it was written here. Order = suggested order.
   Fix: capture `user.id` before the claim (or claim in a savepoint); concurrent
   duplicate test with a signed-in user.
 
-- [ ] **T6 · should-fix · Email change needs no password.**
+- [x] **T6 · should-fix · Email change needs no password.**
   `PATCH /auth/me` (`services/auth.py:558`) changes the email with only an access
   token; existing reset links survive. Token (XSS / shared computer) → change email →
   forgot-password → account taken over, once email sending is on.
@@ -177,4 +177,4 @@ Unverified (check before acting):
   http build — green. Backend `pytest` not run: Docker was not running (needs
   `voltbox-pg` on :55432).
 - Known issues / blockers: live-DB questions in PROJECT.md Open Questions.
-- Next: T6.
+- Next: T7.

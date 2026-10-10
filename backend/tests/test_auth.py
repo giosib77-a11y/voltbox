@@ -8,11 +8,12 @@ import jwt
 import pytest
 from app.core.config import settings
 from app.core.security import decode_access_token
-from app.db.models import RefreshToken, User
+from app.db.models import PasswordResetToken, RefreshToken, User
 from app.db.session import get_db
 from app.main import app
+from app.services import auth as auth_service
 from httpx import ASGITransport
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 REGISTRATION = {
@@ -143,11 +144,72 @@ async def test_profile_email_change_detects_a_conflict(client: httpx.AsyncClient
     headers = await _auth_header(client)
 
     response = await client.patch(
-        "/api/v1/auth/me", headers=headers, json={"email": "taken@example.ge"}
+        "/api/v1/auth/me",
+        headers=headers,
+        json={"email": "taken@example.ge", "currentPassword": REGISTRATION["password"]},
     )
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "EMAIL_ALREADY_EXISTS"
+
+
+async def test_changing_the_email_needs_the_current_password(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """An access token alone must not be enough to take the account away.
+
+    The email is where a forgotten-password link goes. With the token and a new
+    address, `forgot-password` and `reset-password` would hand the account to
+    whoever held it for a moment.
+    """
+    headers = await _auth_header(client)
+
+    missing = await client.patch(
+        "/api/v1/auth/me", headers=headers, json={"email": "thief@example.ge"}
+    )
+    wrong = await client.patch(
+        "/api/v1/auth/me",
+        headers=headers,
+        json={"email": "thief@example.ge", "currentPassword": "not-the-password"},
+    )
+
+    for refused in (missing, wrong):
+        assert refused.status_code == 400
+        assert refused.json()["error"]["code"] == "INVALID_CURRENT_PASSWORD"
+    assert (await client.get("/api/v1/auth/me", headers=headers)).json()["email"] == (
+        "nino@example.ge"
+    )
+
+
+async def test_changing_the_email_with_the_password_ends_pending_reset_links(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    headers = await _auth_header(client)
+    assert await auth_service.issue_password_reset(db, email="nino@example.ge") is not None
+
+    response = await client.patch(
+        "/api/v1/auth/me",
+        headers=headers,
+        json={"email": "new@example.ge", "currentPassword": REGISTRATION["password"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["email"] == "new@example.ge"
+    assert await db.scalar(select(func.count()).select_from(PasswordResetToken)) == 0
+
+
+async def test_an_unchanged_email_needs_no_password(client: httpx.AsyncClient) -> None:
+    """The profile form always sends the email; only a real change is gated."""
+    headers = await _auth_header(client)
+
+    response = await client.patch(
+        "/api/v1/auth/me",
+        headers=headers,
+        json={"email": " Nino@Example.GE ", "firstName": "მარიამ"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["firstName"] == "მარიამ"
 
 
 async def test_refresh_rotates_the_token(client: httpx.AsyncClient) -> None:

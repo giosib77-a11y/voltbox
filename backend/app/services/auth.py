@@ -556,15 +556,42 @@ async def reset_password(db: AsyncSession, *, raw_token: str, new_password: str)
 
 
 async def update_profile(db: AsyncSession, *, user: User, changes: dict[str, object]) -> User:
+    current_password = changes.pop("current_password", None)
+
     if (email := changes.get("email")) is not None:
         normalized = str(email).strip().lower()
         if normalized != user.email:
+            # The email is where a forgotten-password link goes, so changing it
+            # is changing who owns the account. An access token - 30 minutes,
+            # in the browser's storage - is not enough to do that: with one and
+            # a new address, forgot-password and reset-password take the account
+            # for good. The password is checked before the address is looked up,
+            # so a token alone cannot probe which addresses are registered.
+            #
+            # Ends the transaction that loaded `user` first, so its connection
+            # is not held through the hash - see `login`.
+            await db.commit()
+            if not isinstance(current_password, str) or not await verify_password_async(
+                current_password, user.password_hash
+            ):
+                raise ValidationError(
+                    "Current password is incorrect",
+                    code="INVALID_CURRENT_PASSWORD",
+                    details=[
+                        {"field": "currentPassword", "message": "Current password is incorrect"}
+                    ],
+                )
             taken = await db.scalar(
                 select(User).where(User.email == normalized, User.id != user.id)
             )
             if taken is not None:
                 raise ConflictError("Email is already registered", code="EMAIL_ALREADY_EXISTS")
-        user.email = normalized
+            user.email = normalized
+            # A link already sent goes to the old address; it must not outlive
+            # the change and reset the password of an account now elsewhere.
+            await db.execute(
+                delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id)
+            )
 
     for field in ("first_name", "last_name", "phone"):
         if (value := changes.get(field)) is not None:

@@ -361,7 +361,7 @@ export async function getProfile() {
   return publicUser(user);
 }
 
-export async function updateProfile(patch) {
+export async function updateProfile({ currentPassword: _ignored, ...patch }) {
   await delay();
   const session = requireSession();
   const users = readUsers();
