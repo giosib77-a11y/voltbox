@@ -10,6 +10,8 @@ person meaning two - and summing would be the kind of change that looks harmless
 in review and charges somebody twice.
 """
 
+import uuid
+
 import httpx
 import pytest
 from app.db.models import Cart, Product
@@ -284,8 +286,6 @@ class TestLimits:
         self, client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
     ) -> None:
         """A stored document must not be growable without bound."""
-        import uuid
-
         user = await make_user(db, email="hoarder@example.ge")
 
         response = await client.put(
@@ -295,6 +295,29 @@ class TestLimits:
         )
 
         assert response.status_code == 400
+
+    async def test_the_cart_holds_what_checkout_will_take_and_no_more(
+        self, client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+    ) -> None:
+        """Ten of a product, twenty products: a cart past either would fail at checkout."""
+        user = await make_user(db, email="exact@example.ge")
+        line = {"productId": str(shop["cable"].id)}
+
+        over_quantity = await client.put(
+            CART, headers=auth_header(user), json={"items": [{**line, "qty": 11}]}
+        )
+        over_lines = await client.put(
+            CART,
+            headers=auth_header(user),
+            json={"items": [{"productId": str(uuid.uuid4()), "qty": 1} for _ in range(21)]},
+        )
+        at_both = await client.put(
+            CART, headers=auth_header(user), json={"items": [{**line, "qty": 10}]}
+        )
+
+        assert over_quantity.status_code == 400
+        assert over_lines.status_code == 400
+        assert at_both.status_code == 200
 
     async def test_an_empty_cart_is_allowed(
         self, client: httpx.AsyncClient, db: AsyncSession

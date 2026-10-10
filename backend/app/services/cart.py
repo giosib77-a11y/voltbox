@@ -37,11 +37,10 @@ from sqlalchemy.orm import selectinload
 
 from app.core.errors import ValidationError
 from app.core.language import Language, localized
+from app.core.limits import MAX_LINE_QUANTITY
 from app.db.models import MAX_CART_ITEMS, Cart, Product
 
-#: Matches the per-line cap the order schema enforces, so a cart can never hold
-#: a quantity that checkout would refuse.
-MAX_QUANTITY = 99
+MAX_QUANTITY = MAX_LINE_QUANTITY
 
 
 def _clean(items: list[dict[str, Any]] | None) -> dict[uuid.UUID, int]:

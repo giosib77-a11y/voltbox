@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import ProductImage from '../common/ProductImage.jsx';
 import QuantityStepper from './QuantityStepper.jsx';
 import { formatPrice } from '../../utils/format.js';
+import { MAX_LINE_QTY } from '../../constants/index.js';
 import { t } from '../../i18n/index.js';
 
 /**
@@ -12,7 +13,7 @@ import { t } from '../../i18n/index.js';
 export default function CartItem({ item, onQtyChange, onRemove }) {
   const { snapshot, qty, productId } = item;
   const lineTotal = snapshot.price * qty;
-  const maxQty = snapshot.stock > 0 ? snapshot.stock : 1;
+  const maxQty = snapshot.stock > 0 ? Math.min(snapshot.stock, MAX_LINE_QTY) : 1;
 
   return (
     <li className="flex gap-3 py-4 sm:gap-4">
@@ -64,6 +65,9 @@ export default function CartItem({ item, onQtyChange, onRemove }) {
           />
           <span className="text-base font-bold text-ink-900">{formatPrice(lineTotal)}</span>
         </div>
+        {qty >= MAX_LINE_QTY && (
+          <p className="text-xs text-ink-500">{t('cart.maxPerProduct', { count: MAX_LINE_QTY })}</p>
+        )}
       </div>
     </li>
   );

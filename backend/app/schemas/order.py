@@ -13,13 +13,14 @@ from uuid import UUID
 
 from pydantic import EmailStr, Field, field_validator
 
+from app.core.limits import MAX_LINE_QUANTITY, MAX_ORDER_LINES
 from app.schemas.base import ApiModel, ApiRequest
 
 
 class OrderItemRequest(ApiRequest):
     product_id: UUID
     # frontend-ის კალათა `qty`-ს იყენებს და არა `quantity`-ს
-    qty: int = Field(ge=1, le=99)
+    qty: int = Field(ge=1, le=MAX_LINE_QUANTITY)
 
 
 class CustomerRequest(ApiRequest):
@@ -60,7 +61,7 @@ OFFERED_PAYMENT_METHODS = ("cash",)
 
 
 class CreateOrderRequest(ApiRequest):
-    items: list[OrderItemRequest] = Field(min_length=1, max_length=50)
+    items: list[OrderItemRequest] = Field(min_length=1, max_length=MAX_ORDER_LINES)
     customer: CustomerRequest
     payment_method: Literal["cash"] = "cash"
 

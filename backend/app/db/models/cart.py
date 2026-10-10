@@ -28,11 +28,13 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.limits import MAX_ORDER_LINES
 from app.db.base import Base, UUIDPrimaryKey
 
-#: A basket far past this is not a basket. The limit exists so that a stored
-#: document cannot be grown without bound by a client that keeps adding lines.
-MAX_CART_ITEMS = 50
+#: A cart holds what one order can hold (core/limits.py): a basket past that
+#: would fail at checkout, and it also keeps the stored document from being
+#: grown without bound by a client that keeps adding lines.
+MAX_CART_ITEMS = MAX_ORDER_LINES
 
 
 class Cart(Base, UUIDPrimaryKey):

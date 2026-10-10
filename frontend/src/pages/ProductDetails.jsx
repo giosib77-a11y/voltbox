@@ -19,6 +19,8 @@ import { useCart } from '../hooks/useCart.js';
 import { useToast } from '../hooks/useToast.js';
 import { formatPrice, formatSpecValue } from '../utils/format.js';
 import { useDeliveryRules } from '../hooks/useDeliveryRules.js';
+import { cartLimitMessage } from '../utils/cartLimit.js';
+import { MAX_LINE_QTY } from '../constants/index.js';
 import { i18n, t } from '../i18n/index.js';
 
 // Each tab's label is `product.tabs.<id>`.
@@ -92,7 +94,11 @@ export default function ProductDetails() {
   const savings = product.hasDiscount ? product.oldPrice - product.price : 0;
 
   function handleAddToCart() {
-    addItem(product, qty);
+    const limit = addItem(product, qty);
+    if (limit) {
+      toast.error(cartLimitMessage(limit));
+      return;
+    }
     toast.success(t('product.addedNamed', { name: product.name }), {
       action: { label: t('product.goToCart'), onClick: () => navigate('/cart') },
     });
@@ -150,7 +156,7 @@ export default function ProductDetails() {
               <QuantityStepper
                 value={qty}
                 min={1}
-                max={product.stock > 0 ? product.stock : 1}
+                max={product.stock > 0 ? Math.min(product.stock, MAX_LINE_QTY) : 1}
                 onChange={setQty}
                 disabled={!product.inStock}
               />

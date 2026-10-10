@@ -1,8 +1,10 @@
 import { Minus, Plus } from 'lucide-react';
+import { MAX_LINE_QTY } from '../../constants/index.js';
 import { t } from '../../i18n/index.js';
 
 /**
- * რაოდენობის მრიცხველი. `max` ყოველთვის მარაგით არის შეზღუდული.
+ * რაოდენობის მრიცხველი. `max` ყოველთვის მარაგით არის შეზღუდული, და არასდროს აღემატება
+ * ერთი პროდუქტის ზღვარს შეკვეთაში (MAX_LINE_QTY).
  */
 
 const SIZES = {
@@ -13,7 +15,7 @@ const SIZES = {
 export default function QuantityStepper({
   value = 1,
   min = 1,
-  max = 99,
+  max = MAX_LINE_QTY,
   onChange,
   size = 'md',
   disabled = false,
@@ -21,7 +23,7 @@ export default function QuantityStepper({
   className = '',
 }) {
   const dims = SIZES[size] || SIZES.md;
-  const safeMax = Math.max(min, max);
+  const safeMax = Math.max(min, Math.min(max, MAX_LINE_QTY));
 
   function commit(next) {
     const clamped = Math.max(min, Math.min(safeMax, Math.round(Number(next) || min)));

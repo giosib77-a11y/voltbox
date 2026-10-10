@@ -28,6 +28,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.limits import MAX_LINE_QUANTITY
 from app.core.security import generate_order_lookup_token, hash_order_lookup_token
 from app.db.models import (
     REASON_ORDER_PLACED,
@@ -41,7 +42,7 @@ from app.services import delivery, order_status
 from app.services.contact import contact_matches
 from app.services.inventory import adjust_stock
 
-MAX_QUANTITY = 99
+MAX_QUANTITY = MAX_LINE_QUANTITY
 
 #: The unique index that makes the key a claim rather than a hope. Named
 #: explicitly because only *this* violation may be turned into a replay - any

@@ -55,6 +55,16 @@ export const SHOP_FACTS = {
 /*  localStorage გასაღებები (ვერსიით — მიგრაციისთვის)                          */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The size of one order, the owner's rule of 2026-10-10: at most 20 different
+ * products and 10 units of each, for every order, guest or signed in. The cart
+ * holds no more than checkout takes, so nothing is offered that the server then
+ * refuses. backend/app/core/limits.py is the server's copy of the same two
+ * numbers, and backend/tests/test_cart.py and test_orders.py pin them there.
+ */
+export const MAX_CART_LINES = 20;
+export const MAX_LINE_QTY = 10;
+
 export const STORAGE_KEYS = {
   cart: 'cart:v1',
   auth: 'auth:v1',

@@ -8,6 +8,7 @@ import RatingStars from './RatingStars.jsx';
 import { useCart } from '../../hooks/useCart.js';
 import { useToast } from '../../hooks/useToast.js';
 import { formatDiscount } from '../../utils/format.js';
+import { cartLimitMessage } from '../../utils/cartLimit.js';
 import { t } from '../../i18n/index.js';
 
 /**
@@ -27,7 +28,11 @@ function ProductCard({ product, className = '', priority = false }) {
     event.stopPropagation();
     if (isOutOfStock) return;
 
-    addItem(product, 1);
+    const limit = addItem(product, 1);
+    if (limit) {
+      toast.error(cartLimitMessage(limit));
+      return;
+    }
     toast.success(t('product.addedNamed', { name: product.name }), {
       action: { label: t('product.viewCart'), onClick: () => navigate('/cart') },
     });

@@ -232,6 +232,41 @@ async def test_quantity_above_the_cap_is_rejected(
     assert response.status_code == 400
 
 
+async def test_an_order_may_hold_ten_of_a_product_and_not_eleven(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    category = await make_category(db, "bulk")
+    brand = await make_brand(db, "BulkBrand")
+    product = await make_product(db, category, brand, slug="bulk", price="10.00", stock=50)
+    item = {"productId": str(product.id)}
+
+    refused = await _place(client, [{**item, "qty": 11}])
+    allowed = await _place(client, [{**item, "qty": 10}])
+
+    assert refused.status_code == 400
+    assert allowed.status_code == 201
+
+
+async def test_an_order_may_hold_twenty_different_products_and_not_twenty_one(
+    client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    """The owner's cap on one checkout, guest or not: it is what keeps one script
+    from taking a whole catalogue in a single request."""
+    category = await make_category(db, "many")
+    brand = await make_brand(db, "ManyBrand")
+    products = [
+        await make_product(db, category, brand, slug=f"p-{n}", price="10.00", stock=5)
+        for n in range(21)
+    ]
+    lines = [{"productId": str(p.id), "qty": 1} for p in products]
+
+    refused = await _place(client, lines)
+    allowed = await _place(client, lines[:20])
+
+    assert refused.status_code == 400
+    assert allowed.status_code == 201
+
+
 async def test_idempotency_key_prevents_a_duplicate_order(
     client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
 ) -> None:

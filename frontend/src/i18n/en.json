@@ -234,7 +234,11 @@
     "removedNamed": "{{name}} — removed from your cart",
     "emptyTitle": "Your cart is empty",
     "emptyText": "Browse the catalogue and add some products — you don't need an account to order.",
-    "clear": "Empty cart"
+    "clear": "Empty cart",
+    "maxPerProduct_one": "At most {{count}} unit of one product per order",
+    "maxPerProduct_other": "At most {{count}} units of one product per order",
+    "maxLines_one": "An order holds at most {{count}} different product",
+    "maxLines_other": "An order holds at most {{count}} different products"
   },
   "filters": {
     "remove": "Remove filter",

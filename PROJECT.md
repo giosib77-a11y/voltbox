@@ -75,8 +75,9 @@ Deployment state, as far as the repository shows (2026-10-10):
 - **Delivery fee** by city: Tbilisi 8 ₾, Rustavi 5 ₾, free when the items total
   is ≥ 50 ₾; other cities are refused (`app/services/delivery.py`).
 - **Payment**: cash on delivery only for new orders; old `card` orders still load.
-- **Order size** (decided 2026-10-10, not yet in code — PROGRESS T12): at most 20 distinct
-  products per order and 10 units of each.
+- **Order size** (decided 2026-10-10): at most 20 distinct products per order and 10 units
+  of each. One source: `app/core/limits.py`; the cart has the same caps; the storefront copy is
+  in `frontend/src/constants/index.js`.
 - **Stock** never goes negative; every change writes an `inventory_movements`
   row (previous, change, new). Checkout and cancellation are the automatic
   writers; admins adjust with a reason.
@@ -168,6 +169,12 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
+
+### 2026-10-10 — Order and cart share one size cap (20 lines, 10 units)
+- Decision: orders and saved carts both take at most 20 products and 10 units each.
+- Reason: a saved cart that checkout would refuse is useless; one script could otherwise take a whole catalogue in one request.
+- Alternatives considered: cap only the order schema.
+- Why rejected: the shopper would reach checkout with a cart it cannot place.
 
 ### 2026-10-10 — Extensions stay in `public`; `public` leaves the Data API
 - Decision: do not move citext / pg_trgm / unaccent / uuid-ossp. Nothing here uses the

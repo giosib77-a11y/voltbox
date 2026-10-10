@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import Field
 
+from app.core.limits import MAX_LINE_QUANTITY, MAX_ORDER_LINES
 from app.schemas.base import ApiModel, ApiRequest
 
 
@@ -18,7 +19,7 @@ class CartLineIn(ApiRequest):
     """
 
     product_id: UUID
-    qty: int = Field(ge=1, le=99)
+    qty: int = Field(ge=1, le=MAX_LINE_QUANTITY)
 
 
 class CartSnapshot(ApiModel):
@@ -39,7 +40,7 @@ class CartLineOut(ApiModel):
 
 
 class CartRequest(ApiRequest):
-    items: list[CartLineIn] = Field(default_factory=list, max_length=50)
+    items: list[CartLineIn] = Field(default_factory=list, max_length=MAX_ORDER_LINES)
 
 
 class CartOut(ApiModel):

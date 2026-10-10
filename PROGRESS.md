@@ -71,7 +71,7 @@ re-checked in the code before it was written here. Order = suggested order.
   returns the exact `available`. Fix: dedicated `ORDER_RATE_LIMIT` (e.g.
   `5/minute;30/day`) on `create_order` + a route-level test.
 
-- [ ] **T12 · should-fix · Guest order size cap (decided, was D3).**
+- [x] **T12 · should-fix · Guest order size cap (decided, was D3).**
   Owner's rule (2026-10-10): at most 20 distinct products per order, at most 10 units of
   each. Today 50 lines × 99 units (`schemas/order.py:22,63`). Applies to every order,
   not only guests' (one schema). Fix: `max_length=20`, `qty le=10`; the frontend cart
@@ -105,6 +105,9 @@ re-checked in the code before it was written here. Order = suggested order.
   Fix: add the three paths (and the README gates line, see Backlog nit).
 
 ## Backlog (needs user decision)
+
+- `restoreItem` (cart undo) fails silently if the cart filled up meanwhile (low).
+- Backend tests for 51 lines / qty 100 could sit at 21 / 11 (low).
 
 Decided by the owner (2026-10-10):
 - **D1 · onrender.com sessions.** Buying `voltbox.ge` + `api.voltbox.ge`; until then
@@ -171,10 +174,7 @@ Unverified (check before acting):
 
 ## Last Session
 - Date: 2026-10-10
-- Done: PROJECT.md, CLAUDE.md, `.claude/hooks/verify.sh` (agent-dashboard Verify
-  event, CHECKS empty), full audit → this task list. No application code changed.
-- Verification: ruff, ruff format, `mypy app scripts tests`, eslint, vitest 552/552,
-  http build — green. Backend `pytest` not run: Docker was not running (needs
-  `voltbox-pg` on :55432).
-- Known issues / blockers: live-DB questions in PROJECT.md Open Questions.
-- Next: T12.
+- Done: T12 (order and cart cap 20 lines / 10 units, shared `core/limits.py`, storefront clamps and explains).
+- Verification: ruff, format, mypy, pytest 993, eslint, vitest 566, http and mock builds — green, run by orchestrator.
+- Known issues / blockers: new tests not run against the old code; no browser check; Georgian wording unreviewed.
+- Next: stage tasks done — finish-check not run.

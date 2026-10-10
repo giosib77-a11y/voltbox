@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
-import { STORAGE_KEYS } from '../constants/index.js';
+import { MAX_CART_LINES, MAX_LINE_QTY, STORAGE_KEYS } from '../constants/index.js';
 import { readJSON, writeJSON } from '../utils/storage.js';
 import { calcTotals } from '../utils/pricing.js';
 import * as api from '../services/api.js';
@@ -70,13 +70,28 @@ const ACTIONS = {
 const initialState = { items: [], hydrated: false };
 
 function clampQty(qty, stock) {
-  const max = Number.isFinite(stock) && stock > 0 ? stock : 99;
+  const max = Number.isFinite(stock) && stock > 0 ? Math.min(stock, MAX_LINE_QTY) : MAX_LINE_QTY;
   return Math.max(0, Math.min(Math.round(Number(qty) || 0), max));
+}
+
+/**
+ * Which order-size limit adding `qty` of a product would run into, if any:
+ * 'lines' when it would be a 21st product, 'qty' when the line would pass 10
+ * units, null otherwise. Stock is not a limit here - it has always clamped
+ * quietly and the stepper shows it; this is the one the shopper has to be told.
+ */
+export function cartLimitHit(items, productId, qty = 1) {
+  const existing = items.find((item) => item.productId === productId);
+  if (!existing && items.length >= MAX_CART_LINES) return 'lines';
+  if ((existing?.qty ?? 0) + qty > MAX_LINE_QTY) return 'qty';
+  return null;
 }
 
 /** გატეხილი ან უცხო ფორმატის ჩანაწერების გაფილტვრა. */
 function sanitize(items) {
   if (!Array.isArray(items)) return [];
+  // A cart saved before the cap (or merged from two devices) may hold more than
+  // 20 products; checkout would refuse it, so it is cut here, keeping the oldest.
   return items
     .filter((item) => item && typeof item.productId === 'string' && item.snapshot)
     .map((item) => ({
@@ -91,7 +106,8 @@ function sanitize(items) {
         stock: Number(item.snapshot.stock) || 0,
       },
     }))
-    .filter((item) => item.qty > 0);
+    .filter((item) => item.qty > 0)
+    .slice(0, MAX_CART_LINES);
 }
 
 export function cartReducer(state, action) {
@@ -114,7 +130,7 @@ export function cartReducer(state, action) {
       }
 
       const nextQty = clampQty(qty, product.stock);
-      if (nextQty <= 0) return state;
+      if (nextQty <= 0 || state.items.length >= MAX_CART_LINES) return state;
 
       return {
         ...state,
@@ -274,8 +290,11 @@ export function CartProvider({ children }) {
     return () => clearTimeout(timer);
   }, [state.items, state.hydrated]);
 
+  /** → the order-size limit it ran into (see cartLimitHit), or null; the caller says so. */
   const addItem = useCallback((product, qty = 1) => {
+    const hit = cartLimitHit(stateRef.current.items, product.id, qty);
     dispatch({ type: ACTIONS.ADD, payload: { product, qty } });
+    return hit;
   }, []);
 
   const removeItem = useCallback((productId) => {
