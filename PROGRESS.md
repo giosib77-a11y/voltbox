@@ -84,7 +84,7 @@ re-checked in the code before it was written here. Order = suggested order.
   512 MB for two workers. Fix: ASGI middleware → 413 above ~64 KB (counting chunked
   bodies too), with the image-upload route allowed `MAX_IMAGE_BYTES` + overhead; tests.
 
-- [ ] **T9 · should-fix · Renaming a brand or category leaves `search_text` stale.**
+- [x] **T9 · should-fix · Renaming a brand or category leaves `search_text` stale.**
   `services/admin_catalog.py` `update_brand` / `update_category` change the row only;
   `search_text` embeds brand name, category name and slug. Exact search stops finding
   those products until someone runs `scripts/reindex_search.py`.
@@ -177,4 +177,4 @@ Unverified (check before acting):
   http build — green. Backend `pytest` not run: Docker was not running (needs
   `voltbox-pg` on :55432).
 - Known issues / blockers: live-DB questions in PROJECT.md Open Questions.
-- Next: T9.
+- Next: T10.

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.db.models import Brand, Category, Product
 from app.services import audit
+from app.services.search import build_search_text
 from app.services.slug import slugify, unique_slug
 
 #: How deep the category tree may go. The storefront renders one level of
@@ -168,6 +169,35 @@ async def create_category(db: AsyncSession, payload: dict[str, Any]) -> Category
     return category
 
 
+async def _reindex_products(
+    db: AsyncSession, *, category_id: uuid.UUID | None = None, brand_id: uuid.UUID | None = None
+) -> None:
+    """Rebuild `search_text` for every product of one category or brand.
+
+    The text carries the brand's name and the category's name and slug, so a
+    rename leaves each product findable only by the old spelling - silently,
+    until someone runs scripts/reindex_search.py. Same transaction as the rename,
+    and the same builder as every other write path. A catalogue is hundreds of
+    products, so doing it inline costs one query and a loop.
+    """
+    condition = Product.category_id == category_id if category_id else Product.brand_id == brand_id
+    products = (await db.scalars(select(Product).where(condition))).all()
+    for product in products:
+        category = await db.get(Category, product.category_id)
+        brand = await db.get(Brand, product.brand_id)
+        product.search_text = build_search_text(
+            name=product.name,
+            name_en=product.name_en,
+            brand_name=brand.name if brand else "",
+            category_name=category.name if category else "",
+            category_slug=category.slug if category else "",
+            short_description=product.short_description,
+            tags=list(product.tags or []),
+            specs=dict(product.specs or {}),
+        )
+    await db.flush()
+
+
 async def update_category(
     db: AsyncSession, category_id: uuid.UUID, patch: dict[str, Any]
 ) -> tuple[Category, dict[str, Any], dict[str, Any]]:
@@ -191,9 +221,13 @@ async def update_category(
 
     tracked = [column.name for column in Category.__table__.columns]
     before = audit.snapshot(category, tracked)
+    # name and slug are in the products' search text; name_en and the rest are not.
+    reindex = any(key in patch and patch[key] != getattr(category, key) for key in ("name", "slug"))
     for key, value in patch.items():
         setattr(category, key, value)
     await db.flush()
+    if reindex:
+        await _reindex_products(db, category_id=category.id)
     # `updated_at` has a server-side onupdate, so SQLAlchemy expires it after the
     # flush regardless of expire_on_commit. Reading it later would trigger a
     # lazy refresh - synchronous IO inside async code, which raises
@@ -313,9 +347,13 @@ async def update_brand(
 
     tracked = [column.name for column in Brand.__table__.columns]
     before = audit.snapshot(brand, tracked)
+    # Only the name is in the products' search text; the slug is not.
+    reindex = "name" in patch and patch["name"] != brand.name
     for key, value in patch.items():
         setattr(brand, key, value)
     await db.flush()
+    if reindex:
+        await _reindex_products(db, brand_id=brand.id)
     # `updated_at` has a server-side onupdate, so SQLAlchemy expires it after the
     # flush regardless of expire_on_commit. Reading it later would trigger a
     # lazy refresh - synchronous IO inside async code, which raises

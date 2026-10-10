@@ -297,3 +297,75 @@ async def test_unknown_fields_are_rejected_rather_than_ignored(
     )
 
     assert response.status_code == 400
+
+
+async def _found_by(client: httpx.AsyncClient, query: str) -> list[str]:
+    response = await client.get("/api/v1/search", params={"q": query})
+    return [item["slug"] for item in response.json()]
+
+
+async def test_renaming_a_brand_refreshes_the_search_index_of_its_products(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+) -> None:
+    """The brand's name is part of every product's search text.
+
+    Renaming a brand left each of its products findable only by the old name,
+    with no error anywhere, until someone ran the reindex script. (A different
+    name, not a corrected spelling: search matches prefixes and near spellings,
+    so "samsun" would still find "samsung" and prove nothing.)
+    """
+    category = await make_category(db, slug="phones")
+    brand = await make_brand(db, "Hoco")
+    await make_product(db, category, brand, slug="galaxy", name="Galaxy A", price="100")
+    assert await _found_by(client, "hoco") == ["galaxy"]
+    assert await _found_by(client, "baseus") == []
+
+    response = await client.patch(
+        f"{ADMIN}/brands/{brand.id}", headers=headers, json={"name": "Baseus"}
+    )
+
+    assert response.status_code == 200
+    assert await _found_by(client, "baseus") == ["galaxy"]
+    assert await _found_by(client, "hoco") == []
+
+
+async def test_renaming_a_category_or_changing_its_slug_refreshes_its_products(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+) -> None:
+    category = await make_category(db, slug="phones", name="ტელეფონები")
+    brand = await make_brand(db, "Hoco")
+    await make_product(db, category, brand, slug="case", name="Case", price="10")
+    other = await make_category(db, slug="cables", name="კაბელები")
+    await make_product(db, other, brand, slug="wire", name="Wire", price="10")
+
+    await client.patch(
+        f"{ADMIN}/categories/{category.id}",
+        headers=headers,
+        json={"name": "სმარტფონები", "slug": "smartphones"},
+    )
+
+    assert await _found_by(client, "სმარტფონები") == ["case"]
+    assert await _found_by(client, "smartphones") == ["case"]
+    assert await _found_by(client, "ტელეფონები") == []
+    # A product in another category is not touched.
+    assert await _found_by(client, "კაბელები") == ["wire"]
+
+
+async def test_an_english_name_alone_does_not_touch_the_search_index(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+) -> None:
+    """name_en is not part of the product's search text, so changing only it
+    must not rebuild every product."""
+    category = await make_category(db, slug="phones")
+    brand = await make_brand(db, "Hoco")
+    product = await make_product(db, category, brand, slug="case", name="Case", price="10")
+    marker = "kept-as-is"
+    product.search_text = marker
+    await db.flush()
+
+    await client.patch(
+        f"{ADMIN}/brands/{brand.id}", headers=headers, json={"nameEn": "Hoco Global"}
+    )
+    await db.refresh(product)
+
+    assert product.search_text == marker
