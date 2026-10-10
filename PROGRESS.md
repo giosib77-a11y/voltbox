@@ -155,11 +155,9 @@ Prepared 2026-10-10 for Stage 1 (code at `7a867fb`).
   Live already shows RLS on 15/15 tables (advisor, owner), so on live it changes nothing but the
   recorded head. The backend works the same without it; run it so live and `alembic upgrade head`
   agree and a rebuilt database matches.
-- The live head is **not known to me** (reading it was denied by the permission classifier;
-  PROJECT.md Open Questions still asks it). Find it first in the SQL Editor:
-  `select version_num from public.alembic_version;`
-  Then run, in order, only the blocks **above** that value. Each block's last `UPDATE` checks the old
-  value, so a block run on the wrong head updates 0 rows — look for `UPDATE 1`.
+- **Live head is 0014** (owner confirmed 2026-10-10). Only the last block, `0014 -> 0015`, is left to run.
+  Its last `UPDATE` checks the old value, so on a wrong head it updates 0 rows — look for `UPDATE 1`.
+  The 0010–0014 blocks are kept below as reference only; do not run them.
 - The SQL below is `alembic upgrade A:B --sql` output per step (generated offline, 0010–0015), with every
   name hand-qualified with `public.` (Supabase has its own `auth.refresh_tokens`; the generated text is
   unqualified). Statement counts, to check a paste: 0010 = 3, 0011 = 2, 0012 = 4, 0013 = 2, 0014 = 5,
@@ -219,7 +217,7 @@ COMMIT;
 ```
 - Check after: `select version_num from public.alembic_version;` → `0015`; and
   `select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and not c.relrowsecurity;` → no rows.
-- 0010–0014 predate Stage 1. If live is already at 0014 (as PROJECT.md guesses), only the last block is left.
+- 0010–0014 predate Stage 1 and are already applied on live.
 
 **2. Order**
 1. Migrations (additive or no-ops for running code: new columns have defaults, RLS with no policy does not
@@ -230,10 +228,9 @@ Why backend first: the new storefront sends `currentPassword` and caps lines at 
 reject the unknown `currentPassword` field (email change fails), while the new API with the old storefront
 refuses only an email change without a password and a cart line over 10. Either order has a window of a few
 minutes; backend-first keeps browsing and checkout working in it.
-Caveat: `render.yaml` has no `autoDeploy` key, so one push to `main` starts both services (each has its own
-`buildFilter`) and the static site usually finishes first. For a strict order, turn auto-deploy off for the
-storefront in the Render dashboard and trigger it after the API is healthy. I did not check that dashboard
-setting. Nothing is pushed from here.
+Decided by the owner (2026-10-10): the storefront's auto-deploy stays on. `render.yaml` has no `autoDeploy`
+key, so one push to `main` starts both services (each has its own `buildFilter`) and the static site usually
+finishes first; the short window is accepted because there are no real shoppers yet. Nothing is pushed from here.
 
 **3. Environment variables on Render**
 - None new, none changed. `MAX_REQUEST_BODY_BYTES` (default 256 KB) is optional; `ORDER_RATE_LIMIT`

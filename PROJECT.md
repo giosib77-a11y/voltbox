@@ -198,5 +198,5 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 ## Open Questions
 - Has anyone other than the owner placed an order? (The storefront is live at
   voltbox-storefront.onrender.com, API on Render free — owner, 2026-10-10.)
-- Live Supabase: is the database at migration `0014`? (RLS is on 15/15 tables there per
-  the advisor, although no migration enables it on `carts` / `alembic_version` — T2.)
+- ~~Live Supabase: is the database at migration `0014`?~~ Yes (owner, 2026-10-10); only `0015`
+  is left to run there (PROGRESS.md, Deploy plan). RLS is on 15/15 tables per the advisor.
