@@ -104,6 +104,23 @@ re-checked in the code before it was written here. Order = suggested order.
   `frontend/src/admin/statuses.jsx`. A frontend-only PR can turn main red.
   Fix: add the three paths (and the README gates line, see Backlog nit).
 
+- [ ] **T13 · should-fix · T8 turned an oversized photo's message into "request too large, shorten the text".**
+  `core/body_limit.py` answers 413 `PAYLOAD_TOO_LARGE` for an image upload past
+  `max_image_bytes + 64 KB` (declared length and chunked), so the route's `IMAGE_TOO_LARGE`
+  with `maxBytes` (`services/storage.py:178`, `httpClient.js:92`) is reached only inside the
+  64 KB window. The owner uploading a 6–8 MB phone photo sees the wrong text. Reviewer
+  reproduced it; the code and `main.py:38` confirm it.
+  Fix: on the upload route both refusal paths answer `IMAGE_TOO_LARGE` with
+  `{"maxBytes": settings.max_image_bytes}` (`limit_for` returns code/details with the limit);
+  a test in `test_body_limit.py` for the upload 413's `code` and `maxBytes`, declared and chunked.
+
+- [ ] **T14 · should-fix · `scripts/verify_restore.py` reads `backend/.env` at import.**
+  `verify_restore.py:38` calls `dotenv_values(.../.env)` to learn the live URL it must refuse.
+  CLAUDE.md: no script may read `backend/.env`; `VOLTBOX_NO_DOTENV` is not honoured here
+  (T0 covered only `Settings`). Pre-existing.
+  Fix: honour `VOLTBOX_NO_DOTENV=1` (no read, `LIVE_URL = None`) and keep the live-URL refusal
+  working another way (e.g. refuse any `--against` host that is not localhost); a test for both.
+
 ## Backlog (needs user decision)
 
 - `restoreItem` (cart undo) fails silently if the cart filled up meanwhile (low).
@@ -135,6 +152,9 @@ fix that changes behaviour, a push to `main` triggers Render's autoDeploy of the
 storefront — nothing is pushed without approval.
 
 Nits:
+- Profile.jsx:92 inline current-password error never shows in http mode (`details.code`, not `details.currentPassword`; same in ChangePassword.jsx:54); only the toast appears.
+- Partial add to a full-ish cart (8 + 5) shows only the error toast although 2 were added.
+- Over-20 carts are cut silently, and differently: frontend `sanitize` keeps the first 20, backend `merge_cart` the last 20.
 - Refresh 429/5xx logs the user out (`session.js:186`); only 401 should.
 - Access log hides query only under `/api/v1/auth`; admin search `?q=` writes customer
   email/phone to logs (`core/logging.py:39`).
@@ -168,7 +188,7 @@ Unverified (check before acting):
 - Two concurrent first-image uploads → 500 + orphaned file.
 
 ## Run State
-- Finish-check this stage: not run
+- Finish-check this stage: done
 - Fix rounds this stage: 0/2
 - Failed attempts: —
 
