@@ -206,6 +206,77 @@ async def test_parallel_duplicates_of_one_key_make_one_order(last_unit: Product)
     assert orders == 1
 
 
+@pytest.fixture
+async def shopper(last_unit: Product) -> AsyncGenerator[User]:
+    """A signed-in account, written on its own connection.
+
+    Depends on `last_unit` so it is torn down first: its orders have to go
+    before the account, because a signed-in order carries no guest contact and
+    the owner-or-guest CHECK refuses an order left without an owner.
+    """
+    async with SessionLocal() as setup:
+        user = await make_user(setup, email="signed-in@voltbox.ge")
+        await setup.commit()
+
+    yield user
+
+    async with SessionLocal() as cleanup:
+        mine = select(Order.id).where(Order.user_id == user.id)
+        await cleanup.execute(delete(OrderItem).where(OrderItem.order_id.in_(mine)))
+        await cleanup.execute(delete(Order).where(Order.user_id == user.id))
+        await cleanup.execute(delete(User).where(User.id == user.id))
+        await cleanup.commit()
+
+
+async def _order_with_key_signed_in(
+    product_id: object, key: str, user_id: object
+) -> tuple[str, str]:
+    """The route's shape: the account is read in the same session that places the order."""
+    async with SessionLocal() as session:
+        try:
+            user = await session.scalar(select(User).where(User.id == user_id))
+            order = await order_service.create_order(
+                session,
+                items=[(product_id, 1)],  # type: ignore[list-item]
+                customer=dict(CUSTOMER),
+                payment_method="cash",
+                user=user,
+                idempotency_key=key,
+            )
+            number = order.order_number
+            await session.commit()
+        except ConflictError as exc:
+            await session.rollback()
+            return "conflict", exc.code
+        except Exception as exc:
+            await session.rollback()
+            return "error", type(exc).__name__
+        return "ok", number
+
+
+async def test_parallel_duplicates_of_a_signed_in_checkout_make_one_order(
+    last_unit: Product, shopper: User
+) -> None:
+    """The same race as above for an account.
+
+    The loser rolls back to read the winner's order, and that rollback expires
+    the account object it was handed; reading its id afterwards went back to the
+    database from async code and the shopper saw a 500 for an order that exists.
+    """
+    key = str(uuid.uuid4())
+    results = await asyncio.gather(
+        *(_order_with_key_signed_in(last_unit.id, key, shopper.id) for _ in range(5))
+    )
+
+    assert {outcome for outcome, _ in results} == {"ok"}, results
+    assert len({detail for _, detail in results}) == 1, results
+    async with SessionLocal() as check:
+        orders = await check.scalar(
+            select(func.count()).select_from(Order).where(Order.idempotency_key == key)
+        )
+    assert orders == 1
+
+
 async def test_the_last_unit_does_not_turn_a_duplicate_into_out_of_stock(
     last_unit: Product,
 ) -> None:

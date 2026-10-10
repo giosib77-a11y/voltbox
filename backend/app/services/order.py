@@ -101,7 +101,7 @@ async def _lock_products(db: AsyncSession, product_ids: list[UUID]) -> dict[UUID
     return {product.id: product for product in products}
 
 
-def owns_order(order: Order, *, user: User | None, customer: dict[str, Any]) -> bool:
+def owns_order(order: Order, *, user_id: UUID | None, customer: dict[str, Any]) -> bool:
     """Whether this requester is the person the stored order belongs to.
 
     An Idempotency-Key is a value a client chooses, so a repeat of one has to
@@ -112,17 +112,17 @@ def owns_order(order: Order, *, user: User | None, customer: dict[str, Any]) -> 
     else - a guest who happens to know the email must not replay it.
     """
     if order.user_id is not None:
-        return user is not None and order.user_id == user.id
-    if user is not None:
+        return user_id is not None and order.user_id == user_id
+    if user_id is not None:
         return False
     return contact_matches(
         customer.get("email"), email=order.guest_email, phone=order.guest_phone
     ) or contact_matches(customer.get("phone"), email=order.guest_email, phone=order.guest_phone)
 
 
-def _replay(order: Order, *, user: User | None, customer: dict[str, Any]) -> Order:
+def _replay(order: Order, *, user_id: UUID | None, customer: dict[str, Any]) -> Order:
     """Return the stored order to its owner, or refuse without describing it."""
-    if owns_order(order, user=user, customer=customer):
+    if owns_order(order, user_id=user_id, customer=customer):
         return order
     raise ConflictError(
         "This idempotency key belongs to a different order",
@@ -228,13 +228,18 @@ async def place_order(
     The route needs to know, so that a double-submitted checkout does not tell
     the owner about the same order twice.
     """
+    # The id, taken now. The clash path below rolls the session back, which
+    # expires `user`, and reading an expired attribute goes back to the database
+    # - from async code that is MissingGreenlet, a 500 for an order that exists.
+    user_id = user.id if user is not None else None
+
     if idempotency_key:
         existing = await db.scalar(select(Order).where(Order.idempotency_key == idempotency_key))
         if existing is not None:
             # ორმაგად გაგზავნილი checkout — იმავე შეკვეთას ვაბრუნებთ და მეორეს
             # არ ვქმნით. მფლობელობა აუცილებლად მოწმდება: გასაღები კლიენტის
             # არჩეულია და გამოცნობილით სხვისი შეკვეთა იკითხებოდა.
-            return _replay(existing, user=user, customer=customer), False
+            return _replay(existing, user_id=user_id, customer=customer), False
 
     # ერთი პროდუქტი ორჯერ: რაოდენობებს ვაჯამებთ, თორემ FOR UPDATE-ის შემდეგ
     # ორივე ხაზი ერთსა და იმავე მარაგს დაუპირისპირდებოდა
@@ -274,7 +279,7 @@ async def place_order(
         existing = await db.scalar(select(Order).where(Order.idempotency_key == idempotency_key))
         if existing is None:  # pragma: no cover - the violation proves it exists
             raise
-        return _replay(existing, user=user, customer=customer), False
+        return _replay(existing, user_id=user_id, customer=customer), False
 
     products = await _lock_products(db, sorted(quantities))
 

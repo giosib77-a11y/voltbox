@@ -51,7 +51,7 @@ re-checked in the code before it was written here. Order = suggested order.
   Fix: header absent → guest; header present but invalid → 401 `INVALID_TOKEN`
   (client refreshes and retries with the same Idempotency-Key). Tests for both.
 
-- [ ] **T5 · should-fix · Logged-in duplicate checkout returns 500.**
+- [x] **T5 · should-fix · Logged-in duplicate checkout returns 500.**
   `services/order.py:273` `db.rollback()` expires the session's `user`; `owns_order`
   then reads `user.id` (lazy load in async → `MissingGreenlet`). The order exists,
   the shopper sees an error. Concurrency tests only use `user=None`.
@@ -177,4 +177,4 @@ Unverified (check before acting):
   http build — green. Backend `pytest` not run: Docker was not running (needs
   `voltbox-pg` on :55432).
 - Known issues / blockers: live-DB questions in PROJECT.md Open Questions.
-- Next: T5.
+- Next: T6.
