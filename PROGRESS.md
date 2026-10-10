@@ -263,6 +263,12 @@ finishes first; the short window is accepted because there are no real shoppers 
 9. Supabase Dashboard → Advisors: no new "RLS disabled" warning.
 
 Nits:
+- Tailwind 4-ზე გადასვლისას postcss-selector-parser და dev-ჯაჭვის high-ები თავისით გასწორდება.
+  Dependabot #12 (postcss-selector-parser 6.1.4 < 7.1.6, GHSA-rj75-hqrm-r3gf, moderate) — owner
+  dismisses it, 2026-10-10: `tailwindcss` is a devDependency, runs only in `npm run build` on our own
+  CSS, is not in `dist`; CI's `npm audit --omit=dev --audit-level=high` does not see it. Same for the
+  7 high in the dev chain (brace-expansion, braces, micromatch, chokidar, fast-glob, source-map-js,
+  tailwindcss 3). Not fixed with an `overrides` entry on purpose. Backend `pip-audit`: clean.
 - Profile.jsx:92 inline current-password error never shows in http mode (`details.code`, not `details.currentPassword`; same in ChangePassword.jsx:54); only the toast appears.
 - Partial add to a full-ish cart (8 + 5) shows only the error toast although 2 were added.
 - Over-20 carts are cut silently, and differently: frontend `sanitize` keeps the first 20, backend `merge_cart` the last 20.
