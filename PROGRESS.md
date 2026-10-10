@@ -114,7 +114,7 @@ re-checked in the code before it was written here. Order = suggested order.
   `{"maxBytes": settings.max_image_bytes}` (`limit_for` returns code/details with the limit);
   a test in `test_body_limit.py` for the upload 413's `code` and `maxBytes`, declared and chunked.
 
-- [ ] **T14 · should-fix · `scripts/verify_restore.py` reads `backend/.env` at import.**
+- [x] **T14 · should-fix · `scripts/verify_restore.py` reads `backend/.env` at import.**
   `verify_restore.py:38` calls `dotenv_values(.../.env)` to learn the live URL it must refuse.
   CLAUDE.md: no script may read `backend/.env`; `VOLTBOX_NO_DOTENV` is not honoured here
   (T0 covered only `Settings`). Pre-existing.
@@ -194,7 +194,7 @@ Unverified (check before acting):
 
 ## Last Session
 - Date: 2026-10-10
-- Done: T12 (order and cart cap 20 lines / 10 units, shared `core/limits.py`, storefront clamps and explains).
-- Verification: ruff, format, mypy, pytest 993, eslint, vitest 566, http and mock builds — green, run by orchestrator.
-- Known issues / blockers: new tests not run against the old code; no browser check; Georgian wording unreviewed.
-- Next: stage tasks done — finish-check not run.
+- Done: T13 (oversized photo says IMAGE_TOO_LARGE), T14 (verify_restore never reads `.env`; `--against` required, localhost only — owner approved).
+- Verification: ruff, format, mypy, pytest 1009 — green, run by orchestrator. Frontend untouched since T12 (vitest 566, builds green).
+- Known issues / blockers: executor ran the OLD verify_restore.py from backend/ to prove the new tests fail, so `backend/.env` was loaded into that one test process (nothing printed or sent; one failed localhost:55433 connect). Owner told.
+- Next: Stage 1 has no open critical/should-fix; stage is Done pending owner.

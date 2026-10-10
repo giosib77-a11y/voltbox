@@ -5,10 +5,14 @@ constraint or a column default is one that works until the day it matters - so
 this compares the shape of every object and the row count of every table
 between two databases.
 
-    python scripts/verify_restore.py <restored-url>
+    python scripts/verify_restore.py <restored-url> --against <source-url>
 
-The live database is read from DATABASE_URL in backend/.env, read-only. Pass
-`--against <url>` to compare two databases neither of which is the live one.
+`--against` is required and must point at localhost (localhost, 127.0.0.1 or
+::1). The script never reads backend/.env and never learns the live URL, so it
+cannot tell the live database from any other remote one; instead it refuses every
+non-local source. That keeps it from ever touching the live database. To check a
+restore of a production dump, restore it locally and compare it with a local
+database loaded from the same dump.
 
 Written after a drill on 2026-09-13 where everything matched except three
 CHECK constraints, which turned out to be the same constraints printed
@@ -24,8 +28,8 @@ import asyncio
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from dotenv import dotenv_values
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -33,9 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.db.ssl import build_connect_args
 
-#: Read at import time: dotenv touches the filesystem, and doing that inside an
-#: async function is a blocking call in the middle of an event loop.
-LIVE_URL = dotenv_values(Path(__file__).resolve().parents[1] / ".env").get("DATABASE_URL")
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 QUERIES = {
     "tables": """
@@ -87,6 +89,14 @@ def normalise(value: str) -> str:
     return re.sub(r"[\s()\[\]]+", "", without_casts)
 
 
+def is_local(url: str) -> bool:
+    """True only for a URL whose host is the machine running the script."""
+    try:
+        return urlsplit(url).hostname in LOCAL_HOSTS
+    except ValueError:
+        return False
+
+
 async def read(url: str) -> dict[str, list[str]]:
     engine = create_async_engine(
         url.replace("postgresql://", "postgresql+asyncpg://"),
@@ -112,12 +122,14 @@ async def read(url: str) -> dict[str, list[str]]:
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("restored", help="URL of the database restored from the dump")
-    parser.add_argument("--against", help="compare against this instead of the live database")
+    parser.add_argument(
+        "--against", required=True, help="local database to compare with (localhost only)"
+    )
     args = parser.parse_args()
 
-    source = args.against or LIVE_URL
-    if not source:
-        print("no source database: pass --against or set DATABASE_URL in .env")
+    source = args.against
+    if not is_local(source):
+        print("refusing --against: the host is not localhost, 127.0.0.1 or ::1")
         return 2
 
     live, restored = await read(source), await read(args.restored)

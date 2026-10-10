@@ -142,8 +142,13 @@ dump-ის საკუთარი `CREATE SCHEMA public` უვნებე�
 **არ დაეყრდნოთ თვალით შემოწმებას.** ერთი დაკარგული ინდექსი ან check
 შეუმჩნეველი რჩება მანამ, სანამ არ დასჭირდება. იმავე `backend/`-იდან:
 
+`--against` სავალდებულოა და მხოლოდ localhost-ს იღებს (სკრიპტი `backend/.env`-ს არ
+კითხულობს და ლაივ ბაზას არასდროს უკავშირდება). production-ის dump-ის შესამოწმებლად
+შედარების წყარო ლოკალური ბაზაა, იმავე dump-იდან აღდგენილი:
+
 ```bash
-python scripts/verify_restore.py postgresql://voltbox:voltbox@localhost:55433/voltbox_restore
+python scripts/verify_restore.py postgresql://voltbox:voltbox@localhost:55433/voltbox_restore \
+  --against postgresql://voltbox:voltbox@localhost:55432/<local-db-from-same-dump>
 
 # ბოლოს სამიზნე ქრება
 docker rm -f voltbox-restore
