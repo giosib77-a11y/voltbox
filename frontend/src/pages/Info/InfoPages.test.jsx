@@ -6,8 +6,7 @@
  * follow the email switch (the FAQ's forgotten-password answer, Resend in the
  * privacy list); that no page shows a placeholder from its source text; and
  * that a fact listed in docs/info-pages-todo.md stays hidden until it is
- * written into SHOP_FACTS, then appears; the delivery time is `shipping.etaDays`'s, in Georgian, the
- * one the cart shows; and that what the privacy page says is stored, sent to
+ * written into SHOP_FACTS, then appears; the delivery time is `shipping.etaDays`'s, the one the cart shows; and that what the privacy page says is stored, sent to
  * Telegram and asked at registration is read from the code that does it.
  * Notes: the API is the real http client over a stubbed fetch, so a fixture is
  * the response body as the server sends it - money as strings.
@@ -24,7 +23,7 @@ import ReturnsWarranty from './ReturnsWarranty.jsx';
 import Privacy from './Privacy.jsx';
 import Faq from './Faq.jsx';
 import { CONTACT, SHOP_FACTS, STORAGE_KEYS } from '../../constants/index.js';
-import { tKa } from '../../i18n/index.js';
+import { i18n, t } from '../../i18n/index.js';
 import { forgetDeliveryRules, loadDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { createOrder, register } from '../../services/httpApi.js';
 
@@ -81,7 +80,7 @@ async function mount(Page) {
 
 /** The delivery table's body, as [city, fee] pairs. */
 function tableRows() {
-  const table = screen.getByRole('table', { name: 'მიწოდების ღირებულება ქალაქების მიხედვით' });
+  const table = screen.getByRole('table', { name: t('info.delivery.tableCaption') });
   return within(table)
     .getAllByRole('row')
     .slice(1)
@@ -92,7 +91,7 @@ function tableRows() {
 const passwordAnswer = () =>
   screen.getByRole('heading', { name: 'პაროლი დამავიწყდა, რა ვქნა?' }).closest('section');
 
-const returnSteps = () => screen.getByRole('list', { name: 'როგორ დავაბრუნოთ:' });
+const returnSteps = () => screen.getByRole('list', { name: t('info.returns.steps') });
 
 const UNKNOWN = { ...SHOP_FACTS };
 
@@ -230,8 +229,8 @@ describe('facts the owner has not supplied yet', () => {
 
 describe('delivery time', () => {
   it.each([
-    ['delivery', DeliveryTerms, `შეკვეთის მიტანას სჭირდება ${tKa('shipping.etaDays')}.`],
-    ['faq', Faq, `${tKa('shipping.etaDays')}.`],
+    ['delivery', DeliveryTerms, `შეკვეთის მიტანას სჭირდება ${t('shipping.etaDays')}.`],
+    ['faq', Faq, `${t('shipping.etaDays')}.`],
   ])('the %s page states shipping.etaDays, as the cart does', async (_, Page, sentence) => {
     answer(rules());
     await mount(Page);
@@ -343,5 +342,74 @@ describe('the privacy page against the code', () => {
       expect(NAMED[key], `${key} is stored but the page does not name it`).toBeDefined();
       expect(text).toContain(NAMED[key]);
     }
+  });
+});
+
+describe('in English', () => {
+  const GEORGIAN = /[ა-ჿ]/;
+  const ENGLISH_CITIES = {
+    cities: [
+      { name: 'Tbilisi', fee: '8.00' },
+      { name: 'Rustavi', fee: '5.00' },
+    ],
+    freeFrom: '50.00',
+  };
+
+  beforeEach(() => i18n.changeLanguage('en'));
+  afterEach(() => i18n.changeLanguage('ka'));
+
+  describe.each([false, true])('with email %s', (email) => {
+    it.each(PAGES)('the %s page has no Georgian of its own', async (_, Page) => {
+      answer(rules(ENGLISH_CITIES, email));
+      const { container } = await mount(Page);
+
+      // innerHTML, so an aria-label or a caption is read as well as the text
+      expect(container.textContent.length).toBeGreaterThan(0);
+      expect(container.innerHTML).not.toMatch(GEORGIAN);
+      expect(container.innerHTML).not.toContain('{{');
+      expect(document.head.querySelector('meta[name="description"]').content).not.toMatch(GEORGIAN);
+    });
+  });
+
+  it('draws the table and the Georgian city names exactly as the API sends them', async () => {
+    answer(rules(TBILISI_RUSTAVI));
+    await mount(DeliveryTerms);
+
+    expect(
+      screen.getByRole('table', { name: 'Delivery cost by city' }),
+    ).toBeInTheDocument();
+    expect(tableRows()).toEqual([
+      ['თბილისი', '8 ₾'],
+      ['რუსთავი', '5 ₾'],
+      ['Orders from 50 ₾', 'Free'],
+    ]);
+  });
+
+  it('says the delivery time as the cart does', async () => {
+    answer(rules(ENGLISH_CITIES));
+    await mount(DeliveryTerms);
+
+    expect(screen.getByText('An order takes 1–3 business days to arrive.', { exact: false })).toBeInTheDocument();
+  });
+
+  it('names the links as the pages they lead to do', async () => {
+    answer(rules(ENGLISH_CITIES, true));
+    await mount(Faq);
+
+    expect(screen.getByRole('link', { name: '“Returns and warranty”' })).toHaveAttribute('href', '/returns');
+    expect(screen.getByRole('link', { name: '“My orders”' })).toHaveAttribute('href', '/account/orders');
+    expect(screen.getByRole('link', { name: '“Forgot your password?”' })).toHaveAttribute(
+      'href',
+      '/forgot-password',
+    );
+  });
+
+  it('puts the owner facts in the sentences when they are written', async () => {
+    Object.assign(SHOP_FACTS, { returnPickup: 'The courier collects it', warrantyPeriod: 'one year' });
+    answer(rules(ENGLISH_CITIES));
+    await mount(ReturnsWarranty);
+
+    expect(within(returnSteps()).getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.getByText('The product is covered by a warranty for a period of one year.')).toBeInTheDocument();
   });
 });

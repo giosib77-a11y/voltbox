@@ -17,8 +17,6 @@
  *   utils/search.js        Georgian suffixes and unit names the search matches
  *                          a query against - logic, not text to show
  *   colorSwatches.js       colour values as the catalogue spells them (API data)
- *   pages/Info/ bodies     the info pages are not translated in this phase;
- *                          InfoPage.jsx, their frame, is checked
  *   new Error('...')       a message for a developer, not a shopper
  */
 
@@ -38,12 +36,6 @@ const SKIP_FILES = [
   ['services', 'mockApi.js'],
   ['utils', 'search.js'],
   ['constants', 'colorSwatches.js'],
-  ['pages', 'Info', 'Privacy.jsx'],
-  ['pages', 'Info', 'Faq.jsx'],
-  ['pages', 'Info', 'ReturnsWarranty.jsx'],
-  ['pages', 'Info', 'DeliveryTerms.jsx'],
-  ['pages', 'Info', 'DeliveryTable.jsx'],
-  ['pages', 'Info', 'Contact.jsx'],
 ].map((parts) => join(SRC, ...parts));
 
 const GEORGIAN = /[ა-ჿ]/;
@@ -109,12 +101,11 @@ describe('the translation files', () => {
 });
 
 describe('the keys the source asks for', () => {
-  // Literal keys only: `t('cart.title')`, `tKa('...')`, `<Rich k="..." />` and
+  // Literal keys only: `t('cart.title')`, `<Rich k="..." />` and
   // the `labelKey` / `titleKey` / `title: 'home...'` entries of the lists that
   // hold keys. A key built at runtime - `sort.${value}` - is not read here.
   const KEY_PATTERNS = [
     /\bt\(\s*'([\w.]+)'/g,
-    /\btKa\(\s*'([\w.]+)'/g,
     /<Rich\s+k="([\w.]+)"/g,
     /\b(?:labelKey|titleKey|title|text):\s*'([a-z][\w]*\.[\w.]+)'/g,
   ];

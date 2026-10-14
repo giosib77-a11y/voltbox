@@ -9,10 +9,8 @@ import { t } from '../../i18n/index.js';
  * `page` არის `INFO_PAGES`-ის ჩანაწერი: სათაური იგივეა, რაც ფუტერის ბმულს
  * აწერია, canonical კი — ის მისამართი, რომელზეც მარშრუტი დგას.
  *
- * The frame - title, breadcrumb - is in the page's language; the text is not
- * translated yet and is Georgian in both, so it says so with `lang="ka"` for a
- * screen reader to read it in the right voice (and the pages build it with
- * `tKa`, never `t`).
+ * The whole page - frame and text - is in the page's language, so the text
+ * carries no `lang` of its own: it is the document's.
  */
 export default function InfoPage({ page, description, children }) {
   const title = t(page.titleKey);
@@ -23,7 +21,7 @@ export default function InfoPage({ page, description, children }) {
     <div className="container-page max-w-3xl py-8 lg:py-12">
       <Breadcrumbs items={[{ label: title }]} className="mb-4" />
       <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">{title}</h1>
-      <div lang="ka" className="mt-6 space-y-8 text-sm leading-relaxed text-ink-700 sm:text-base">
+      <div className="mt-6 space-y-8 text-sm leading-relaxed text-ink-700 sm:text-base">
         {children}
       </div>
     </div>

@@ -109,13 +109,6 @@ export const i18n = i18next;
 /** Translate a key. Bound, so it can be passed around and imported by name. */
 export const t = (key, options) => i18next.t(key, options);
 
-/**
- * Georgian, whatever the page's language. For the info pages, whose text has
- * not been translated: a sentence on them stays whole in Georgian rather than
- * taking an English fragment - a delivery time, a page title - in the middle.
- */
-export const tKa = (key, options) => i18next.getFixedT(DEFAULT_LANGUAGE)(key, options);
-
 /** The language `t` is answering in - the page's, or a test's override. */
 export function currentLanguage() {
   return i18next.language || DEFAULT_LANGUAGE;

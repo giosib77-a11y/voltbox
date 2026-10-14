@@ -1,7 +1,8 @@
 import { Link } from 'react-router';
 import { Skeleton } from '../../components/common/Skeleton.jsx';
 import { CONTACT, INFO_PAGES } from '../../constants/index.js';
-import { tKa } from '../../i18n/index.js';
+import { t } from '../../i18n/index.js';
+import Rich from '../../i18n/Rich.jsx';
 import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { useEmailEnabled } from '../../hooks/useEmailEnabled.js';
 import InfoPage, { InfoSection, TEXT_LINK_CLASS } from './InfoPage.jsx';
@@ -13,111 +14,123 @@ import { ContactList } from './Contact.jsx';
  *
  * „შეკვეთის სტატუსი“ მხოლოდ რეგისტრირებულს პასუხობს: სტუმარს საიტზე
  * შეკვეთის მოსაძებნი გვერდი არ აქვს — იხ. docs/info-pages-todo.md.
+ *
+ * A link's text is the title of the page or control it leads to (`nav.orders`,
+ * `auth.forgot`), so the FAQ names it as that page does, in either language.
  */
 export default function Faq() {
   const { rules, loading } = useDeliveryRules();
   const emailEnabled = useEmailEnabled();
 
+  const quoted = (text) => t('info.common.quoted', { text });
+
   const items = [
     {
-      question: 'როგორ გავაფორმო შეკვეთა?',
-      answer: (
-        <p>
-          დაამატეთ პროდუქტი კალათაში, გადადით კალათაზე და დააჭირეთ „გაფორმებას“. შეავსეთ მიწოდების
-          მონაცემები და დაადასტურეთ.
-        </p>
-      ),
+      question: t('info.faq.orderQuestion'),
+      answer: <p>{t('info.faq.orderAnswer')}</p>,
     },
     {
-      question: 'რეგისტრაცია სავალდებულოა?',
-      answer: (
-        <p>
-          არა. შეკვეთა შეგიძლიათ რეგისტრაციის გარეშეც. რეგისტრაცია გაძლევთ შეკვეთების ისტორიას და
-          შენახულ მისამართს — შემდეგ ჯერზე მისამართი თავისით ჩაიწერება.
-        </p>
-      ),
+      question: t('info.faq.registrationQuestion'),
+      answer: <p>{t('info.faq.registrationAnswer')}</p>,
     },
     {
-      question: 'რა ღირს მიწოდება?',
+      question: t('info.faq.costQuestion'),
       answer: <DeliveryTable />,
     },
     {
-      question: 'სად ვაწვდით?',
+      question: t('info.faq.whereQuestion'),
       answer: (
         <p>
-          ცხრილში ჩამოთვლილ ქალაქებში
-          {rules && `: ${rules.cities.map((city) => city.name).join(', ')}`}.
+          {t('info.faq.whereAnswer', {
+            cities: rules ? `: ${rules.cities.map((city) => city.name).join(', ')}` : '',
+          })}
         </p>
       ),
     },
     {
-      question: 'როგორ გადავიხადო?',
-      answer: <p>ნაღდი ფულით, პროდუქტის მიღებისას. ონლაინ გადახდა მალე დაემატება.</p>,
+      question: t('info.faq.payQuestion'),
+      answer: <p>{t('info.faq.payAnswer')}</p>,
     },
     {
-      question: 'რამდენ ხანში მომივა?',
-      answer: <p>{tKa('shipping.etaDays')}.</p>,
+      question: t('info.faq.timeQuestion'),
+      answer: <p>{t('info.faq.timeAnswer', { eta: t('shipping.etaDays') })}</p>,
     },
     {
-      question: 'შემიძლია დავაბრუნო?',
+      question: t('info.faq.returnQuestion'),
       answer: (
         <p>
-          დიახ, მიღებიდან 14 დღის განმავლობაში, თუ პროდუქტი გამოუყენებელია და შეფუთვა დაცულია.
-          დეტალები —{' '}
-          <Link to={INFO_PAGES.returns.path} className={TEXT_LINK_CLASS}>
-            „{tKa(INFO_PAGES.returns.titleKey)}“
-          </Link>{' '}
-          გვერდზე.
+          <Rich
+            k="info.faq.returnAnswer"
+            values={{
+              link: (
+                <Link to={INFO_PAGES.returns.path} className={TEXT_LINK_CLASS}>
+                  {quoted(t(INFO_PAGES.returns.titleKey))}
+                </Link>
+              ),
+            }}
+          />
         </p>
       ),
     },
     {
-      question: 'შეკვეთის სტატუსი სად ვნახო?',
+      question: t('info.faq.statusQuestion'),
       answer: (
         <p>
-          რეგისტრირებულს — ანგარიშში,{' '}
-          <Link to="/account/orders" className={TEXT_LINK_CLASS}>
-            „ჩემი შეკვეთები“
-          </Link>
-          .
+          <Rich
+            k="info.faq.statusAnswer"
+            values={{
+              link: (
+                <Link to="/account/orders" className={TEXT_LINK_CLASS}>
+                  {quoted(t('nav.orders'))}
+                </Link>
+              ),
+            }}
+          />
         </p>
       ),
     },
     {
-      question: 'პაროლი დამავიწყდა, რა ვქნა?',
+      question: t('info.faq.passwordQuestion'),
       answer: loading ? (
         <Skeleton className="h-5 w-2/3" />
       ) : emailEnabled ? (
         <p>
-          შესვლის გვერდზე დააჭირეთ{' '}
-          <Link to="/forgot-password" className={TEXT_LINK_CLASS}>
-            „დაგავიწყდათ პაროლი?“
-          </Link>{' '}
-          და მიუთითეთ ანგარიშის ელფოსტა — პაროლის აღდგენის ბმულს გამოგიგზავნით.
+          <Rich
+            k="info.faq.passwordAnswerOn"
+            values={{
+              link: (
+                <Link to="/forgot-password" className={TEXT_LINK_CLASS}>
+                  {quoted(t('auth.forgot'))}
+                </Link>
+              ),
+            }}
+          />
         </p>
       ) : (
         // ForgotPassword-ის სიტყვებით. აღდგენას არ ვპირდებით: ადმინ-პანელს
         // მომხმარებლის პაროლის შეცვლა არ შეუძლია
         <p>
-          პაროლის აღდგენა ამჟამად მიუწვდომელია. დაგვიკავშირდით ტელეფონით:{' '}
-          <a href={CONTACT.phoneHref} className={`whitespace-nowrap ${TEXT_LINK_CLASS}`}>
-            {CONTACT.phone}
-          </a>
-          .
+          <Rich
+            k="info.faq.passwordAnswerOff"
+            values={{
+              phone: (
+                <a href={CONTACT.phoneHref} className={`whitespace-nowrap ${TEXT_LINK_CLASS}`}>
+                  {CONTACT.phone}
+                </a>
+              ),
+            }}
+          />
         </p>
       ),
     },
     {
-      question: 'როგორ დაგიკავშირდეთ?',
+      question: t('info.faq.contactQuestion'),
       answer: <ContactList />,
     },
   ];
 
   return (
-    <InfoPage
-      page={INFO_PAGES.faq}
-      description="პასუხები ხშირ კითხვებზე: შეკვეთა, მიწოდება, გადახდა, დაბრუნება და ანგარიში."
-    >
+    <InfoPage page={INFO_PAGES.faq} description={t('info.faq.description')}>
       {items.map((item) => (
         <InfoSection key={item.question} title={item.question}>
           {item.answer}

@@ -134,7 +134,28 @@ re-checked in the code before it was written here. Order = suggested order.
   unreachable from the agent's shell (1009 errors, all DB connect). ruff, format and mypy are green;
   the change touches only `Footer.jsx` and its test.
 
+- [x] **T16 · should-fix · The info pages (/delivery, /returns, /privacy, /faq) have an English title and a Georgian body.**
+  Their text was written into the components and `InfoPage.jsx` wrapped it in `lang="ka"`;
+  `i18n.test.js` skipped the six files. There is no separate "terms" page (the owner decides that later).
+  Fix: the text moved to `info.*` in `ka.json` (word for word) with the English in `en.json`; pages use
+  `t()` / `<Rich>`; `lang="ka"` and `tKa` are gone; the six files are no longer skipped by the
+  "no Georgian in components" test. Delivery wording (where, cost note, time, payment, receipt, table)
+  is all under `info.delivery`, the time is `shipping.etaDays`: a courier change is edited there only.
+  Privacy and Returns English follows the Georgian sentence for sentence.
+  Check: the old and the new Georgian HTML of the four pages, 16 variants (owner facts set/unset x email
+  on/off), compared byte for byte: identical. Frontend lint, vitest (580), both builds and backend
+  ruff, format, mypy, pytest (1009) green. New English tests: no Georgian in any page (text, aria,
+  caption, meta description), the table, links, owner facts.
+  Not translated on purpose: city names (`GET /delivery`, see Backlog) and the `SHOP_FACTS` values
+  (`returnPickup`, `warrantyPeriod`, `legalEntity`), which the owner writes in one language: on
+  `/en` they would appear as written.
+
 ## Backlog (needs user decision)
+
+- **City names in English** (owner, 2026-10-14: after sales start). `GET /delivery` and the checkout
+  city list send Georgian names, so `/en` shows `თბილისი` in the delivery table and the city field.
+  Needs the backend to send names by `lang` (like the catalogue). `SHOP_FACTS` values have the same
+  limit - one language each.
 
 - `restoreItem` (cart undo) fails silently if the cart filled up meanwhile (low).
 - Backend tests for 51 lines / qty 100 could sit at 21 / 11 (low).

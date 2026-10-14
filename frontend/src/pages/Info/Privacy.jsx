@@ -1,5 +1,7 @@
 import { INFO_PAGES, SHOP_FACTS } from '../../constants/index.js';
 import { useEmailEnabled } from '../../hooks/useEmailEnabled.js';
+import { t } from '../../i18n/index.js';
+import Rich from '../../i18n/Rich.jsx';
 import InfoPage, { InfoSection } from './InfoPage.jsx';
 import { ContactInline } from './Contact.jsx';
 
@@ -10,6 +12,8 @@ import { ContactInline } from './Contact.jsx';
  * რა ინახება ბრაუზერში (STORAGE_KEYS, services/httpApi.js-ის
  * GUEST_ORDERS_KEY), რა მიდის Telegram-ში (backend/app/services/telegram.py),
  * რას ითხოვს რეგისტრაცია. ერთ მხარეს ცვლილება მეორესაც მოითხოვს.
+ * The test reads the Georgian text; the English is the same sentences, one
+ * for one (`info.privacy` in en.json), so a change here is made in both.
  *
  * Resend სიაში მხოლოდ მაშინ ჩანს, როცა მაღაზია წერილს მართლა აგზავნის
  * (`useEmailEnabled`) — მანამდე მას მყიდველის არცერთი მონაცემი არ ეგზავნება.
@@ -19,83 +23,63 @@ export default function Privacy() {
   const { legalEntity } = SHOP_FACTS;
 
   return (
-    <InfoPage
-      page={INFO_PAGES.privacy}
-      description="რა პერსონალურ მონაცემებს ვაგროვებთ, რისთვის ვიყენებთ, ვის ვუზიარებთ და რა უფლებები გაქვთ."
-    >
+    <InfoPage page={INFO_PAGES.privacy} description={t('info.privacy.description')}>
       {legalEntity && (
-        <InfoSection title="ვინ ვართ">
+        <InfoSection title={t('info.privacy.whoTitle')}>
           <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-[auto_1fr]">
-            <dt className="font-semibold text-ink-900">დასახელება</dt>
+            <dt className="font-semibold text-ink-900">{t('info.privacy.whoName')}</dt>
             <dd>{legalEntity.name}</dd>
-            <dt className="font-semibold text-ink-900">საიდენტიფიკაციო კოდი</dt>
+            <dt className="font-semibold text-ink-900">{t('info.privacy.whoIdCode')}</dt>
             <dd>{legalEntity.idCode}</dd>
-            <dt className="font-semibold text-ink-900">იურიდიული მისამართი</dt>
+            <dt className="font-semibold text-ink-900">{t('info.privacy.whoAddress')}</dt>
             <dd>{legalEntity.address}</dd>
           </dl>
         </InfoSection>
       )}
 
-      <InfoSection title="რა მონაცემებს ვაგროვებთ">
+      <InfoSection title={t('info.privacy.collectTitle')}>
         <p>
-          <strong className="font-semibold text-ink-900">შეკვეთისას:</strong> სახელი და გვარი,
-          ტელეფონის ნომერი, მიწოდების ქალაქი და მისამართი, ელფოსტა (არასავალდებულო).
+          <strong className="font-semibold text-ink-900">{t('info.privacy.collectOrderLabel')}</strong>{' '}
+          {t('info.privacy.collectOrder')}
         </p>
         <p>
-          <strong className="font-semibold text-ink-900">რეგისტრაციისას:</strong> სახელი და
-          გვარი, ელფოსტა და პაროლი, შენახული მისამართები, შეკვეთების ისტორია. პაროლს ვინახავთ
-          მხოლოდ დაშიფრული სახით — ჩვენ ის არ ვიცით და ვერ ვნახავთ.
+          <strong className="font-semibold text-ink-900">
+            {t('info.privacy.collectAccountLabel')}
+          </strong>{' '}
+          {t('info.privacy.collectAccount')}
         </p>
         <p>
-          <strong className="font-semibold text-ink-900">ტექნიკური მონაცემები:</strong> IP მისამართი
-          — უსაფრთხოებისთვის, მაგ. შესვლის მცდელობების შეზღუდვისთვის, მოკლე ვადით.
-        </p>
-      </InfoSection>
-
-      <InfoSection title="რისთვის ვიყენებთ">
-        <p>
-          შეკვეთის შესრულება და მიწოდება, თქვენთან დაკავშირება შეკვეთის შესახებ, ანგარიშის მართვა
-          და საიტის უსაფრთხოება. თქვენს მონაცემებს არ ვყიდით და რეკლამისთვის არ ვიყენებთ.
+          <strong className="font-semibold text-ink-900">{t('info.privacy.collectTechLabel')}</strong>{' '}
+          {t('info.privacy.collectTech')}
         </p>
       </InfoSection>
 
-      <InfoSection title="ვის ვუზიარებთ">
-        <p>მხოლოდ იმას, ვინც შეკვეთის შესასრულებლად აუცილებელია:</p>
+      <InfoSection title={t('info.privacy.useTitle')}>
+        <p>{t('info.privacy.useText')}</p>
+      </InfoSection>
+
+      <InfoSection title={t('info.privacy.shareTitle')}>
+        <p>{t('info.privacy.shareIntro')}</p>
         <ul className="list-disc space-y-1.5 pl-5">
-          <li>საკურიერო სერვისი — სახელი, ტელეფონი, მისამართი — მიწოდებისთვის</li>
-          <li>Render — საიტის ჰოსტინგი</li>
-          <li>Supabase — მონაცემთა ბაზა, ევროკავშირში</li>
-          {emailEnabled && <li>Resend — ელფოსტა, შეკვეთის დადასტურებისთვის</li>}
+          <li>{t('info.privacy.shareCourier')}</li>
+          <li>{t('info.privacy.shareRender')}</li>
+          <li>{t('info.privacy.shareSupabase')}</li>
+          {emailEnabled && <li>{t('info.privacy.shareResend')}</li>}
         </ul>
-        <p>
-          შეკვეთის შესახებ შიდა შეტყობინებაში, რომელსაც მაღაზია იღებს, თქვენი პერსონალური
-          მონაცემები არ იგზავნება — მხოლოდ შეკვეთის ნომერი, პროდუქტების ღირებულება, მიწოდების
-          საფასური, ჯამი, ნივთების რაოდენობა და ბმული შეკვეთაზე მაღაზიის მართვის პანელში.
-        </p>
+        <p>{t('info.privacy.shareInternal')}</p>
       </InfoSection>
 
-      <InfoSection title="ბრაუზერში შენახული მონაცემები">
-        <p>
-          საიტი ბრაუზერში ინახავს მხოლოდ იმას, რაც მუშაობისთვის საჭიროა: კალათის შიგთავსს, თემის
-          არჩევანს, შესვლის სესიას და ბოლო ძებნებს. ანგარიშის გარეშე გაფორმებული შეკვეთის შემდეგ —
-          შეკვეთის ნომერს და შემთხვევით კოდს, რომ ამავე ბრაუზერიდან შეკვეთის გვერდი გაიხსნას.
-          სარეკლამო ან თვალთვალის cookie-ებს არ ვიყენებთ.
-        </p>
+      <InfoSection title={t('info.privacy.browserTitle')}>
+        <p>{t('info.privacy.browserText')}</p>
       </InfoSection>
 
-      <InfoSection title="რამდენ ხანს ვინახავთ">
-        <p>
-          შეკვეთის მონაცემებს — კანონით დადგენილი ვადით, საგადასახადო აღრიცხვისთვის. ანგარიშის
-          მონაცემებს — ანგარიშის წაშლამდე.
-        </p>
+      <InfoSection title={t('info.privacy.retentionTitle')}>
+        <p>{t('info.privacy.retentionText')}</p>
       </InfoSection>
 
-      <InfoSection title="თქვენი უფლებები">
+      <InfoSection title={t('info.privacy.rightsTitle')}>
         <p>
-          საქართველოს კანონის „პერსონალურ მონაცემთა დაცვის შესახებ“ შესაბამისად, გაქვთ უფლება
-          გაეცნოთ თქვენს მონაცემებს, მოითხოვოთ მათი შესწორება ან წაშლა, და გაიწვიოთ თანხმობა.
-          მოთხოვნისთვის დაგვიკავშირდით: <ContactInline />. საჩივრის შემთხვევაში შეგიძლიათ
-          მიმართოთ პერსონალურ მონაცემთა დაცვის სამსახურს.
+          <Rich k="info.privacy.rightsText" values={{ contact: <ContactInline /> }} />
         </p>
       </InfoSection>
     </InfoPage>

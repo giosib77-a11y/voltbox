@@ -1,6 +1,6 @@
 import ErrorState from '../../components/common/ErrorState.jsx';
 import { Skeleton } from '../../components/common/Skeleton.jsx';
-import { tKa } from '../../i18n/index.js';
+import { t } from '../../i18n/index.js';
 import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { formatPrice } from '../../utils/format.js';
 
@@ -17,7 +17,7 @@ export default function DeliveryTable() {
   if (error) {
     return (
       <ErrorState
-        description="მიწოდების ფასები ვერ ჩაიტვირთა."
+        description={t('info.delivery.tableFailed')}
         onRetry={reload}
         className="py-8"
       />
@@ -29,14 +29,14 @@ export default function DeliveryTable() {
   return (
     <div className="overflow-hidden rounded-card border border-ink-200 bg-surface">
       <table className="w-full text-left text-sm">
-        <caption className="sr-only">მიწოდების ღირებულება ქალაქების მიხედვით</caption>
+        <caption className="sr-only">{t('info.delivery.tableCaption')}</caption>
         <thead className="bg-ink-100 text-ink-700">
           <tr>
             <th scope="col" className="px-4 py-2.5 font-semibold">
-              ქალაქი
+              {t('info.delivery.tableCity')}
             </th>
             <th scope="col" className="px-4 py-2.5 text-right font-semibold">
-              მიწოდება
+              {t('info.delivery.tableFee')}
             </th>
           </tr>
         </thead>
@@ -53,9 +53,9 @@ export default function DeliveryTable() {
           ))}
           <tr className="bg-primary-50">
             <th scope="row" className="px-4 py-3 font-medium text-primary-800">
-              შეკვეთა {formatPrice(rules.freeFrom)}-დან
+              {t('info.delivery.tableFreeFrom', { price: formatPrice(rules.freeFrom) })}
             </th>
-            <td className="px-4 py-3 text-right font-semibold text-primary-800">{tKa('common.free')}</td>
+            <td className="px-4 py-3 text-right font-semibold text-primary-800">{t('common.free')}</td>
           </tr>
         </tbody>
       </table>
