@@ -147,7 +147,9 @@ Before going live on `voltbox.ge` (owner's list):
 - Supabase Dashboard: remove `public` from the Data API exposed schemas (D2).
 - Plan 0.5c-512mb and the refresh-token prune cron back (docs/deployment.md §2).
 
-Deploy plan (owner runs; nothing here was run against live — no alembic, no SQL, no push, no Render call).
+Deploy plan — **DONE 2026-10-10**: the owner deployed `d25910e` (voltbox-api and voltbox-storefront) and
+ran `0015` on live by hand (head = 0015; `carts` and `alembic_version` have RLS). Kept below as the record.
+Nothing in it was run from here — no alembic, no SQL, no push, no Render call.
 Prepared 2026-10-10 for Stage 1 (code at `7a867fb`).
 
 **1. Migrations on the live Supabase database**
@@ -251,16 +253,19 @@ finishes first; the short window is accepted because there are no real shoppers 
 **5. After the deploy (by hand)**
 1. `GET <api>/api/v1/health/live` and `/health` → 200.
 2. Sign in on the storefront; the login response sets a refresh cookie (DevTools → Application → Cookies).
-   On onrender.com the session still ends after 30 minutes (Accepted Risk) — expected.
+   On onrender.com the session still ends after 30 minutes (Accepted Risk) — expected.  ✅ login (owner, 2026-10-10); cookie not reported
 3. Guest order with one product × 10 → created; × 11 → refused; a 21st different product in the cart →
-   the "at most 20 different products" message. The new order shows a started status timeline in the admin (T10).
+   the "at most 20 different products" message. The new order shows a started status timeline in the admin (T10).  ✅ cart limit 10 with the Georgian message, and an order placed (owner); 11/21 refusal at the API and the timeline not reported
 4. Signed-in checkout, repeated with the same Idempotency-Key (double click / retry) → no error page.
 5. Profile: change email without the current password → refused; with it → works.
 6. Admin: upload a photo over 5 MB → "photo is over 5 MB" (T13); a normal photo → saved.
-7. Admin: rename a brand → its products are found by the new name in search (T9).
+7. Admin: rename a brand → its products are found by the new name in search (T9).  ✅ (owner)
 8. Rate limit: the 6th order within a minute from one IP → 429 (use a test product and delete the test
    orders by hand in the admin afterwards).
 9. Supabase Dashboard → Advisors: no new "RLS disabled" warning.
+   ✅ for the two tables (owner: RLS = true on `carts` and `alembic_version`); the advisor page itself not reported.
+Not yet reported (⬜ do when convenient): 1 health, 4 signed-in duplicate checkout, 5 email change, 6 photo over
+5 MB, 8 rate limit. **D2 (section 4) is still open** — the Data API step is for before the public launch.
 
 Nits:
 - Tailwind 4-ზე გადასვლისას postcss-selector-parser და dev-ჯაჭვის high-ები თავისით გასწორდება.
@@ -321,7 +326,10 @@ Unverified (check before acting):
 
 ## Last Session
 - Date: 2026-10-10
+- Stage 1 closed and **deployed** (`d25910e`, owner). Dependabot: Mako #13/#14 closed by the fix;
+  #12/#16/#17 dismissed (build-time only); the pip group, react and react-dom PRs closed by the owner; the npm
+  minor/patch and the Docker digest are in `f09dab4` / `bd9cf63` (their PRs are superseded).
 - Done: T13 (oversized photo says IMAGE_TOO_LARGE), T14 (verify_restore never reads `.env`; `--against` required, localhost only — owner approved).
 - Verification: ruff, format, mypy, pytest 1009 — green, run by orchestrator. Frontend untouched since T12 (vitest 566, builds green).
 - Known issues / blockers: executor ran the OLD verify_restore.py from backend/ to prove the new tests fail, so `backend/.env` was loaded into that one test process (nothing printed or sent; one failed localhost:55433 connect). Owner told.
-- Next: Stage 1 has no open critical/should-fix; stage is Done pending owner.
+- Next: no stage is open. The owner picks the next one (Backlog nits, D2 before launch, `voltbox.ge` list).
