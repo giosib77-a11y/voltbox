@@ -1,7 +1,7 @@
 # Progress
 
 ## Current Stage
-Stage 1 — Audit fixes (closed by the owner 2026-10-10; T0–T14 done)
+Stage 1 — Audit fixes (closed by the owner 2026-10-10; T0–T16 done; T17 open from the 2026-10-14 finish-check)
 
 Source: full audit 2026-10-10 (standard-reviewer, three slices: auth/authz/privacy;
 money/stock/data/Supabase; frontend/config/CI/Docker). Every task below was
@@ -149,6 +149,26 @@ re-checked in the code before it was written here. Order = suggested order.
   Not translated on purpose: city names (`GET /delivery`, see Backlog) and the `SHOP_FACTS` values
   (`returnPickup`, `warrantyPeriod`, `legalEntity`), which the owner writes in one language: on
   `/en` they would appear as written.
+
+- [ ] **T17 · should-fix · `scripts/verify_restore.py` still loads `backend/.env`, and its localhost guard has two gaps.**
+  Found by the 2026-10-14 finish-check (scope `cff0b34..HEAD`); T14's claim "never reads backend/.env" is not true.
+  `verify_restore.py:38` imports `app.db.ssl` → `app/core/config.py:331` `settings = get_settings()`, which reads
+  `.env` from the cwd. `docs/backup-restore.md:143` runs the script from `backend/`, so the live `DATABASE_URL` and
+  every key are loaded into the process (no connection to live: `--against` is local, and `build_connect_args` is
+  used only for a `supabase` URL). With `VOLTBOX_NO_DOTENV=1` the import fails instead (`jwt_secret` required), so
+  the documented command works only by loading the live `.env`. `test_the_module_does_not_read_a_dotenv` cannot see
+  it: pytest already sets the flag and has imported `app.core.config`.
+  Reproduced from a scratch cwd with a sentinel `.env` (never `backend/.env`): without the flag `settings.db_ssl_mode`
+  came from the sentinel.
+  Same guarantee, same file: (a) the positional `restored` URL is not checked at all; (b) `is_local` uses `urlsplit`,
+  but SQLAlchemy's asyncpg dialect passes `url.query` to connect, so
+  `postgresql://u:p@localhost:5432/db?host=db.x.supabase.co` passes `is_local` and connects to `db.x.supabase.co`
+  (checked with `create_connect_args`, no network).
+  Done when: the script no longer imports `app.*` settings (drop `app.db.ssl` and the `"supabase" in url` branch -
+  both URLs are local, no TLS); a subprocess test from a cwd holding a sentinel `.env`, with `VOLTBOX_NO_DOTENV`
+  and `JWT_SECRET` unset, shows the script runs to its argument check without loading it; both URLs are checked
+  with `make_url`, host in `LOCAL_HOSTS` and no `host`/`hostaddr` in the query (tests for `restored` remote and for
+  `?host=`); the docstring and `docs/backup-restore.md` say what holds.
 
 ## Backlog (needs user decision)
 
@@ -344,6 +364,8 @@ Nits:
 - README gates (`mypy app scripts`, frontend `npm run build` only) differ from CI.
 - Auth 5/min decorators have no route-level test.
 - `docker-compose.yml` publishes Postgres/Redis on all interfaces.
+- `frontend/README.md:453-455` still says the four info pages are Georgian in both languages and built with
+  `lang="ka"` / `tKa`; T16 removed both. Only city names and `SHOP_FACTS` values stay Georgian (2026-10-14).
 
 Unverified (check before acting):
 - `FORWARDED_ALLOW_IPS` value on Render — if wrong, all clients share one bucket.
@@ -352,13 +374,18 @@ Unverified (check before acting):
 - Supabase session-pooler size vs the 30-connection budget.
 - Render edge body-size limit; multipart image body parsed before `require_admin`.
 - Two concurrent first-image uploads → 500 + orphaned file.
+- A 6–8 MB photo refused early by `body_limit._refuse` (413 + `connection: close` while the browser is still
+  sending) may reach the panel as a connection reset, i.e. `apiErrors.network`, not "photo is over 5 MB". From T8;
+  not reproducible locally. Deploy checklist item 6 (photo over 5 MB on live) answers it.
 
 ## Run State
-- Finish-check this stage: done
+- Finish-check this stage: done (2026-10-10); second run 2026-10-14 over `cff0b34..HEAD` (T13–T16, deps) → T17
 - Fix rounds this stage: 1/2
 - Failed attempts: —
 
 ## Last Session
+- 2026-10-14 finish-check over `cff0b34..HEAD`: ruff, format, mypy, pytest 1009; frontend lint, vitest 580, both
+  builds (http `dist` has no `footer.demo` call, mock has it) - all green. Not done: T17 (should-fix). Next: T17.
 - Date: 2026-10-10
 - Stage 1 closed and **deployed** (`d25910e`, owner). Dependabot: Mako #13/#14 closed by the fix;
   #12/#16/#17 dismissed (build-time only); the pip group, react and react-dom PRs closed by the owner; the npm
