@@ -1,7 +1,7 @@
 # Progress
 
 ## Current Stage
-Stage 1 — Audit fixes (closed by the owner 2026-10-10; T0–T16 done; T17 open from the 2026-10-14 finish-check)
+Stage 1 — Audit fixes (closed by the owner 2026-10-10; T0–T17 done)
 
 Source: full audit 2026-10-10 (standard-reviewer, three slices: auth/authz/privacy;
 money/stock/data/Supabase; frontend/config/CI/Docker). Every task below was
@@ -150,7 +150,7 @@ re-checked in the code before it was written here. Order = suggested order.
   (`returnPickup`, `warrantyPeriod`, `legalEntity`), which the owner writes in one language: on
   `/en` they would appear as written.
 
-- [ ] **T17 · should-fix · `scripts/verify_restore.py` still loads `backend/.env`, and its localhost guard has two gaps.**
+- [x] **T17 · should-fix · `scripts/verify_restore.py` still loads `backend/.env`, and its localhost guard has two gaps.**
   Found by the 2026-10-14 finish-check (scope `cff0b34..HEAD`); T14's claim "never reads backend/.env" is not true.
   `verify_restore.py:38` imports `app.db.ssl` → `app/core/config.py:331` `settings = get_settings()`, which reads
   `.env` from the cwd. `docs/backup-restore.md:143` runs the script from `backend/`, so the live `DATABASE_URL` and
@@ -169,6 +169,10 @@ re-checked in the code before it was written here. Order = suggested order.
   and `JWT_SECRET` unset, shows the script runs to its argument check without loading it; both URLs are checked
   with `make_url`, host in `LOCAL_HOSTS` and no `host`/`hostaddr` in the query (tests for `restored` remote and for
   `?host=`); the docstring and `docs/backup-restore.md` say what holds.
+  **Done 2026-10-14:** the script imports nothing from `app`; `is_local` uses `make_url` and rejects `host`/`hostaddr`
+  in the query; both URLs are checked. Checked by hand from a scratch cwd with a sentinel `.env`, flag and
+  `JWT_SECRET` unset: remote `restored` and `?host=` on `--against` both exit 2. Not run: the new tests against the
+  old code (reasoned only); the subprocess test only on Windows, not on Linux CI.
 
 ## Backlog (needs user decision)
 
@@ -385,7 +389,7 @@ Unverified (check before acting):
 
 ## Last Session
 - 2026-10-14 finish-check over `cff0b34..HEAD`: ruff, format, mypy, pytest 1009; frontend lint, vitest 580, both
-  builds (http `dist` has no `footer.demo` call, mock has it) - all green. Not done: T17 (should-fix). Next: T17.
+  builds (http `dist` has no `footer.demo` call, mock has it) - all green. T17 (should-fix) found and fixed the same day: pytest 1017, ruff, format, mypy green. No stage is open; the finish-check can be re-run.
 - Date: 2026-10-10
 - Stage 1 closed and **deployed** (`d25910e`, owner). Dependabot: Mako #13/#14 closed by the fix;
   #12/#16/#17 dismissed (build-time only); the pip group, react and react-dom PRs closed by the owner; the npm

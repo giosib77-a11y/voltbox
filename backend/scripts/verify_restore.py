@@ -7,12 +7,15 @@ between two databases.
 
     python scripts/verify_restore.py <restored-url> --against <source-url>
 
-`--against` is required and must point at localhost (localhost, 127.0.0.1 or
-::1). The script never reads backend/.env and never learns the live URL, so it
-cannot tell the live database from any other remote one; instead it refuses every
-non-local source. That keeps it from ever touching the live database. To check a
-restore of a production dump, restore it locally and compare it with a local
-database loaded from the same dump.
+`--against` is required, and both URLs (the restored one and `--against`) must
+point at localhost (localhost, 127.0.0.1 or ::1) and must not carry a `host` or
+`hostaddr` query parameter: asyncpg takes those from the query and they would
+override the host in the URL. The script imports nothing from `app`, so it never
+loads settings or backend/.env, and it never learns the live URL; instead it
+refuses every non-local database. That keeps it from ever touching the live
+database. Both databases are local, so no TLS is configured. To check a restore
+of a production dump, restore it locally and compare it with a local database
+loaded from the same dump.
 
 Written after a drill on 2026-09-13 where everything matched except three
 CHECK constraints, which turned out to be the same constraints printed
@@ -26,16 +29,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import re
-import sys
-from pathlib import Path
-from urllib.parse import urlsplit
 
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 from sqlalchemy.ext.asyncio import create_async_engine
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from app.db.ssl import build_connect_args
 
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
@@ -90,18 +88,20 @@ def normalise(value: str) -> str:
 
 
 def is_local(url: str) -> bool:
-    """True only for a URL whose host is the machine running the script."""
+    """True only for a URL that connects to the machine running the script.
+
+    The host must be local and the query must not name one: SQLAlchemy hands
+    `url.query` to asyncpg, where `?host=` wins over the host in the URL.
+    """
     try:
-        return urlsplit(url).hostname in LOCAL_HOSTS
-    except ValueError:
+        parsed = make_url(url)
+    except ArgumentError:
         return False
+    return parsed.host in LOCAL_HOSTS and not {"host", "hostaddr"} & set(parsed.query)
 
 
 async def read(url: str) -> dict[str, list[str]]:
-    engine = create_async_engine(
-        url.replace("postgresql://", "postgresql+asyncpg://"),
-        connect_args=build_connect_args() if "supabase" in url else {},
-    )
+    engine = create_async_engine(url.replace("postgresql://", "postgresql+asyncpg://"))
     out: dict[str, list[str]] = {}
     async with engine.connect() as conn:
         for name, sql in QUERIES.items():
@@ -127,12 +127,15 @@ async def main() -> int:
     )
     args = parser.parse_args()
 
-    source = args.against
-    if not is_local(source):
-        print("refusing --against: the host is not localhost, 127.0.0.1 or ::1")
-        return 2
+    for flag, url in (("restored", args.restored), ("--against", args.against)):
+        if not is_local(url):
+            print(
+                f"refusing {flag}: the host must be localhost, 127.0.0.1 or ::1, "
+                "with no host/hostaddr in the query"
+            )
+            return 2
 
-    live, restored = await read(source), await read(args.restored)
+    live, restored = await read(args.against), await read(args.restored)
 
     real, expected = 0, 0
     for name in [*QUERIES, "rows"]:
