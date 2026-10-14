@@ -3,11 +3,12 @@
  * `parentId`; a subcategory is reached from its parent, not listed beside it.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 
 import Footer from './Footer.jsx';
+import { t } from '../../i18n/index.js';
 
 const CATEGORIES = [
   { id: 'c-phones', slug: 'phones', name: 'ტელეფონები', parentId: null },
@@ -28,5 +29,30 @@ describe('Footer', () => {
       .getAllByRole('link')
       .map((link) => link.textContent);
     expect(names).toEqual(['ტელეფონები', 'კაბელები']);
+  });
+
+  describe('demo notice', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    const renderFooter = () =>
+      render(
+        <MemoryRouter>
+          <Footer categories={CATEGORIES} />
+        </MemoryRouter>
+      );
+
+    it('is shown in mock mode', () => {
+      vi.stubEnv('VITE_API_MODE', 'mock');
+      renderFooter();
+      expect(screen.getByText(t('footer.demo'))).toBeInTheDocument();
+    });
+
+    it('is absent in http mode', () => {
+      vi.stubEnv('VITE_API_MODE', 'http');
+      renderFooter();
+      expect(screen.queryByText(t('footer.demo'))).not.toBeInTheDocument();
+    });
   });
 });

@@ -96,7 +96,8 @@ export default function Footer({ categories = [] }) {
           <p>
             © {year} {SITE_NAME}. {t('footer.rights')}
           </p>
-          <p>{t('footer.demo')}</p>
+          {/* Substituted at build time, so an http build ships neither the branch nor the text. */}
+          {import.meta.env?.VITE_API_MODE !== 'http' && <p>{t('footer.demo')}</p>}
         </div>
       </div>
     </footer>

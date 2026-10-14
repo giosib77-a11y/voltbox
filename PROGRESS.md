@@ -121,6 +121,16 @@ re-checked in the code before it was written here. Order = suggested order.
   Fix: honour `VOLTBOX_NO_DOTENV=1` (no read, `LIVE_URL = None`) and keep the live-URL refusal
   working another way (e.g. refuse any `--against` host that is not localhost); a test for both.
 
+- [x] **T15 · should-fix · The live footer says "demo project — data from a mock source".**
+  `Footer.jsx` rendered `t('footer.demo')` in every mode, so the http build on Render (which
+  `frontend/render.yaml` pins to `VITE_API_MODE=http`) told shoppers the data was mock.
+  Fix: the notice renders only when `VITE_API_MODE !== 'http'` (same check as `routes.jsx`);
+  the text stays in `ka.json` and `en.json` for mock. Tests: shown in mock, absent in http.
+  Check: the http `dist` has no `footer.demo` call (the sentence itself stays in the bundled
+  dictionary, so grepping the text proves nothing); the mock `dist` has it. Live shows the change
+  only after the owner redeploys the storefront. Not verified: that the Render dashboard has no
+  hand-set `VITE_API_MODE` overriding the Blueprint.
+
 ## Backlog (needs user decision)
 
 - `restoreItem` (cart undo) fails silently if the cart filled up meanwhile (low).
