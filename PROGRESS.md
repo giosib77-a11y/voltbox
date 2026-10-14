@@ -128,8 +128,11 @@ re-checked in the code before it was written here. Order = suggested order.
   the text stays in `ka.json` and `en.json` for mock. Tests: shown in mock, absent in http.
   Check: the http `dist` has no `footer.demo` call (the sentence itself stays in the bundled
   dictionary, so grepping the text proves nothing); the mock `dist` has it. Live shows the change
-  only after the owner redeploys the storefront. Not verified: that the Render dashboard has no
-  hand-set `VITE_API_MODE` overriding the Blueprint.
+  only after the owner redeploys the storefront.
+  **Done 2026-10-14:** `3268c71` is live and the owner checked in the browser that the footer notice is
+  gone (so the Render build is http). Backend `pytest -q` was not run for this change: Docker was
+  unreachable from the agent's shell (1009 errors, all DB connect). ruff, format and mypy are green;
+  the change touches only `Footer.jsx` and its test.
 
 ## Backlog (needs user decision)
 
