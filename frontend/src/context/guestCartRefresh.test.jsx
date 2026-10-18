@@ -45,6 +45,46 @@ describe('ADD on a line already in the cart', () => {
   });
 });
 
+describe('ADD with a product as the API sends it', () => {
+  // Over HTTP money and stock arrive as strings; the snapshot must hold numbers
+  // or it never equals the number fromApi makes of a quote's price.
+  const apiProduct = { ...product(0), price: '999.00', oldPrice: '1099.00', stock: '5' };
+
+  it('stores numbers for a new line and for an existing one', () => {
+    const add = { type: CART_ACTIONS.ADD, payload: { product: apiProduct, qty: 1 } };
+    const fresh = cartReducer({ items: [], hydrated: true }, add);
+    expect(fresh.items[0].snapshot).toMatchObject({ price: 999, oldPrice: 1099, stock: 5 });
+
+    const again = cartReducer({ items: [line(1, 100)], hydrated: true }, add);
+    expect(again.items[0].snapshot).toMatchObject({ price: 999, oldPrice: 1099, stock: 5 });
+  });
+
+  it('is not a price change when the quote returns the same price', () => {
+    const added = cartReducer(
+      { items: [], hydrated: true },
+      { type: CART_ACTIONS.ADD, payload: { product: apiProduct, qty: 1 } },
+    );
+    const quoteLines = [
+      {
+        productId: 'p1',
+        qty: 1,
+        snapshot: { name: 'Phone', slug: 'phone', image: '', price: '999.00', oldPrice: '1099.00', stock: '5' },
+      },
+    ];
+    expect(reconcileWithQuote(added.items, quoteLines).change).toBeNull();
+    const refreshed = cartReducer(added, { type: CART_ACTIONS.REFRESH, payload: quoteLines });
+    expect(refreshed.items[0].snapshot.price).toBe(999);
+  });
+
+  it('keeps a missing old price null', () => {
+    const next = cartReducer(
+      { items: [], hydrated: true },
+      { type: CART_ACTIONS.ADD, payload: { product: { ...apiProduct, oldPrice: null } } },
+    );
+    expect(next.items[0].snapshot.oldPrice).toBeNull();
+  });
+});
+
 describe('reconcileWithQuote', () => {
   const quote = (qty, price, stock) => [
     {

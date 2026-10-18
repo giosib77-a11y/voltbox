@@ -127,15 +127,22 @@ function sanitize(items) {
     .slice(0, MAX_CART_LINES);
 }
 
-/** A catalogue product -> the snapshot a cart line keeps of it. */
+/**
+ * A catalogue product -> the snapshot a cart line keeps of it.
+ *
+ * Numbers whatever the source, like `sanitize` and `fromApi`: over HTTP a
+ * product's price is a string ("999.00"), and a string snapshot would never
+ * equal the number a quote's price becomes, so every refresh would report a
+ * price change.
+ */
 function snapshotOf(product) {
   return {
     name: product.name,
     slug: product.slug,
     image: product.images?.[0] ?? '',
-    price: product.price,
-    oldPrice: product.oldPrice ?? null,
-    stock: product.stock,
+    price: Number(product.price) || 0,
+    oldPrice: product.oldPrice ? Number(product.oldPrice) : null,
+    stock: Number(product.stock) || 0,
   };
 }
 
@@ -425,8 +432,10 @@ export function CartProvider({ children }) {
    *
    * A failed request changes nothing and is not an error to the caller: the
    * server prices the order anyway, so checkout works with the basket as it is.
-   * Lines edited while the request was out are reconciled, not overwritten,
-   * because the reducer works on the state it finds when the answer lands.
+   * The answer is reconciled against the lines as they are when it lands, so a
+   * quantity changed or a line removed while the request was out is kept as
+   * edited. A line ADDED meanwhile (e.g. from another tab) is not in the answer
+   * and is dropped as removed; that is a known open gap (A-027).
    *
    * → what changed ('removed' | 'reduced' | 'prices'), or null.
    */

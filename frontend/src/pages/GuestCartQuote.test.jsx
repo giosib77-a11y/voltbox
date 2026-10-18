@@ -9,7 +9,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { useEffect, useRef } from 'react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 
 vi.mock('virtual:api-impl', () => import('../services/httpApi.js'));
@@ -21,7 +22,7 @@ vi.mock('../hooks/useAuth.js', () => ({
 
 import Checkout from './Checkout.jsx';
 import Cart from './Cart.jsx';
-import { CartProvider } from '../context/CartContext.jsx';
+import { CartProvider, useCartContext } from '../context/CartContext.jsx';
 import { ToastProvider } from '../context/ToastContext.jsx';
 import ToastViewport from '../components/common/Toast.jsx';
 import { forgetDeliveryRules } from '../hooks/useDeliveryRules.js';
@@ -214,6 +215,53 @@ describe('a guest opening the cart', () => {
 
     expect(await screen.findByText(MSG_PRICES)).toBeInTheDocument();
     expect(screen.queryByText('999 ₾')).not.toBeInTheDocument();
+  });
+});
+
+describe('a guest who added a product through the page', () => {
+  // The product as GET /products/:id sends it: money and stock as strings.
+  const apiProduct = {
+    id: 'p1',
+    name: 'Phone',
+    slug: 'phone',
+    images: [],
+    price: '999.00',
+    oldPrice: null,
+    stock: 10,
+  };
+
+  function AddOnce() {
+    const { addItem, hydrated } = useCartContext();
+    const done = useRef(false);
+    useEffect(() => {
+      if (!hydrated || done.current) return;
+      done.current = true;
+      addItem(apiProduct);
+    }, [hydrated, addItem]);
+    return null;
+  }
+
+  it('is not told the prices changed when the quote returns the same price', async () => {
+    quoteReply = () => reply({ items: [quoted('p1', 1, '999.00', 10, 'Phone')] });
+    render(
+      <ToastProvider>
+        <CartProvider>
+          <AddOnce />
+          <MemoryRouter>
+            <Cart />
+          </MemoryRouter>
+        </CartProvider>
+        <ToastViewport />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => expect(quoteCalls()).toHaveLength(1));
+    // Let the answer be applied and the toast (if any) rendered before looking.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.getByText('Phone')).toBeInTheDocument();
+    expect(screen.queryByText(MSG_PRICES)).not.toBeInTheDocument();
   });
 });
 
