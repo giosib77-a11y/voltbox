@@ -178,7 +178,7 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
   no host psql is needed), it leaves `alembic current` = `0016` and `alembic check` clean.
   No backend file changes, so no gate beyond `git diff --stat` showing only this file.
 
-- [ ] **T24 · should-fix · No toast is ever shown in the admin panel**
+- [x] **T24 · should-fix · No toast is ever shown in the admin panel**
   owner: frontend-dev
   files: frontend/src/admin/AdminLayout.jsx, frontend/src/admin/AdminLayout.test.jsx (new)
   depends: T22
@@ -193,7 +193,7 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
   `toast.success('…')`, and finds the text on screen — and that test fails with the viewport removed. Frontend gate
   green; full backend gate green (run by the orchestrator).
 
-- [ ] **T25 · should-fix · The trash list's row buttons are off-screen at 1280px**
+- [x] **T25 · should-fix · The trash list's row buttons are off-screen at 1280px**
   owner: frontend-dev
   files: frontend/src/admin/pages/OrderList.jsx, frontend/src/admin/pages/OrderList.test.jsx
   depends: T22
@@ -466,7 +466,7 @@ Unverified (check before acting):
 ## Run State
 - Stage: Stage 2 — Order trash (admin)
 - Finish-check this stage: done (2026-10-18; code-reviewer, security-auditor, browser-tester) → T24, T25
-- Fix rounds this stage: 0/2
+- Fix rounds this stage: 1/2
 - Failed attempts: —
 
 ## Last Session

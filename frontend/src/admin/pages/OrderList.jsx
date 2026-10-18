@@ -105,33 +105,53 @@ export default function OrderList() {
       setDeleting(null);
       setReloadToken((token) => token + 1);
     } catch (caught) {
+      if (caught.status === 404 || caught.status === 409) {
+        // Another admin or the purge got there first: a retry can only fail again.
+        setDeleting(null);
+        setReloadToken((token) => token + 1);
+        return;
+      }
       setDeleteError(caught);
     }
   }
 
-  const baseColumns = [
-    {
-      key: 'number',
-      header: 'შეკვეთა',
-      render: (order) => (
-        <Link
-          to={`/admin/orders/${order.id}`}
-          className="font-medium text-ink-900 hover:text-accent-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-700"
-        >
-          {order.orderNumber}
-        </Link>
-      ),
-    },
-    {
-      key: 'customer',
-      header: 'მყიდველი',
-      render: (order) => (
-        <span>
-          <span className="block text-ink-900">{order.customerName}</span>
-          <span className="text-xs text-ink-500">{order.phone || order.email || '—'}</span>
-        </span>
-      ),
-    },
+  const numberColumn = {
+    key: 'number',
+    header: 'შეკვეთა',
+    render: (order) => (
+      <Link
+        to={`/admin/orders/${order.id}`}
+        className="font-medium text-ink-900 hover:text-accent-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-700"
+      >
+        {order.orderNumber}
+      </Link>
+    ),
+  };
+  const customerColumn = {
+    key: 'customer',
+    header: 'მყიდველი',
+    render: (order) => (
+      <span>
+        <span className="block text-ink-900">{order.customerName}</span>
+        <span className="text-xs text-ink-500">{order.phone || order.email || '—'}</span>
+      </span>
+    ),
+  };
+  const totalColumn = {
+    key: 'total',
+    header: 'ჯამი',
+    align: 'right',
+    render: (order) => <span className="tabular-nums">{money(order.total)}</span>,
+  };
+  const statusColumn = {
+    key: 'status',
+    header: 'სტატუსი',
+    render: (order) => <OrderStatusBadge status={order.status} />,
+  };
+
+  const liveColumns = [
+    numberColumn,
+    customerColumn,
     {
       key: 'city',
       header: 'ქალაქი',
@@ -143,17 +163,8 @@ export default function OrderList() {
       align: 'right',
       render: (order) => <span className="tabular-nums">{order.itemCount}</span>,
     },
-    {
-      key: 'total',
-      header: 'ჯამი',
-      align: 'right',
-      render: (order) => <span className="tabular-nums">{money(order.total)}</span>,
-    },
-    {
-      key: 'status',
-      header: 'სტატუსი',
-      render: (order) => <OrderStatusBadge status={order.status} />,
-    },
+    totalColumn,
+    statusColumn,
     {
       key: 'created',
       header: 'თარიღი',
@@ -163,19 +174,24 @@ export default function OrderList() {
     },
   ];
 
+  // The trash view drops city, item count and order date so both row buttons fit
+  // beside the admin sidebar at 1280px; deletion date and days left share a cell.
   const trashColumns = [
+    numberColumn,
+    customerColumn,
+    totalColumn,
+    statusColumn,
     {
       key: 'deleted',
       header: 'წაშლილია',
       render: (order) => (
-        <span className="whitespace-nowrap text-ink-600">{dateTime(order.deletedAt)}</span>
+        <span className="whitespace-nowrap">
+          <span className="block text-ink-600">{dateTime(order.deletedAt)}</span>
+          <span className="text-xs text-ink-500">
+            დარჩა <span className="tabular-nums">{daysLeft(order.purgeAt)} დღე</span>
+          </span>
+        </span>
       ),
-    },
-    {
-      key: 'daysLeft',
-      header: 'დარჩა',
-      align: 'right',
-      render: (order) => <span className="tabular-nums">{daysLeft(order.purgeAt)} დღე</span>,
     },
     {
       key: 'actions',
@@ -208,7 +224,7 @@ export default function OrderList() {
     },
   ];
 
-  const columns = trash ? [...baseColumns, ...trashColumns] : baseColumns;
+  const columns = trash ? trashColumns : liveColumns;
 
   return (
     <div>
@@ -308,9 +324,16 @@ export default function OrderList() {
         open={Boolean(deleting)}
         title="შეკვეთის სამუდამოდ წაშლა"
         description={
-          deleteError
-            ? deleteError.message
-            : `${deleting?.orderNumber} სამუდამოდ წაიშლება და მისი აღდგენა შეუძლებელი იქნება. ქმედება შეუქცევადია.`
+          <>
+            <span>
+              {`${deleting?.orderNumber} სამუდამოდ წაიშლება და მისი აღდგენა შეუძლებელი იქნება. ქმედება შეუქცევადია.`}
+            </span>
+            {deleteError ? (
+              <span role="alert" className="mt-2 block font-medium text-danger-700">
+                {deleteError.message}
+              </span>
+            ) : null}
+          </>
         }
         confirmLabel="სამუდამოდ წაშლა"
         variant="danger"

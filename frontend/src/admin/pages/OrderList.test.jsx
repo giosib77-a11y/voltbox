@@ -13,7 +13,7 @@ import { MemoryRouter, useLocation } from 'react-router';
 
 import OrderList from './OrderList.jsx';
 import * as adminApi from '../adminApi.js';
-import { ApiError, ConflictError } from '../../services/errors.js';
+import { ApiError, ConflictError, NotFoundError } from '../../services/errors.js';
 
 const DAY = 86_400_000;
 
@@ -152,21 +152,26 @@ describe('OrderList row actions in the trash', () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
-  it('shows ORDER_NOT_IN_TRASH in the dialog and leaves it usable', async () => {
-    vi.spyOn(adminApi, 'listOrders').mockResolvedValue(pageOf([trashed()]));
-    vi.spyOn(adminApi, 'deleteOrderForever').mockRejectedValue(
-      new ConflictError('შეკვეთა სანაგვეში არ არის', {
-        code: 'ORDER_NOT_IN_TRASH',
-      }),
-    );
+  it.each([
+    [
+      'ORDER_NOT_IN_TRASH',
+      new ConflictError('შეკვეთა სანაგვეში არ არის', { code: 'ORDER_NOT_IN_TRASH' }),
+    ],
+    ['ORDER_NOT_FOUND', new NotFoundError('შეკვეთა ვერ მოიძებნა')],
+  ])('closes the dialog and reloads the list on %s', async (_code, failure) => {
+    const list = vi
+      .spyOn(adminApi, 'listOrders')
+      .mockResolvedValueOnce(pageOf([trashed()]))
+      .mockResolvedValue(pageOf([]));
+    vi.spyOn(adminApi, 'deleteOrderForever').mockRejectedValue(failure);
     renderList('/admin/orders?trash=true');
 
     await userEvent.click(await screen.findByRole('button', { name: 'VB-1001 — სამუდამოდ წაშლა' }));
     await userEvent.click(screen.getByRole('button', { name: 'სამუდამოდ წაშლა' }));
 
-    expect(await screen.findByText('შეკვეთა სანაგვეში არ არის')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'სამუდამოდ წაშლა' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'გაუქმება' })).toBeEnabled();
+    expect(await screen.findByText('სანაგვე ცარიელია')).toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('shows the message and keeps row buttons enabled when restore hits the network error', async () => {
@@ -181,15 +186,49 @@ describe('OrderList row actions in the trash', () => {
     expect(screen.getByRole('button', { name: 'VB-1001 — სამუდამოდ წაშლა' })).toBeEnabled();
   });
 
-  it('shows the message when the permanent delete hits the network error', async () => {
-    vi.spyOn(adminApi, 'listOrders').mockResolvedValue(pageOf([trashed()]));
+  it('keeps the dialog open with an alert under the description on a network error', async () => {
+    const list = vi.spyOn(adminApi, 'listOrders').mockResolvedValue(pageOf([trashed()]));
     vi.spyOn(adminApi, 'deleteOrderForever').mockRejectedValue(new ApiError('ქსელის შეცდომა', 0));
     renderList('/admin/orders?trash=true');
 
     await userEvent.click(await screen.findByRole('button', { name: 'VB-1001 — სამუდამოდ წაშლა' }));
     await userEvent.click(screen.getByRole('button', { name: 'სამუდამოდ წაშლა' }));
 
-    expect(await screen.findByText('ქსელის შეცდომა')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('ქსელის შეცდომა');
+    expect(screen.getByText(/ქმედება შეუქცევადია/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'სამუდამოდ წაშლა' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'გაუქმება' })).toBeEnabled();
+    expect(list).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('OrderList columns', () => {
+  const headers = () => screen.getAllByRole('columnheader').map((cell) => cell.textContent);
+
+  it('keeps the live view headers', async () => {
+    vi.spyOn(adminApi, 'listOrders').mockResolvedValue(pageOf([makeOrder()]));
+    renderList();
+    await screen.findByText('VB-1001');
+
+    expect(headers()).toEqual([
+      'შეკვეთა',
+      'მყიდველი',
+      'ქალაქი',
+      'პოზიცია',
+      'ჯამი',
+      'სტატუსი',
+      'თარიღი',
+    ]);
+  });
+
+  it('drops city, item count and order date in the trash and merges the two trash dates', async () => {
+    vi.spyOn(adminApi, 'listOrders').mockResolvedValue(pageOf([trashed()]));
+    renderList('/admin/orders?trash=true');
+    await screen.findByText('VB-1001');
+
+    const shown = headers().filter(Boolean);
+    expect(shown).toEqual(['შეკვეთა', 'მყიდველი', 'ჯამი', 'სტატუსი', 'წაშლილია']);
+    expect(screen.queryByRole('columnheader', { name: 'დარჩა' })).not.toBeInTheDocument();
+    expect(screen.getByText('12 დღე')).toBeInTheDocument();
   });
 });
