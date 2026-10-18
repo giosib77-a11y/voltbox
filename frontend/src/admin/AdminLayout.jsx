@@ -6,6 +6,8 @@
  * Where it fits: the element for the /admin route tree, inside RequireAdmin.
  * Notes: the sidebar lists only sections that exist. Dead links that 404 make a
  * work tool feel broken, so new entries are added as their pages land.
+ * The admin does not use the storefront Layout, so the ToastViewport is
+ * rendered here; without it toast.success() in an admin page shows nothing.
  */
 
 import { Link, NavLink, Outlet, useNavigate } from 'react-router';
@@ -22,6 +24,7 @@ import {
   Warehouse,
 } from 'lucide-react';
 
+import ToastViewport from '../components/common/Toast.jsx';
 import * as api from '../services/api.js';
 import { useAdminSession } from './AdminSessionContext.jsx';
 
@@ -117,6 +120,7 @@ export default function AdminLayout() {
           <Outlet />
         </main>
       </div>
+      <ToastViewport />
     </div>
   );
 }
