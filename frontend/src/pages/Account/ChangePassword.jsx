@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { KeyRound } from 'lucide-react';
 import Button from '../../components/common/Button.jsx';
 import Input from '../../components/common/Input.jsx';
@@ -6,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { useToast } from '../../hooks/useToast.js';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle.js';
 import { MIN_PASSWORD_LENGTH, PASSWORD_FIELDS, validateField, validateForm } from '../../utils/validate.js';
+import { QUERY_KEYS } from '../../constants/index.js';
 import { t } from '../../i18n/index.js';
 
 const EMPTY = { currentPassword: '', newPassword: '', confirmPassword: '' };
@@ -16,6 +18,7 @@ export default function ChangePassword() {
 
   const { changePassword } = useAuth();
   const toast = useToast();
+  const navigate = useNavigate();
 
   const [values, setValues] = useState(EMPTY);
   const [errors, setErrors] = useState({});
@@ -46,9 +49,11 @@ export default function ChangePassword() {
         currentPassword: values.currentPassword,
         newPassword: values.newPassword,
       });
-      setValues(EMPTY);
-      setTouched({});
-      toast.success(t('account.passwordChanged'));
+      // The session is gone (see AuthContext), so this page would only be
+      // bounced to login on the next request. Go there now, with the reason,
+      // and come back to the account afterwards. The router adds /en itself.
+      toast.success(t('account.passwordChangedSignIn'));
+      navigate(`/login?${QUERY_KEYS.redirect}=${encodeURIComponent('/account')}`, { replace: true });
     } catch (error) {
       toast.error(error?.message || t('account.passwordChangeFailed'));
       if (error?.details?.currentPassword) {

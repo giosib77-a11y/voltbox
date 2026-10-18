@@ -470,6 +470,28 @@ describe('updateProfile and the stored session', () => {
   });
 });
 
+describe('changePassword and the stored session', () => {
+  it('drops the stored session once the server has ended every session', async () => {
+    writeSession({ user: { id: 'u1' }, token: 'tok' });
+    global.fetch = vi.fn(async () => reply({ ok: true }));
+
+    await httpApi.changePassword({ currentPassword: 'a', newPassword: 'b' });
+
+    expect(readSession()).toBeNull();
+  });
+
+  it('keeps the stored session when the change is rejected', async () => {
+    writeSession({ user: { id: 'u1' }, token: 'tok' });
+    global.fetch = vi.fn(async () =>
+      reply({ error: { code: 'INVALID_CURRENT_PASSWORD', message: 'bad' } }, 400),
+    );
+
+    await expect(httpApi.changePassword({ currentPassword: 'a', newPassword: 'b' })).rejects.toBeTruthy();
+
+    expect(readSession().token).toBe('tok');
+  });
+});
+
 describe('guest order lookup', () => {
   const placeOrder = (answer) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply(answer, 201)));

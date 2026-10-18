@@ -61,7 +61,13 @@ export function AuthProvider({ children }) {
     return updated;
   }, []);
 
-  const changePassword = useCallback((payload) => api.changePassword(payload), []);
+  // A password change ends every session of the account, so on success the
+  // api has dropped the stored one and the signed-in state goes with it.
+  const changePassword = useCallback(async (payload) => {
+    const result = await api.changePassword(payload);
+    setUser(null);
+    return result;
+  }, []);
 
   const value = useMemo(
     () => ({

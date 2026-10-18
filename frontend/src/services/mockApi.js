@@ -387,6 +387,8 @@ export async function changePassword({ currentPassword, newPassword }) {
 
   users[index] = { ...users[index], passwordHash: obfuscate(newPassword) };
   writeJSON(STORAGE_KEYS.users, users);
+  // Same as the real API: a password change ends every session, this one too.
+  writeJSON(STORAGE_KEYS.auth, null);
   return { ok: true };
 }
 

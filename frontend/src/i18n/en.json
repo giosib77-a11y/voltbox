@@ -643,7 +643,7 @@
     "addressNamePlaceholder": "e.g. Home or Office",
     "addressPlaceholder": "Street, number, flat",
     "makeDefault": "Make this my default address",
-    "passwordChanged": "Password changed",
+    "passwordChangedSignIn": "Password changed — sign in with the new password",
     "passwordChangeFailed": "Couldn't change the password",
     "passwordRule_one": "The new password must be at least {{count}} character long.",
     "passwordRule_other": "The new password must be at least {{count}} characters long.",

@@ -643,7 +643,7 @@
     "addressNamePlaceholder": "მაგ. სახლი ან ოფისი",
     "addressPlaceholder": "ქუჩა, ნომერი, ბინა",
     "makeDefault": "ძირითად მისამართად დაყენება",
-    "passwordChanged": "პაროლი შეიცვალა",
+    "passwordChangedSignIn": "პაროლი შეიცვალა — შედით ახალი პაროლით",
     "passwordChangeFailed": "პაროლის შეცვლა ვერ მოხერხდა",
     "passwordRule_one": "ახალი პაროლი უნდა შეიცავდეს მინიმუმ {{count}} სიმბოლოს.",
     "passwordRule_other": "ახალი პაროლი უნდა შეიცავდეს მინიმუმ {{count}} სიმბოლოს.",

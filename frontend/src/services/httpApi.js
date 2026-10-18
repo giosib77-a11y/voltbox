@@ -229,7 +229,12 @@ export async function updateProfile(patch) {
 
 // POST /auth/change-password
 export async function changePassword(payload) {
-  return request('/auth/change-password', { method: 'POST', body: payload });
+  const result = await request('/auth/change-password', { method: 'POST', body: payload });
+  // The server has just ended every session of the account, this one included.
+  // Keeping the stored session would leave the app signed in until some later
+  // request got a 401 and bounced the user to login with no explanation.
+  clearSession();
+  return result;
 }
 
 // POST /auth/forgot-password — the same answer whether or not the address has
