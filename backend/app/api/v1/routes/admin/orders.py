@@ -1,20 +1,23 @@
 """Admin order endpoints.
 
 What it does: the filtered order list (live or trash), the detail view, status
-changes, and moving an order to the trash and back.
+changes, moving an order to the trash and back, and deleting a trashed order
+for good.
 Where it fits: thin routes over services/admin_orders.py,
 services/order_status.py and services/order_trash.py, mounted on admin_router.
 Notes: a status change goes through the state machine and nowhere else, so the
 side effects (restocking a cancellation, writing history) cannot be skipped by
-adding another endpoint later. Trash and restore never touch stock, and write an
-audit row only when they changed something - a repeated click is a no-op, not a
-second log entry.
+adding another endpoint later. Trash, restore and delete never touch stock.
+Trash and restore write an audit row only when they changed something - a
+repeated click is a no-op, not a second log entry; the delete writes its
+`order.purge` row inside the service. Opening the list first sweeps the
+orders whose 30 days in the trash are up, in a transaction of its own.
 """
 
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 
 from app.core.config import settings
 from app.core.deps import AdminUser, Db
@@ -52,6 +55,11 @@ async def list_orders(
     date_to: Annotated[str | None, Query(alias="dateTo")] = None,
     trash: bool = False,
 ) -> OrderPage:
+    # Lazy retention sweep (Decision Log 2026-10-18): committed on its own before
+    # the list query, so a failing list cannot roll the deletions back, and a
+    # sweep that finds nothing writes nothing.
+    if await order_trash.purge_expired(db):
+        await db.commit()
     result = await admin_orders.list_orders(
         db,
         page=page,
@@ -130,3 +138,15 @@ async def restore_order(
         )
     await db.commit()
     return await _detail(db, order_id)
+
+
+@router.delete(
+    "/{order_id}",
+    summary="Delete a trashed order for good",
+    status_code=204,
+    response_class=Response,
+)
+async def delete_order(request: Request, db: Db, admin: AdminUser, order_id: UUID) -> Response:
+    await order_trash.delete_forever(db, order_id, actor_id=admin.id, ip=_client_ip(request))
+    await db.commit()
+    return Response(status_code=204)

@@ -79,7 +79,7 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
   (anonymous 401, customer 403) with no edit; `tests/test_error_messages.py` green. Backend gate
   green; frontend gate green (JSON changed: `i18n.test.js` key parity).
 
-- [ ] **T20 · Permanent delete and the 30-day purge**
+- [x] **T20 · Permanent delete and the 30-day purge**
   owner: backend-dev
   files: backend/app/services/order_trash.py, backend/app/api/v1/routes/admin/orders.py, frontend/src/i18n/ka.json, frontend/src/i18n/en.json, backend/tests/test_order_purge.py (new)
   depends: T19
