@@ -8,7 +8,7 @@ import jwt
 import pytest
 from app.core.config import settings
 from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
-from app.core.security import decode_access_token
+from app.core.security import decode_access_token, hash_password, verify_password_async
 from app.db.models import PasswordResetToken, RefreshToken, User
 from app.db.session import get_db
 from app.main import app
@@ -1094,3 +1094,152 @@ async def test_a_few_typos_do_not_stop_a_correct_password_change(
         json={"email": REGISTRATION["email"], "password": "brandnewpass9"},
     )
     assert relogin.status_code == 200
+
+
+# ── a lock that lands while the current password is being hashed (A-017) ─────
+#
+# The pre-check reads the row before the hash, and a parallel burst passes it
+# together. What decides is the statement that writes the change, so each test
+# changes the row after the request read it and before it writes.
+
+
+def _changed_while_hashing(
+    monkeypatch: pytest.MonkeyPatch, db: AsyncSession, **values: object
+) -> None:
+    """Apply `values` to the account right after the current password was verified."""
+    verify = verify_password_async
+
+    async def verify_then_change(password: str, password_hash: str) -> bool:
+        verified = await verify(password, password_hash)
+        await db.execute(
+            update(User)
+            .where(User.email == REGISTRATION["email"])
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+        return verified
+
+    monkeypatch.setattr(auth_service, "verify_password_async", verify_then_change)
+
+
+async def _account_state(db: AsyncSession) -> tuple[str, str, int, datetime | None]:
+    row = (
+        await db.execute(
+            select(User.password_hash, User.email, User.failed_login_count, User.locked_until)
+        )
+    ).one()
+    return row[0], row[1], row[2], row[3]
+
+
+async def _revoked_sessions(db: AsyncSession) -> int:
+    return int(
+        await db.scalar(
+            select(func.count())
+            .select_from(RefreshToken)
+            .where(RefreshToken.revoked_at.is_not(None))
+        )
+        or 0
+    )
+
+
+async def test_a_lock_landing_during_the_hash_refuses_the_right_password_change(
+    realistic_client: httpx.AsyncClient, db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The lock must bind the right guess too, or a burst learns which one it was."""
+    client = realistic_client
+    headers = {"Authorization": f"Bearer {(await _register(client)).json()['token']}"}
+    before = (await _account_state(db))[0]
+    _changed_while_hashing(monkeypatch, db, locked_until=datetime.now(UTC) + timedelta(minutes=15))
+
+    refused = await client.post(
+        "/api/v1/auth/change-password",
+        headers=headers,
+        json={"currentPassword": REGISTRATION["password"], "newPassword": "brandnewpass9"},
+    )
+
+    assert refused.status_code == 429
+    body = refused.json()["error"]
+    assert body["code"] == "TOO_MANY_LOGIN_ATTEMPTS"
+    assert body["details"]["retryAfterSeconds"] > 0
+    password_hash, _, _, _ = await _account_state(db)
+    assert password_hash == before, "the password was changed despite the lock"
+    assert await _revoked_sessions(db) == 0
+    assert (await client.post("/api/v1/auth/refresh")).status_code == 200
+
+    # Once the lock is lifted the old password is still the password.
+    monkeypatch.undo()
+    await db.execute(
+        update(User).values(locked_until=None).execution_options(synchronize_session=False)
+    )
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": REGISTRATION["email"], "password": REGISTRATION["password"]},
+    )
+    assert login.status_code == 200
+
+
+async def test_a_lock_landing_during_the_hash_refuses_the_right_email_change(
+    realistic_client: httpx.AsyncClient, db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = realistic_client
+    headers = {"Authorization": f"Bearer {(await _register(client)).json()['token']}"}
+    assert await auth_service.issue_password_reset(db, email=REGISTRATION["email"]) is not None
+    _changed_while_hashing(monkeypatch, db, locked_until=datetime.now(UTC) + timedelta(minutes=15))
+
+    refused = await client.patch(
+        "/api/v1/auth/me",
+        headers=headers,
+        json={"email": "thief@example.ge", "currentPassword": REGISTRATION["password"]},
+    )
+
+    assert refused.status_code == 429
+    body = refused.json()["error"]
+    assert body["code"] == "TOO_MANY_LOGIN_ATTEMPTS"
+    assert body["details"]["retryAfterSeconds"] > 0
+    _, email, _, _ = await _account_state(db)
+    assert email == REGISTRATION["email"], "the email was changed despite the lock"
+    # The link sent to the real address is not the thief's to cancel or keep.
+    assert await db.scalar(select(func.count()).select_from(PasswordResetToken)) == 1
+
+
+async def test_a_password_replaced_during_the_hash_is_a_wrong_password_not_a_count(
+    realistic_client: httpx.AsyncClient, db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = realistic_client
+    headers = {"Authorization": f"Bearer {(await _register(client)).json()['token']}"}
+    replaced = hash_password("somebody-elses-1")
+    _changed_while_hashing(monkeypatch, db, password_hash=replaced)
+
+    refused = await client.post(
+        "/api/v1/auth/change-password",
+        headers=headers,
+        json={"currentPassword": REGISTRATION["password"], "newPassword": "brandnewpass9"},
+    )
+
+    assert refused.status_code == 400
+    assert refused.json()["error"]["code"] == "INVALID_CURRENT_PASSWORD"
+    password_hash, _, failures, locked_until = await _account_state(db)
+    assert password_hash == replaced, "the other change was overwritten"
+    assert (failures, locked_until) == (0, None), "a right password was counted"
+
+
+async def test_a_password_replaced_during_the_hash_refuses_the_email_change(
+    realistic_client: httpx.AsyncClient, db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = realistic_client
+    headers = {"Authorization": f"Bearer {(await _register(client)).json()['token']}"}
+    assert await auth_service.issue_password_reset(db, email=REGISTRATION["email"]) is not None
+    _changed_while_hashing(monkeypatch, db, password_hash=hash_password("somebody-elses-1"))
+
+    refused = await client.patch(
+        "/api/v1/auth/me",
+        headers=headers,
+        json={"email": "thief@example.ge", "currentPassword": REGISTRATION["password"]},
+    )
+
+    assert refused.status_code == 400
+    assert refused.json()["error"]["code"] == "INVALID_CURRENT_PASSWORD"
+    _, email, failures, locked_until = await _account_state(db)
+    assert email == REGISTRATION["email"]
+    assert (failures, locked_until) == (0, None)
+    assert await db.scalar(select(func.count()).select_from(PasswordResetToken)) == 1

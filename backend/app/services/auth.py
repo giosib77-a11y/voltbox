@@ -158,7 +158,8 @@ async def _wrong_current_password(db: AsyncSession, user: User) -> AppError:
     if await _record_failure(db, user):
         return _invalid_current_password()
     # Locked by another guess while this one was hashing: refused as locked,
-    # whatever it guessed, as `_refused_meanwhile` does at sign-in.
+    # whatever it guessed, as `_refused_meanwhile` does at sign-in for a wrong
+    # password. A right one is refused the same way by `_refused_write`.
     locked_until = await db.scalar(select(User.locked_until).where(User.id == user.id))
     return _password_check_locked(locked_until)
 
@@ -166,6 +167,23 @@ async def _wrong_current_password(db: AsyncSession, user: User) -> AppError:
 def _unlocked(now: datetime) -> ColumnElement[bool]:
     """No lock on the row, judged on the row as the statement finds it."""
     return or_(User.locked_until.is_(None), User.locked_until <= now)
+
+
+async def _refused_write(db: AsyncSession, user: User) -> AppError:
+    """The refusal for a change whose conditional UPDATE found the row moved on.
+
+    The pre-check reads the row before the hash and a parallel burst passes it
+    together, so what decides is the UPDATE that writes the change - as
+    `_clear_failures` is at sign-in. Locked meanwhile: refused as locked,
+    whatever was sent, the right password included, so a burst cannot learn
+    which of its guesses was right through the lock. Otherwise the password it
+    was checked against has been replaced: a wrong password now, and not
+    counted, because no guess was made against the current one.
+    """
+    locked_until = await db.scalar(select(User.locked_until).where(User.id == user.id))
+    if locked_until is not None and locked_until > datetime.now(UTC):
+        return _password_check_locked(locked_until)
+    return _invalid_current_password()
 
 
 async def _refused_meanwhile(db: AsyncSession, user: User) -> UnauthorizedError:
@@ -243,7 +261,7 @@ async def _clear_failures(db: AsyncSession, user: User) -> bool:
     password change ends every session with `revoke_all`, and a sign-in with
     the old password checked in the same instant used to write its refresh
     token after that had run: it kept a session the change was made to end.
-    Both write this row before revoking - `reset_password`'s UPDATE, the flush
+    Both write this row before revoking - `reset_password`'s UPDATE, the UPDATE
     in `change_password` - so its row lock orders them against this UPDATE.
     If this one comes first, its token is committed before `revoke_all` can
     look and is revoked with the rest. If the change comes first, this waits
@@ -495,8 +513,27 @@ async def change_password(
         raise _password_check_locked(user.locked_until)
     if not await verify_password_async(current_password, user.password_hash):
         raise await _wrong_current_password(db, user)
-    user.password_hash = await hash_password_async(new_password)
-    await db.flush()
+    new_hash = await hash_password_async(new_password)
+    # The check that decides, as in `_clear_failures`: the pre-check above ran on
+    # the row as it was read, and a burst of guesses can have locked the account
+    # since. The write is conditional on the row as it is now - unlocked, and
+    # still the password that was verified - so once locked even the right
+    # password changes nothing. It is an UPDATE, so it takes the row lock
+    # `_clear_failures` relies on to order itself against `revoke_all`.
+    changed = await db.execute(
+        update(User)
+        .where(
+            User.id == user.id,
+            _unlocked(datetime.now(UTC)),
+            User.password_hash == user.password_hash,
+        )
+        .values(password_hash=new_hash)
+        .returning(User.id)
+        # Keeps `user` in step: `expire_on_commit=False` would leave the old hash.
+        .execution_options(synchronize_session="fetch")
+    )
+    if changed.first() is None:
+        raise await _refused_write(db, user)
     await revoke_all(db, user.id)
 
 
@@ -637,7 +674,22 @@ async def update_profile(db: AsyncSession, *, user: User, changes: dict[str, obj
             )
             if taken is not None:
                 raise ConflictError("Email is already registered", code="EMAIL_ALREADY_EXISTS")
-            user.email = normalized
+            # Conditional as in `change_password`: a lock that landed since the
+            # pre-check, or a password replaced since the hash, refuses the
+            # change even to the right password.
+            moved = await db.execute(
+                update(User)
+                .where(
+                    User.id == user.id,
+                    _unlocked(datetime.now(UTC)),
+                    User.password_hash == user.password_hash,
+                )
+                .values(email=normalized)
+                .returning(User.id)
+                .execution_options(synchronize_session="fetch")
+            )
+            if moved.first() is None:
+                raise await _refused_write(db, user)
             # A link already sent goes to the old address; it must not outlive
             # the change and reset the password of an account now elsewhere.
             await db.execute(
