@@ -288,6 +288,17 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-10-18 — No `@playwright/test` setup task for Stage 2; browser checks use the existing `playwright`
+- Decision: the stage gets no "Browser testing setup" task. The repo already drives a real
+  browser with the `playwright` library (`frontend/package.json` devDependency 1.63.0,
+  `frontend/scripts/e2e/cart-sync.mjs`); browser checks of the admin trash use that.
+- Reason: adding `@playwright/test` rewrites `frontend/package-lock.json`, and a lock written
+  with the local Node 24 / npm 11 has turned CI (Node 20 / npm 10) red before. The admin is
+  http-only, so a mock-mode smoke test would not reach the trash UI anyway.
+- Alternatives considered: `@playwright/test` + `playwright.config.*` + an `e2e/` smoke test.
+- Why rejected: a new dependency and a lock change for a check the existing library can do.
+  Revisit if the project wants browser tests in CI.
+
 ### 2026-10-18 — Stage 2 stays Tier 2, no new layer or dependency
 - Decision: the order trash is one nullable column, one service module
   (`services/order_trash.py`), four route changes on the existing admin orders router and
