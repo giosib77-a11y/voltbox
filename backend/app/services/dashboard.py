@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Order, OrderItem, Product
@@ -40,7 +40,12 @@ async def build(db: AsyncSession) -> dict[str, Any]:
     today = datetime.now(store_tz()).date()
     day_start, day_end = day_bounds(today)
 
-    sold = Order.status.notin_(EXCLUDED_FROM_SALES)
+    # A trashed order is out of every figure, as a cancelled one is out of the
+    # money: the admin deleted it from the shop's books. Its stock was not
+    # returned (trash never touches stock), which is why this is a separate
+    # condition from EXCLUDED_FROM_SALES and not a status.
+    live = Order.deleted_at.is_(None)
+    sold = and_(Order.status.notin_(EXCLUDED_FROM_SALES), live)
 
     sales_today = await db.scalar(
         select(func.coalesce(func.sum(Order.total), 0)).where(
@@ -89,7 +94,10 @@ async def build(db: AsyncSession) -> dict[str, Any]:
     latest_orders = list(
         (
             await db.scalars(
-                select(Order).order_by(Order.created_at.desc()).limit(LATEST_ORDERS_LIMIT)
+                select(Order)
+                .where(live)
+                .order_by(Order.created_at.desc())
+                .limit(LATEST_ORDERS_LIMIT)
             )
         )
         .unique()

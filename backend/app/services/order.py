@@ -236,6 +236,11 @@ async def place_order(
     user_id = user.id if user is not None else None
 
     if idempotency_key:
+        # Deliberately not filtered by `deleted_at`: an order in the admin trash
+        # still holds its key, and a retry of its checkout has to be answered
+        # with that order. Hiding it here would place a second order and take
+        # the stock a second time. What still holds: every other reader in this
+        # module skips the trash.
         existing = await db.scalar(select(Order).where(Order.idempotency_key == idempotency_key))
         if existing is not None:
             # ორმაგად გაგზავნილი checkout — იმავე შეკვეთას ვაბრუნებთ და მეორეს
@@ -276,7 +281,9 @@ async def place_order(
         if not _is_idempotency_clash(error):
             raise
         # The original committed while we waited. Start a clean transaction,
-        # read what it wrote, and hand it back to whoever owns it.
+        # read what it wrote, and hand it back to whoever owns it. Unfiltered
+        # by `deleted_at` for the same reason as the first lookup: the original
+        # may have been trashed in the meantime.
         await db.rollback()
         existing = await db.scalar(select(Order).where(Order.idempotency_key == idempotency_key))
         if existing is None:  # pragma: no cover - the violation proves it exists
@@ -379,8 +386,13 @@ async def place_order(
 
 
 async def list_for_user(db: AsyncSession, user_id: UUID) -> list[Order]:
+    # A trashed order is the shop's to keep or purge, not part of the customer's
+    # history (PROJECT.md -> Business Rules -> Order trash).
     stmt = (
-        select(Order).where(Order.user_id == user_id).order_by(Order.created_at.desc()).limit(100)
+        select(Order)
+        .where(Order.user_id == user_id, Order.deleted_at.is_(None))
+        .order_by(Order.created_at.desc())
+        .limit(100)
     )
     return list((await db.scalars(stmt)).unique().all())
 
@@ -391,8 +403,13 @@ async def get_by_number(db: AsyncSession, order_number: str, *, user: User) -> O
     შეკვეთის ნომერი თანმიმდევრობითია და გამოცნობადი, ამიტომ მარტო ნომრით
     წვდომა დაუშვებელია. სხვისი შეკვეთა 404-ია და არა 403. A guest reads theirs
     with `get_guest_order`.
+
+    A trashed order is a 404 as well, the same one: to the customer it no
+    longer exists, and a different answer would tell them it does.
     """
-    order = await db.scalar(select(Order).where(Order.order_number == order_number))
+    order = await db.scalar(
+        select(Order).where(Order.order_number == order_number, Order.deleted_at.is_(None))
+    )
     if order is None or order.user_id != user.id:
         raise order_not_found()
     return order
@@ -433,11 +450,16 @@ async def get_guest_order(db: AsyncSession, order_number: str, token: str) -> Or
     the same statement and fail at the same place. The phone is no part of it:
     a phone number is known to the shopper's friends, family and every shop
     they have given it to, and the order number is a counter.
+
+    A trashed order is one more reason for the same refusal, inside the same
+    statement: the holder of a right token must not learn that the order exists
+    but was deleted.
     """
     order = await db.scalar(
         select(Order).where(
             Order.order_number == order_number,
             Order.lookup_token_hash == hash_order_lookup_token(token),
+            Order.deleted_at.is_(None),
         )
     )
     if order is None:
@@ -459,10 +481,15 @@ async def cancel(db: AsyncSession, order: Order, *, actor_id: UUID | None = None
     What is kept is the refusal's code. `ORDER_NOT_CANCELLABLE` is the one a
     customer is meant to read - the frontend already has the sentence for it -
     while `INVALID_TRANSITION` names a move in a graph they never see.
+    `ORDER_IN_TRASH` is not that kind of refusal - the move is allowed, the
+    order is frozen in the admin trash - so it passes through unchanged rather
+    than being reported as an order that can no longer be cancelled.
     """
     try:
         return await order_status.transition(db, order.id, "cancelled", actor_id=actor_id)
     except ConflictError as exc:
+        if exc.code == "ORDER_IN_TRASH":
+            raise
         raise ConflictError(
             "Order can no longer be cancelled", code="ORDER_NOT_CANCELLABLE"
         ) from exc

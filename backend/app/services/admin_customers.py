@@ -7,6 +7,9 @@ Where it fits: called by app/api/v1/routes/admin/customers.py.
 Notes: totals are computed with correlated subqueries rather than by loading a
 customer's orders. On a shop with history that is the difference between a page
 and a timeout, and the figures then match the dashboard by construction.
+
+Orders in the admin trash count nowhere here - not in the order count, the spend
+or the order list - exactly as in the dashboard (Business Rules -> Order trash).
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ def _orders_count_subquery() -> ColumnElement[int]:
     return (
         select(func.count())
         .select_from(Order)
-        .where(Order.user_id == User.id)
+        .where(Order.user_id == User.id, Order.deleted_at.is_(None))
         .correlate(User)
         .scalar_subquery()
     )
@@ -43,7 +46,11 @@ def _total_spent_subquery() -> ColumnElement[Decimal]:
     return (
         select(func.coalesce(func.sum(Order.total), 0))
         .select_from(Order)
-        .where(Order.user_id == User.id, Order.status.notin_(EXCLUDED_FROM_SPEND))
+        .where(
+            Order.user_id == User.id,
+            Order.status.notin_(EXCLUDED_FROM_SPEND),
+            Order.deleted_at.is_(None),
+        )
         .correlate(User)
         .scalar_subquery()
     )
@@ -118,7 +125,9 @@ async def get_customer(db: AsyncSession, user_id: uuid.UUID) -> dict[str, Any]:
     orders = list(
         (
             await db.scalars(
-                select(Order).where(Order.user_id == user_id).order_by(Order.created_at.desc())
+                select(Order)
+                .where(Order.user_id == user_id, Order.deleted_at.is_(None))
+                .order_by(Order.created_at.desc())
             )
         )
         .unique()
