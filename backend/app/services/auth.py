@@ -595,11 +595,13 @@ async def reset_password(db: AsyncSession, *, raw_token: str, new_password: str)
     """Set a new password through a reset link, exactly once, and end every session.
 
     The DELETE is the check, as the UPDATE is in `refresh`: of two submissions
-    of one link, the second waits on the row, finds it gone once the first
-    commits, and is refused. Nothing reads the row first and decides later.
+    of one link, the second waits on the account's row lock, its DELETE finds
+    the token gone once the first commits, and it is refused. The token is read
+    first only to learn whose account to lock; that read decides nothing.
 
-    A failure after the claim - the account blocked in the meantime - raises,
-    and the rollback puts the row back; the link is refused either way.
+    A blocked account is refused before the claim, under the row lock, so it
+    cannot be blocked in between; any later failure rolls back and the token
+    row returns. The link is refused either way.
 
     Lock order: the account's row, then its reset token - the order of
     `revoke_all`, `change_password` and the email change in `update_profile`.
