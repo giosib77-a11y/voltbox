@@ -163,6 +163,10 @@ function toQuery(params = {}) {
  */
 export async function request(path, options = {}) {
   const { method = 'GET', body, params, signal, headers: extraHeaders, retried = false } = options;
+  // Set by calls the shopper did not ask for (the signed-in cart sync, which
+  // runs on every page load): a dead session there must not move them off
+  // the page they are on.
+  const background = options.background === true;
   const url = `${BASE_URL}${path}${toQuery(params)}`;
 
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
@@ -208,9 +212,11 @@ export async function request(path, options = {}) {
   // (`refreshSession` single-flight-ია), მერე თითოეული ზუსტად ერთხელ მეორდება.
   if (response.status === 401 && !retried && !isAuthPath(path)) {
     const hadSession = Boolean(readSession());
-    const token = await refreshSession();
+    const token = await refreshSession({ background });
     if (token) return request(path, { ...options, retried: true });
-    // The session is gone and `refreshSession` has already redirected. One
+    // The session is gone and cleared. `refreshSession` redirected to the login
+    // page only if a request the shopper made was waiting; a background one
+    // (`background: true`) just ends the session and the app follows it. One
     // recognisable type for every request caught in the same moment, so the UI
     // shows one message rather than one per pending call. A guest falls
     // through instead: their 401 is about permission, not an expired session.

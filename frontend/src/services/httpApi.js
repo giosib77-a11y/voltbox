@@ -292,7 +292,7 @@ function cartPayload(items = []) {
 
 // GET /cart?lang=
 export async function getCart() {
-  const { items } = await request('/cart', { params: { lang: lang() } });
+  const { items } = await request('/cart', { params: { lang: lang() }, background: true });
   return items;
 }
 
@@ -302,6 +302,7 @@ export async function saveCart(items) {
     method: 'PUT',
     params: { lang: lang() },
     body: cartPayload(items),
+    background: true,
   });
   return saved;
 }
@@ -318,13 +319,14 @@ export async function mergeCart(items) {
     method: 'POST',
     params: { lang: lang() },
     body: cartPayload(items),
+    background: true,
   });
   return merged;
 }
 
 // DELETE /cart
 export async function clearCart() {
-  return request('/cart', { method: 'DELETE' });
+  return request('/cart', { method: 'DELETE', background: true });
 }
 
 export const implementation = 'http';

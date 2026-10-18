@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import * as api from '../services/api.js';
+import { subscribeSessionEnded } from '../services/session.js';
 
 /**
  * ავტორიზაციის მდგომარეობა.
@@ -22,6 +23,11 @@ export function AuthProvider({ children }) {
     if (session?.user) setUser(session.user);
     setInitializing(false);
   }, []);
+
+  // session.js clears the stored session when a refresh fails; without this the
+  // user restored above would stay on screen and the cart sync would never see
+  // a sign-out.
+  useEffect(() => subscribeSessionEnded(() => setUser(null)), []);
 
   const login = useCallback(async (credentials) => {
     setPending(true);

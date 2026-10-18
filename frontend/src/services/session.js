@@ -143,13 +143,44 @@ export function setSessionLostHandler(handler) {
 }
 
 /**
+ * Called when a failed refresh ends the session, whoever noticed it.
+ *
+ * Separate from the handler above: that one navigates, and only a request the
+ * shopper made may do so. The signed-in state (AuthContext) has to follow the
+ * cleared storage either way, or a background 401 would leave the header
+ * showing someone who is no longer signed in.
+ */
+const endedListeners = new Set();
+
+export function subscribeSessionEnded(listener) {
+  endedListeners.add(listener);
+  return () => endedListeners.delete(listener);
+}
+
+/**
+ * True while a foreground request is waiting on the running refresh. Several
+ * requests share one refresh, so this is what keeps "redirect once, if anyone
+ * who asked for something is waiting" true when a background call is among them.
+ */
+let foregroundWaiting = false;
+
+/**
  * Exchanges the refresh token for a new session, at most once concurrently.
  *
  * Returns the new access token, or null when the session is gone. Every caller
  * that arrives while a refresh is running gets the same promise.
+ *
+ * When the refresh fails the stored session is cleared and listeners are told,
+ * but the user is sent to the login page only if a non-`background` caller was
+ * waiting - a background request (the cart sync on page load) must not turn
+ * browsing a public page into a login redirect. Pages that need a session send
+ * a guest to the login themselves (RequireAuth, RequireAdmin).
  */
-export function refreshSession() {
-  if (inFlight) return inFlight;
+export function refreshSession({ background = false } = {}) {
+  if (inFlight) {
+    if (!background) foregroundWaiting = true;
+    return inFlight;
+  }
 
   // No stored session means a guest, and a guest's 401 is an answer about
   // permission, not an expired token. Firing a refresh would spend a request
@@ -158,6 +189,13 @@ export function refreshSession() {
   // the stored session is what tells us whether there is one to spend.
   const staleToken = readSession()?.token ?? null;
   if (!staleToken) return Promise.resolve(null);
+
+  foregroundWaiting = !background;
+  let ended = false;
+  const endSession = () => {
+    clearSession();
+    ended = true;
+  };
 
   inFlight = withRefreshLock(async () => {
     // Inside the lock: another tab may have refreshed while we waited, and its
@@ -184,22 +222,31 @@ export function refreshSession() {
     }
 
     if (!response.ok) {
-      clearSession();
-      onSessionLost();
+      endSession();
       return null;
     }
 
     const session = await response.json().catch(() => null);
     if (!session?.token) {
-      clearSession();
-      onSessionLost();
+      endSession();
       return null;
     }
     writeSession(session);
     return session.token;
-  }).finally(() => {
-    inFlight = null;
-  });
+  })
+    .then((token) => {
+      // Runs before any waiting caller continues, so the listeners and the
+      // redirect happen once per failed refresh, not once per request.
+      if (ended) {
+        endedListeners.forEach((listener) => listener());
+        if (foregroundWaiting) onSessionLost();
+      }
+      return token;
+    })
+    .finally(() => {
+      inFlight = null;
+      foregroundWaiting = false;
+    });
 
   return inFlight;
 }
@@ -207,5 +254,7 @@ export function refreshSession() {
 /** Test hook: forgets any in-flight refresh and restores the default handler. */
 export function __resetSessionStateForTests() {
   inFlight = null;
+  foregroundWaiting = false;
+  endedListeners.clear();
   onSessionLost = defaultOnSessionLost;
 }
