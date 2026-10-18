@@ -601,16 +601,40 @@ async def reset_password(db: AsyncSession, *, raw_token: str, new_password: str)
     A failure after the claim - the account blocked in the meantime - raises,
     and the rollback puts the row back; the link is refused either way.
 
+    Lock order: the account's row, then its reset token - the order of
+    `revoke_all`, `change_password` and the email change in `update_profile`.
+    The token is only read to learn whose account it is; the row is locked;
+    and the DELETE below, still the one check that decides, runs after that.
+    Deleting the token first took the two in the opposite order, and a reset
+    used in the same instant as a password or email change was a deadlock,
+    which Postgres settled by failing one of them with a 500.
+
     The new password is hashed first, before any statement, so no connection
     is held while the hash waits its turn and runs - see `login`. A link that
     turns out to be invalid has then cost a hash, as a wrong password does.
     """
     password_hash = await hash_password_async(new_password)
+    token_hash = hash_password_reset_token(raw_token)
+    owner_id = await db.scalar(
+        select(PasswordResetToken.user_id).where(
+            PasswordResetToken.token_hash == token_hash,
+            PasswordResetToken.expires_at > func.now(),
+        )
+    )
+    if owner_id is None:
+        raise invalid_reset_token()
+
+    # FOR NO KEY UPDATE, the level the UPDATE below takes anyway: it does not
+    # hold up the foreign-key check of an `issue_password_reset` insert.
+    user = await db.scalar(select(User).where(User.id == owner_id).with_for_update(key_share=True))
+    if user is None or not user.is_active:
+        raise invalid_reset_token()
+
     claimed = (
         await db.execute(
             delete(PasswordResetToken)
             .where(
-                PasswordResetToken.token_hash == hash_password_reset_token(raw_token),
+                PasswordResetToken.token_hash == token_hash,
                 PasswordResetToken.expires_at > func.now(),
             )
             .returning(PasswordResetToken.user_id)
@@ -618,10 +642,6 @@ async def reset_password(db: AsyncSession, *, raw_token: str, new_password: str)
         )
     ).scalar_one_or_none()
     if claimed is None:
-        raise invalid_reset_token()
-
-    user = await db.scalar(select(User).where(User.id == claimed))
-    if user is None or not user.is_active:
         raise invalid_reset_token()
 
     await db.execute(

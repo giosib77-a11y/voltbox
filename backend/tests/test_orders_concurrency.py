@@ -670,6 +670,65 @@ async def test_a_sign_in_with_the_old_password_does_not_outlive_the_change(
     assert answer == ("rejected", "INVALID_CREDENTIALS")
 
 
+async def _password_change_writes(session: AsyncSession, user: User) -> None:
+    """What `change_password` does, up to and including its token cleanup.
+
+    Its two halves spelled out, so the test can hold the transaction between
+    taking the account's row and touching the reset token.
+    """
+    await session.execute(update(User).where(User.id == user.id).values(password_hash="x" * 20))
+
+
+async def _email_change_writes(session: AsyncSession, user: User) -> None:
+    await session.execute(update(User).where(User.id == user.id).values(email="moved@voltbox.ge"))
+
+
+@pytest.mark.parametrize(
+    "write", [_password_change_writes, _email_change_writes], ids=["password", "email"]
+)
+async def test_a_reset_and_a_change_in_the_same_instant_do_not_deadlock(
+    lockable: User, write: Callable[[AsyncSession, User], Awaitable[None]]
+) -> None:
+    """A reset link used while the password or the email is being changed.
+
+    `change_password` and the email change write the account's row and then
+    delete its reset token; `reset_password` deleted the token and then wrote
+    the row. Opposite orders: Postgres aborted one of the two with a deadlock,
+    which the caller saw as a 500. The change here has taken the account's row
+    and not yet touched the token when the reset arrives - the interleaving
+    that needs both locks held by different transactions at once.
+    """
+    async with SessionLocal() as setup:
+        issued = await auth_service.issue_password_reset(setup, email=lockable.email)
+        await setup.commit()
+    assert issued is not None
+
+    async with SessionLocal() as changing:
+        await write(changing, lockable)
+        reset = asyncio.create_task(_reset(issued.token))
+        await _until_queued_behind(changing)
+        # The rest of the change: the cleanup both paths end with.
+        await changing.execute(
+            delete(PasswordResetToken).where(PasswordResetToken.user_id == lockable.id)
+        )
+        await changing.commit()
+    answer = await reset
+
+    # Refused as a link that was used or replaced is - never a deadlock.
+    assert answer == ("error", "ValidationError")
+    async with SessionLocal() as check:
+        left = await check.scalar(
+            select(func.count())
+            .select_from(PasswordResetToken)
+            .where(PasswordResetToken.user_id == lockable.id)
+        )
+        stored = await check.scalar(select(User.password_hash).where(User.id == lockable.id))
+    assert left == 0
+    # The reset did not write over the change that won.
+    expected = "x" * 20 if write is _password_change_writes else lockable.password_hash
+    assert stored == expected
+
+
 async def _block_in(session: AsyncSession, user: User) -> None:
     # Only compared by id against the account being blocked.
     actor = User(id=uuid.uuid4(), role=ROLE_ADMIN)
