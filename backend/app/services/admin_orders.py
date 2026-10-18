@@ -1,9 +1,10 @@
 """Admin order queries.
 
-What it does: the filtered order list and the detail view.
+What it does: the filtered order list (live orders, or the trash) and the detail
+view, which shows a live or a trashed order.
 Where it fits: called by app/api/v1/routes/admin/orders.py. Status changes are
 not here - they belong to services/order_status.py, the single place that may
-write `orders.status`.
+write `orders.status`; trashing and restoring belong to services/order_trash.py.
 Notes: date filters are resolved in the store's timezone. "Today" for a shop in
 Tbilisi is not the UTC day, and an order placed at 01:00 belongs to that day.
 """
@@ -24,6 +25,7 @@ from app.core.config import settings
 from app.core.errors import NotFoundError, ValidationError
 from app.db.models import Order, OrderItem
 from app.services.order_status import allowed_transitions
+from app.services.order_trash import purge_at
 
 DIGITS = re.compile(r"\D+")
 
@@ -62,8 +64,13 @@ def _conditions(
     status: str | None,
     date_from: date | None,
     date_to: date | None,
+    trash: bool,
 ) -> list[ColumnElement[bool]]:
-    conditions: list[ColumnElement[bool]] = []
+    # Always one side or the other: the live list must never show a trashed
+    # order, and the trash list must never show a live one.
+    conditions: list[ColumnElement[bool]] = [
+        Order.deleted_at.is_not(None) if trash else Order.deleted_at.is_(None)
+    ]
 
     if status:
         conditions.append(Order.status == status)
@@ -134,6 +141,8 @@ def _summary(order: Order, item_count: int) -> dict[str, Any]:
         "item_count": item_count,
         "payment_method": order.payment_method,
         "created_at": order.created_at,
+        "deleted_at": order.deleted_at,
+        "purge_at": purge_at(order.deleted_at),
     }
 
 
@@ -146,17 +155,17 @@ async def list_orders(
     status: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    trash: bool = False,
 ) -> dict[str, Any]:
-    conditions = _conditions(q=q, status=status, date_from=date_from, date_to=date_to)
+    conditions = _conditions(q=q, status=status, date_from=date_from, date_to=date_to, trash=trash)
 
     total = await db.scalar(select(func.count()).select_from(Order).where(*conditions))
 
+    # The trash reads newest deletion first (the one the admin just trashed is on
+    # top); the live list newest order first.
+    ordering = (Order.deleted_at.desc(), Order.id) if trash else (Order.created_at.desc(), Order.id)
     stmt = (
-        select(Order)
-        .where(*conditions)
-        .order_by(Order.created_at.desc(), Order.id)
-        .limit(limit)
-        .offset((page - 1) * limit)
+        select(Order).where(*conditions).order_by(*ordering).limit(limit).offset((page - 1) * limit)
     )
     orders = list((await db.scalars(stmt)).unique().all())
 
@@ -210,7 +219,11 @@ async def get_order(db: AsyncSession, order_id: uuid.UUID) -> dict[str, Any]:
         ],
         # The UI must never re-implement the state machine; it renders what the
         # server says is possible.
-        "allowed_transitions": allowed_transitions(order.status),
+        # Empty while trashed: the status is frozen (order_status.transition
+        # refuses it), so no button may be offered.
+        "allowed_transitions": (
+            [] if order.deleted_at is not None else allowed_transitions(order.status)
+        ),
     }
 
 

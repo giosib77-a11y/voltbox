@@ -4,6 +4,9 @@ What it does: defines which status may follow which, and applies a transition
 with its side effects.
 Where it fits: the single place a status changes. No endpoint writes
 `orders.status` directly.
+Notes: a trashed order is frozen - `transition` refuses it with 409
+`ORDER_IN_TRASH`, so a hidden order cannot restock from a place the admin does
+not look at. Restore returns it to the status it had.
 
 Why one table: an allowed-transition rule spread across endpoints drifts. Here
 the graph is data, the API can hand the UI the allowed moves, and the tests can
@@ -44,11 +47,13 @@ def allowed_transitions(status: str) -> list[str]:
     return list(TRANSITIONS.get(status, ()))
 
 
-async def _lock_order(db: AsyncSession, order_id: uuid.UUID) -> Order:
+async def lock_order(db: AsyncSession, order_id: uuid.UUID) -> Order:
     """Lock the order row before reading its status.
 
     Without this, two admins clicking Cancel at the same time would both read
-    `pending`, both pass the check and both return the stock.
+    `pending`, both pass the check and both return the stock. Public because
+    services/order_trash.py takes the same lock, so a trash and a status change
+    racing each other are serialised - one copy of the lock, not two.
     """
     locked = await db.scalar(select(Order.id).where(Order.id == order_id).with_for_update())
     if locked is None:
@@ -81,8 +86,18 @@ async def transition(
             details={"allowed": sorted(TRANSITIONS)},
         )
 
-    order = await _lock_order(db, order_id)
+    order = await lock_order(db, order_id)
     from_status = order.status
+
+    # After the lock, so a trash that commits while this request waits for the
+    # row is seen. Before the transition check: the answer for a trashed order
+    # is "restore it first", not a statement about the status graph.
+    if order.deleted_at is not None:
+        raise ConflictError(
+            "The order is in the trash",
+            code="ORDER_IN_TRASH",
+            details={"status": from_status},
+        )
 
     if to_status not in TRANSITIONS[from_status]:
         raise ConflictError(
@@ -132,8 +147,13 @@ async def history(db: AsyncSession, order_id: uuid.UUID) -> list[OrderStatusHist
 
 
 async def counts_by_status(db: AsyncSession) -> dict[str, int]:
-    """One grouped query, not one COUNT per status."""
-    rows = await db.execute(select(Order.status, func.count().label("hits")).group_by(Order.status))
+    """One grouped query, not one COUNT per status. Live orders only: the trash
+    is not part of the shop's workload (Business Rules -> Order trash)."""
+    rows = await db.execute(
+        select(Order.status, func.count().label("hits"))
+        .where(Order.deleted_at.is_(None))
+        .group_by(Order.status)
+    )
     found: dict[str, Any] = {row[0]: int(row[1]) for row in rows}
     # Every status appears, including the ones with no orders - a missing key
     # would render as a gap in the dashboard instead of a zero.

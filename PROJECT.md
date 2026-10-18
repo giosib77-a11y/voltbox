@@ -288,6 +288,16 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-10-18 — `deleted_at` is written from the application clock (T19)
+- Decision: `order_trash.trash` sets `deleted_at = datetime.now(UTC)`; `purgeAt` is that value
+  plus `TRASH_RETENTION`, and the 30-day purge (T20) compares against a cutoff taken from the
+  same application clock, so one clock decides both.
+- Reason: the database's `now()` is frozen at the start of the transaction, so two trashes in
+  one transaction would share an instant and "newest deletion first" could not be tested.
+- Alternatives considered: `func.now()` (database clock).
+- Why rejected: the frozen-instant problem above; app and database run in UTC on the same
+  host class, so a skew of seconds against a 30-day retention does not matter.
+
 ### 2026-10-18 — No `@playwright/test` setup task for Stage 2; browser checks use the existing `playwright`
 - Decision: the stage gets no "Browser testing setup" task. The repo already drives a real
   browser with the `playwright` library (`frontend/package.json` devDependency 1.63.0,

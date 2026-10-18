@@ -1,11 +1,14 @@
 """Admin order endpoints.
 
-What it does: the filtered order list, the detail view and status changes.
-Where it fits: thin routes over services/admin_orders.py and
-services/order_status.py, mounted on admin_router.
+What it does: the filtered order list (live or trash), the detail view, status
+changes, and moving an order to the trash and back.
+Where it fits: thin routes over services/admin_orders.py,
+services/order_status.py and services/order_trash.py, mounted on admin_router.
 Notes: a status change goes through the state machine and nowhere else, so the
 side effects (restocking a cancellation, writing history) cannot be skipped by
-adding another endpoint later.
+adding another endpoint later. Trash and restore never touch stock, and write an
+audit row only when they changed something - a repeated click is a no-op, not a
+second log entry.
 """
 
 from typing import Annotated
@@ -21,7 +24,7 @@ from app.schemas.admin_orders import (
     StatusChangeRequest,
     StatusHistoryOut,
 )
-from app.services import admin_orders, audit, order_status
+from app.services import admin_orders, audit, order_status, order_trash
 
 router = APIRouter(prefix="/orders", tags=["admin"])
 
@@ -47,6 +50,7 @@ async def list_orders(
     status: str | None = None,
     date_from: Annotated[str | None, Query(alias="dateFrom")] = None,
     date_to: Annotated[str | None, Query(alias="dateTo")] = None,
+    trash: bool = False,
 ) -> OrderPage:
     result = await admin_orders.list_orders(
         db,
@@ -56,6 +60,7 @@ async def list_orders(
         status=status,
         date_from=admin_orders.parse_date(date_from, "dateFrom"),
         date_to=admin_orders.parse_date(date_to, "dateTo"),
+        trash=trash,
     )
     return OrderPage.model_validate(result)
 
@@ -83,5 +88,45 @@ async def change_status(
         changes={"status": order.status, "note": payload.note},
         ip=_client_ip(request),
     )
+    await db.commit()
+    return await _detail(db, order_id)
+
+
+@router.post(
+    "/{order_id}/trash", summary="Move an order to the trash", response_model=OrderDetailOut
+)
+async def trash_order(request: Request, db: Db, admin: AdminUser, order_id: UUID) -> OrderDetailOut:
+    order, changed = await order_trash.trash(db, order_id)
+    if changed:
+        await audit.record(
+            db,
+            actor_id=admin.id,
+            action="order.trash",
+            entity_type="order",
+            entity_id=str(order_id),
+            changes={"status": order.status, "deletedAt": order.deleted_at},
+            ip=_client_ip(request),
+        )
+    await db.commit()
+    return await _detail(db, order_id)
+
+
+@router.post(
+    "/{order_id}/restore", summary="Take an order out of the trash", response_model=OrderDetailOut
+)
+async def restore_order(
+    request: Request, db: Db, admin: AdminUser, order_id: UUID
+) -> OrderDetailOut:
+    order, changed = await order_trash.restore(db, order_id)
+    if changed:
+        await audit.record(
+            db,
+            actor_id=admin.id,
+            action="order.restore",
+            entity_type="order",
+            entity_id=str(order_id),
+            changes={"status": order.status, "deletedAt": None},
+            ip=_client_ip(request),
+        )
     await db.commit()
     return await _detail(db, order_id)

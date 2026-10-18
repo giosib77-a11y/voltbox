@@ -508,6 +508,7 @@
     "UNKNOWN_SORT": "Unknown sort order.",
     "UNKNOWN_STATUS": "Unknown status.",
     "INVALID_TRANSITION": "The status can't change this way.",
+    "ORDER_IN_TRASH": "This order is in the trash — restore it first.",
     "NO_IMAGES": "No image selected.",
     "EMPTY_FILE": "The file is empty.",
     "INVALID_IMAGE": "The file is not an image.",

@@ -39,7 +39,7 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
   `alembic upgrade head` then `alembic check` → no new operations. (pytest's conftest runs the
   migrations down and up, so the downgrade is exercised too.) Backend gate green.
 
-- [ ] **T19 · Trash and restore; status frozen in the trash; the trash list**
+- [x] **T19 · Trash and restore; status frozen in the trash; the trash list**
   owner: backend-dev
   files: backend/app/services/order_trash.py (new), backend/app/services/admin_orders.py, backend/app/services/order_status.py, backend/app/schemas/admin_orders.py, backend/app/api/v1/routes/admin/orders.py, frontend/src/i18n/ka.json, frontend/src/i18n/en.json, backend/tests/test_order_trash.py (new)
   depends: T18

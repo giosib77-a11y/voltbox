@@ -4,7 +4,9 @@ What it does: shapes the admin's order list and detail, the inventory views and
 the dashboard payload.
 Where it fits: the routes under app/api/v1/routes/admin/.
 Notes: the order detail carries `allowedTransitions` so the UI renders only the
-moves the server would accept, instead of re-implementing the state machine.
+moves the server would accept, instead of re-implementing the state machine
+(empty while the order is in the trash). `deletedAt`/`purgeAt` are null for a
+live order.
 """
 
 from __future__ import annotations
@@ -31,6 +33,9 @@ class OrderListItem(ApiModel):
     item_count: int
     payment_method: str
     created_at: datetime
+    #: Set while the order is in the trash; `purge_at` is deleted_at + retention.
+    deleted_at: datetime | None
+    purge_at: datetime | None
 
 
 class OrderPage(ApiModel):
