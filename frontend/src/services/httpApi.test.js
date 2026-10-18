@@ -801,6 +801,7 @@ describe('the language the catalogue answers in', () => {
     ['getCart', () => httpApi.getCart()],
     ['saveCart', () => httpApi.saveCart([])],
     ['mergeCart', () => httpApi.mergeCart([])],
+    ['quoteCart', () => httpApi.quoteCart([])],
   ];
 
   /** The URL each call requested, with an answer every one of them can read. */
@@ -849,6 +850,45 @@ describe('the language the catalogue answers in', () => {
       getCart: '/api/v1/cart',
       saveCart: '/api/v1/cart',
       mergeCart: '/api/v1/cart/merge',
+      quoteCart: '/api/v1/cart/quote',
     });
+  });
+});
+
+describe('quoteCart', () => {
+  const LINES = [
+    {
+      productId: 'p1',
+      qty: 2,
+      snapshot: { name: 'Phone', slug: 'phone', image: '/a.png', price: 999, oldPrice: null, stock: 3 },
+    },
+  ];
+
+  afterEach(() => {
+    i18n.changeLanguage('ka');
+  });
+
+  it('posts only ids and quantities to /cart/quote, in the page language, and returns the lines', async () => {
+    i18n.changeLanguage('en');
+    const answer = [{ productId: 'p1', qty: 2, snapshot: { price: '1099.00' } }];
+    const fetchMock = vi.fn(async () => reply({ items: answer }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await httpApi.quoteCart(LINES);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    const parsed = new URL(url, 'http://shop');
+    expect(parsed.pathname).toBe('/api/v1/cart/quote');
+    expect(parsed.searchParams.get('lang')).toBe('en');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ items: [{ productId: 'p1', qty: 2 }] });
+    expect(result).toEqual(answer);
+  });
+
+  it('is a background call: a 401 is an error, never a redirect to the login page', async () => {
+    const fetchMock = vi.fn(async () => unauthorized());
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(httpApi.quoteCart(LINES)).rejects.toBeDefined();
   });
 });

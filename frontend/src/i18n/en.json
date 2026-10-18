@@ -332,7 +332,12 @@
     "maxPerProduct_one": "At most {{count}} unit of one product per order",
     "maxPerProduct_other": "At most {{count}} units of one product per order",
     "maxLines_one": "An order holds at most {{count}} different product",
-    "maxLines_other": "An order holds at most {{count}} different products"
+    "maxLines_other": "An order holds at most {{count}} different products",
+    "quote": {
+      "prices": "Prices in your cart have been updated — the totals below are current",
+      "removed": "Some products are no longer available and were removed from your cart",
+      "reduced": "Quantities were reduced to what is in stock"
+    }
   },
   "filters": {
     "remove": "Remove filter",

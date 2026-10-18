@@ -519,6 +519,13 @@ export async function mergeCart(items) {
   return resolveCart(entries);
 }
 
+// A guest's basket priced from the catalogue; unknown products are absent,
+// exactly as the API leaves out archived ones. No session, nothing stored.
+export async function quoteCart(items) {
+  await delay();
+  return resolveCart(asEntries(items));
+}
+
 export async function clearCart() {
   await delay();
   requireSession();

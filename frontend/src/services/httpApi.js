@@ -324,6 +324,21 @@ export async function mergeCart(items) {
   return merged;
 }
 
+// POST /cart/quote?lang= - a guest's basket priced from today's catalogue.
+// Public and stateless: nothing is stored and a lost product is simply absent
+// from the answer. `background` is set although there is no session to lose:
+// it is the flag that keeps a 401 from ever being turned into a redirect to the
+// login page, and this call is never something the shopper asked for.
+export async function quoteCart(items) {
+  const { items: quoted } = await request('/cart/quote', {
+    method: 'POST',
+    params: { lang: lang() },
+    body: cartPayload(items),
+    background: true,
+  });
+  return quoted;
+}
+
 // DELETE /cart
 export async function clearCart() {
   return request('/cart', { method: 'DELETE', background: true });

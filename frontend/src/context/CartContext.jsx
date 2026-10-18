@@ -78,6 +78,7 @@ const CartContext = createContext(null);
 const ACTIONS = {
   HYDRATE: 'HYDRATE',
   ADD: 'ADD',
+  REFRESH: 'REFRESH',
   REMOVE: 'REMOVE',
   SET_QTY: 'SET_QTY',
   CLEAR: 'CLEAR',
@@ -126,6 +127,53 @@ function sanitize(items) {
     .slice(0, MAX_CART_LINES);
 }
 
+/** A catalogue product -> the snapshot a cart line keeps of it. */
+function snapshotOf(product) {
+  return {
+    name: product.name,
+    slug: product.slug,
+    image: product.images?.[0] ?? '',
+    price: product.price,
+    oldPrice: product.oldPrice ?? null,
+    stock: product.stock,
+  };
+}
+
+/**
+ * A guest's lines against POST /cart/quote's answer (today's catalogue).
+ *
+ * → { items, change } where `change` is the one thing worth telling the
+ * shopper, most serious first: 'removed' (a product is gone from the answer, or
+ * is out of stock), 'reduced' (quantity cut to the stock), 'prices' (a price
+ * differs), or null. A line with stock 0 is removed rather than kept as
+ * unavailable: POST /orders refuses it outright, and a line that can never be
+ * ordered would block checkout with no way for the shopper to act on it except
+ * removing it by hand. A stock number that moved without touching the quantity
+ * is silent - the stepper already shows it.
+ */
+export function reconcileWithQuote(items, quotedLines) {
+  const fresh = new Map(fromApi(quotedLines).map((line) => [line.productId, line.snapshot]));
+  let removed = false;
+  let reduced = false;
+  let repriced = false;
+
+  const next = [];
+  for (const item of items) {
+    const snapshot = fresh.get(item.productId);
+    if (!snapshot || snapshot.stock <= 0) {
+      removed = true;
+      continue;
+    }
+    const qty = clampQty(item.qty, snapshot.stock);
+    if (qty < item.qty) reduced = true;
+    if (snapshot.price !== item.snapshot.price) repriced = true;
+    next.push({ ...item, qty, snapshot });
+  }
+
+  const change = removed ? 'removed' : reduced ? 'reduced' : repriced ? 'prices' : null;
+  return { items: next, change };
+}
+
 export function cartReducer(state, action) {
   switch (action.type) {
     case ACTIONS.HYDRATE:
@@ -147,7 +195,11 @@ export function cartReducer(state, action) {
         return {
           ...state,
           items: state.items.map((item) =>
-            item.productId === product.id ? { ...item, qty: nextQty } : item,
+            // The product passed in is fresh (the product page just loaded it), so
+            // the line takes its price and stock too, not only the quantity.
+            item.productId === product.id
+              ? { ...item, qty: nextQty, snapshot: snapshotOf(product) }
+              : item,
           ),
         };
       }
@@ -162,17 +214,18 @@ export function cartReducer(state, action) {
           {
             productId: product.id,
             qty: nextQty,
-            snapshot: {
-              name: product.name,
-              slug: product.slug,
-              image: product.images?.[0] ?? '',
-              price: product.price,
-              oldPrice: product.oldPrice ?? null,
-              stock: product.stock,
-            },
+            snapshot: snapshotOf(product),
           },
         ],
       };
+    }
+
+    case ACTIONS.REFRESH: {
+      // Not an account change: `accountItems` is left as it was, so a guest's
+      // refresh is never mistaken for lines the account supplied.
+      const { items } = reconcileWithQuote(state.items, action.payload);
+      const unchanged = JSON.stringify(items) === JSON.stringify(state.items);
+      return unchanged ? state : { ...state, items };
     }
 
     case ACTIONS.SET_QTY: {
@@ -360,6 +413,40 @@ export function CartProvider({ children }) {
     };
   }, [state.items, state.accountItems, state.hydrated]);
 
+  /**
+   * A guest's basket: replace the snapshots with today's from POST /cart/quote.
+   *
+   * The snapshot is taken when a product is added and nothing else ever
+   * refreshes it, so a guest could check out against a price the server would
+   * not charge. A signed-in cart is never touched: its lines come from the
+   * account on every load. Saving is off for a guest (`savingRef` is set only
+   * by a successful merge or restore), and REFRESH leaves `accountItems` alone,
+   * so this neither sets the unsynced marker nor sends anything anywhere.
+   *
+   * A failed request changes nothing and is not an error to the caller: the
+   * server prices the order anyway, so checkout works with the basket as it is.
+   * Lines edited while the request was out are reconciled, not overwritten,
+   * because the reducer works on the state it finds when the answer lands.
+   *
+   * → what changed ('removed' | 'reduced' | 'prices'), or null.
+   */
+  const refreshFromQuote = useCallback(async () => {
+    const sent = stateRef.current.items;
+    if (savingRef.current || sent.length === 0) return null;
+    let quoted;
+    try {
+      quoted = await api.quoteCart(sent);
+    } catch (error) {
+      noteSyncFailure('quoteCart', error);
+      return null;
+    }
+    // Signed in while the request was out: the account's lines are the truth.
+    if (savingRef.current || !Array.isArray(quoted)) return null;
+    const { change } = reconcileWithQuote(stateRef.current.items, quoted);
+    dispatch({ type: ACTIONS.REFRESH, payload: quoted });
+    return change;
+  }, []);
+
   /** → the order-size limit it ran into (see cartLimitHit), or null; the caller says so. */
   const addItem = useCallback((product, qty = 1) => {
     const hit = cartLimitHit(stateRef.current.items, product.id, qty);
@@ -447,6 +534,7 @@ export function CartProvider({ children }) {
       setQty,
       clear,
       restoreItem,
+      refreshFromQuote,
     }),
     [
       state.items,
@@ -458,6 +546,7 @@ export function CartProvider({ children }) {
       setQty,
       clear,
       restoreItem,
+      refreshFromQuote,
       mergeWithAccount,
       restoreFromAccount,
       detachFromAccount,

@@ -58,6 +58,7 @@ export const deleteAddress = api.deleteAddress;
 export const getCart = api.getCart;
 export const saveCart = api.saveCart;
 export const mergeCart = api.mergeCart;
+export const quoteCart = api.quoteCart;
 export const clearCart = api.clearCart;
 
 /* --- დიაგნოსტიკა და შეცდომები --------------------------------------------- */
@@ -92,6 +93,7 @@ export default {
   getCart,
   saveCart,
   mergeCart,
+  quoteCart,
   clearCart,
   apiMode,
 };

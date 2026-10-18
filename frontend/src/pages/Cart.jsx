@@ -10,6 +10,7 @@ import { useToast } from '../hooks/useToast.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import { useDeliveryRules } from '../hooks/useDeliveryRules.js';
 import { amountToFreeDelivery, deliveryFee, totalWithDelivery } from '../utils/pricing.js';
+import { useGuestCartQuote } from '../hooks/useGuestCartQuote.js';
 import { t } from '../i18n/index.js';
 
 /**
@@ -17,6 +18,7 @@ import { t } from '../i18n/index.js';
  */
 export default function Cart() {
   useDocumentTitle(t('cart.title'));
+  useGuestCartQuote();
 
   const { items, itemsCount, subtotal, savings, setQty, removeItem, restoreItem, clear } = useCart();
   // The cart does not know the city yet: the fee is known only once the basket

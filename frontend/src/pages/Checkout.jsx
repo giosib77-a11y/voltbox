@@ -26,6 +26,7 @@ import {
   validateForm,
 } from '../utils/validate.js';
 import { OFFERED_PAYMENT_METHODS } from '../constants/index.js';
+import { useGuestCartQuote } from '../hooks/useGuestCartQuote.js';
 import { t } from '../i18n/index.js';
 
 const EMPTY_FORM = {
@@ -45,6 +46,7 @@ const EMPTY_FORM = {
  */
 export default function Checkout() {
   useDocumentTitle(t('common.checkout'));
+  useGuestCartQuote();
 
   const navigate = useNavigate();
   const { items, itemsCount, subtotal, savings, clear } = useCart();

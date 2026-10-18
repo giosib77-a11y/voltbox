@@ -59,6 +59,7 @@ const cart = (items, subtotal = 80) => ({
   subtotal,
   savings: 0,
   clear: vi.fn(),
+  refreshFromQuote: vi.fn(async () => null),
 });
 
 /** GET /delivery as the API sends it: money as strings. */
