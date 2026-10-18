@@ -129,7 +129,14 @@ function sanitize(items) {
 export function cartReducer(state, action) {
   switch (action.type) {
     case ACTIONS.HYDRATE:
-      return { items: sanitize(action.payload), hydrated: true };
+      // `accountItems` names the array the account itself supplied. It is state,
+      // not a ref, so it is judged against the very render it belongs to: a
+      // change dispatched in the same batch makes `items` a different array and
+      // is still saved. A HYDRATE from storage leaves it undefined.
+      {
+        const items = sanitize(action.payload);
+        return { items, hydrated: true, accountItems: action.fromAccount ? items : undefined };
+      }
 
     case ACTIONS.ADD: {
       const { product, qty = 1 } = action.payload;
@@ -251,7 +258,7 @@ export function CartProvider({ children }) {
     writeJSON(UNSYNCED_KEY, true);
     try {
       const merged = await api.mergeCart(stateRef.current.items);
-      dispatch({ type: ACTIONS.HYDRATE, payload: fromApi(merged) });
+      dispatch({ type: ACTIONS.HYDRATE, payload: fromApi(merged), fromAccount: true });
       savingRef.current = true;
       removeKey(UNSYNCED_KEY);
     } catch (error) {
@@ -279,7 +286,7 @@ export function CartProvider({ children }) {
     }
     try {
       const saved = await api.getCart();
-      dispatch({ type: ACTIONS.HYDRATE, payload: fromApi(saved) });
+      dispatch({ type: ACTIONS.HYDRATE, payload: fromApi(saved), fromAccount: true });
       savingRef.current = true;
     } catch (error) {
       noteSyncFailure('getCart', error);
@@ -320,6 +327,13 @@ export function CartProvider({ children }) {
   // not overwrite a real cart.
   useEffect(() => {
     if (!state.hydrated || !savingRef.current) return undefined;
+    // Lines the account just handed us are its own: sending them back is
+    // redundant, and a lost send would leave the unsynced marker set, so the
+    // next load would merge a basket that is by then stale.
+    if (state.items === state.accountItems) {
+      accountHoldsCartRef.current = true;
+      return undefined;
+    }
     // One change ahead of the account from here until the save comes back, and
     // a sign-out in that window keeps the basket rather than trusting a save
     // that has not happened yet.
@@ -344,7 +358,7 @@ export function CartProvider({ children }) {
       superseded = true;
       clearTimeout(timer);
     };
-  }, [state.items, state.hydrated]);
+  }, [state.items, state.accountItems, state.hydrated]);
 
   /** → the order-size limit it ran into (see cartLimitHit), or null; the caller says so. */
   const addItem = useCallback((product, qty = 1) => {

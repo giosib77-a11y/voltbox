@@ -246,8 +246,11 @@ describe('CartAccountSync', () => {
     const { rerender } = renderSync(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
 
-    // Let the save that follows the merge land first, so the account is known
-    // to hold the basket and the failure below is what takes that back.
+    // Let a save land first, so the account is known to hold the basket and
+    // the failure below is what takes that back. (The merge's own result is
+    // not sent back, so this save is a change made here.)
+    await waitFor(() => expect(localStorage.getItem('cart-unsynced:v1')).toBeNull());
+    screen.getByText('add').click();
     await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(1), { timeout: 2000 });
     await api.saveCart.mock.results[0].value;
 
@@ -365,6 +368,65 @@ describe('emptying the cart', () => {
   });
 });
 
+describe('lines that came from the account', () => {
+  // The account's own cart is not a local change: sending it back is redundant,
+  // and losing that request would leave a marker that re-arms the merge.
+  const UNSYNCED = 'cart-unsynced:v1';
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 1200));
+
+  it('are not sent back after a restore, and leave no marker', async () => {
+    api.getCart.mockResolvedValueOnce([apiLine('p1', 2)]);
+
+    renderRestored();
+
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
+    expect(localStorage.getItem(UNSYNCED)).toBeNull();
+    await settle();
+    expect(api.saveCart).not.toHaveBeenCalled();
+    expect(localStorage.getItem(UNSYNCED)).toBeNull();
+  });
+
+  it('are not sent back after a merge, and the marker is gone', async () => {
+    renderSync(U1);
+
+    await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(api.saveCart).not.toHaveBeenCalled();
+    expect(localStorage.getItem(UNSYNCED)).toBeNull();
+  });
+
+  it('do not stop a later local change from saving, and the marker clears on success', async () => {
+    api.getCart.mockResolvedValueOnce([apiLine('p1', 2)]);
+    renderRestored();
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
+
+    screen.getByText('add').click();
+
+    await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    expect(api.saveCart).toHaveBeenCalledWith([expect.objectContaining({ productId: 'p1', qty: 4 })]);
+    await api.saveCart.mock.results[0].value;
+    await waitFor(() => expect(localStorage.getItem(UNSYNCED)).toBeNull());
+  });
+
+  it('do not swallow a change that lands in the same batch as the hydrate', async () => {
+    let release;
+    api.getCart.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)));
+    renderRestored();
+    await waitFor(() => expect(api.getCart).toHaveBeenCalledTimes(1));
+
+    // Resolve and click in one tick: both dispatches reach one render.
+    await act(async () => {
+      release([apiLine('p1', 2)]);
+      await Promise.resolve();
+      await Promise.resolve();
+      screen.getByText('add').click();
+    });
+
+    await waitFor(() => expect(api.saveCart).toHaveBeenCalled(), { timeout: 2000 });
+    expect(api.saveCart).toHaveBeenLastCalledWith([expect.objectContaining({ qty: 4 })]);
+  });
+});
+
 describe('a session restored on page load', () => {
   // Two devices on one account. The laptop's localStorage still holds what the
   // phone has since bought or removed; the server cart is the truth.
@@ -414,13 +476,12 @@ describe('a session restored on page load', () => {
     authValue = { user: U1, initializing: false };
     const first = renderSync(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(1), { timeout: 2000 });
-    await api.saveCart.mock.results[0].value;
+    await waitFor(() => expect(localStorage.getItem(UNSYNCED)).toBeNull());
 
     api.saveCart.mockRejectedValueOnce(new Error('offline'));
     screen.getByText('add').click();
-    await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(2), { timeout: 2000 });
-    await expect(api.saveCart.mock.results[1].value).rejects.toThrow();
+    await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    await expect(api.saveCart.mock.results[0].value).rejects.toThrow();
     expect(warn).toHaveBeenCalled();
     first.unmount();
 
@@ -430,11 +491,10 @@ describe('a session restored on page load', () => {
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
     expect(api.mergeCart).toHaveBeenCalledWith([expect.objectContaining({ productId: 'p1', qty: 2 })]);
     expect(api.getCart).not.toHaveBeenCalled();
-    await waitFor(() => expect(api.saveCart).toHaveBeenCalled(), { timeout: 2000 });
-    await api.saveCart.mock.results[0].value;
+    await waitFor(() => expect(localStorage.getItem(UNSYNCED)).toBeNull());
     cleanup();
 
-    // Reload 2: the merge and the save that followed are confirmed, so no marker.
+    // Reload 2: the merge is confirmed, so no marker.
     vi.clearAllMocks();
     api.getCart.mockResolvedValueOnce([]);
     renderRestored();
@@ -471,6 +531,8 @@ describe('a session restored on page load', () => {
     localStorage.setItem('cart:v1', JSON.stringify([localLine('p1', 2)]));
     const { rerender } = renderSync(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(localStorage.getItem(UNSYNCED)).toBeNull());
+    screen.getByText('add').click();
     await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(1), { timeout: 2000 });
     await api.saveCart.mock.results[0].value;
 
