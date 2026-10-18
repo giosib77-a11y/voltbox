@@ -11,7 +11,17 @@
   - frontend: `npm run lint` ✅ · `npm test` ✅ **580 tests / 46 files** · build `http` ✅ · build `mock` ✅ ·
     `npm audit --omit=dev --audit-level=high` ✅ (0)
   - არ გაშვებულა: e2e workflow, Docker image build და API surface შემოწმება, frontend-ის mock-data export job.
-- **შედეგი:** 0 critical · 7 should-fix · 9 nit
+- **შედეგი:** 0 critical · 7 should-fix · 9 nit (აუდიტი); მიზნობრივმა re-review-ებმა დაამატა 2 should-fix (A-017,
+  A-018) და 7 nit (A-019–A-025)
+
+**`/fix` 2026-10-18** (არჩეული: A-001 A-002 A-003 A-005 A-006 A-007; re-review-ს ახალი should-fix-ები A-017, A-018 და
+A-003-ის ფანჯარა A-019 იმავე რაუნდში).
+- fixed (verified): A-001, A-002, A-003, A-005, A-006, A-007, A-017, A-018, A-019 — თითოეულს ტესტი აქვს, რომელიც
+  ძველ კოდზე ვარდებოდა; მიზნობრივმა re-review-მ (ვინც იპოვა) ყველა დახურულად ჩათვალა.
+- ღია should-fix: **A-004** (არჩეულ სიაში არ იყო). ღია nit-ები: A-008–A-016, A-020–A-025.
+- საბოლოო შემოწმება (`73ae127`, tester): backend ruff ✅ · format ✅ (161) · mypy ✅ (143) · **pytest 1029** (baseline
+  1017, +12) · alembic upgrade head + check ✅; frontend lint ✅ · **vitest 608 / 49 ფაილი** (baseline 580 / 46, +28) ·
+  build http ✅ · build mock ✅ · npm audit 0. ბრაუზერში არცერთი გასწორება არ შემოწმებულა.
 
 PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში უკვე ჩაწერილი საკითხები აქ აღარ მეორდება.
 Stage 1-ის გამოსწორებებში (T0–T17) რეგრესია ვერ ვიპოვეთ.
@@ -36,7 +46,7 @@ Stage 1-ის გამოსწორებებში (T0–T17) რეგ�
   შეცდომა ითვლება `_record_failure`-ით, დაბლოკილ ანგარიშზე პასუხი `TOO_MANY_LOGIN_ATTEMPTS`-ია (როგორც login-ში).
   ტესტები: მე-6 ცდა → 429; არასწორი მიმდინარე პაროლი N-ჯერ → lock.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `1f2c637`; ტესტები `test_auth.py` (rate limit 429, lock `realistic_client`-ით) ძველ კოდზე ვარდებოდა. re-review-მ A-017 იპოვა
 
 ### A-002 · should-fix · ფასის ფილტრი კატეგორიის ყველაზე ძვირ პროდუქტს მალავს, როცა ფასი მთელი არ არის
 - **ფაილი:** `backend/app/services/catalog.py:363-366`; `frontend/src/components/catalog/PriceRangeSlider.jsx:9-12,34-37`
@@ -49,7 +59,7 @@ Stage 1-ის გამოსწორებებში (T0–T17) რეგ�
 - **გამოსწორება:** `min`/`current_min` → `math.floor`, `max`/`current_max` → `math.ceil` (Decimal-ზე).
   ტესტი: 129.99-იან პროდუქტზე `max == 130` და `price=50-130` მას აბრუნებს.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `9814a5e`; `TestPriceBoundsContainFractionalPrices` ძველ კოდზე ვარდებოდა (`129 != 130`)
 
 ### A-003 · should-fix · შესული მომხმარებლის კალათა ყოველ გვერდის ჩატვირთვაზე ერწყმის, ამიტომ ნაყიდი და წაშლილი ხაზები სხვა მოწყობილობიდან ბრუნდება
 - **ფაილი:** `frontend/src/context/CartAccountSync.jsx:31-46`, `frontend/src/context/CartContext.jsx:233-241`,
@@ -65,7 +75,7 @@ Stage 1-ის გამოსწორებებში (T0–T17) რეგ�
 - **გამოსწორება:** merge მხოლოდ ნამდვილ შესვლაზე (login/register action). უკვე შესულის გვერდის ჩატვირთვაზე
   ანგარიშის კალათა იკითხება `GET /cart`-ით. ტესტი: ორი „მოწყობილობა“, წაშლა ან შეკვეთა ერთზე, მეორის reload.
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `e1081e4` (+ `STORAGE_KEYS.cartUnsynced` privacy-ის ტესტში); „ორი მოწყობილობის“ ტესტები ძველ კოდზე ვარდებოდა. re-review-მ A-019 იპოვა
 
 ### A-004 · should-fix · სტუმრის კალათის ფასი და მარაგი არასდროს ახლდება — checkout აჩვენებს ჯამს, რომელსაც სერვერი არ ჩამოჭრის
 - **ფაილი:** `frontend/src/context/CartContext.jsx:118-130` (ADD არსებულ ხაზზე მხოლოდ `qty`), `frontend/src/pages/Checkout.jsx:385-413`,
@@ -81,7 +91,7 @@ Stage 1-ის გამოსწორებებში (T0–T17) რეგ�
   საჯარო, rate limit-იანი `POST /cart/quote` იმავე `services/cart._resolve`-ით, ≤20 ხაზით, ან არსებული product
   endpoint-ები, თუ ერთი მოთხოვნით შეიძლება. გამქრალი ხაზი ამოიღება შეტყობინებით. ADD არსებულ ხაზზე snapshot-საც აახლებს.
 - **owner:** frontend-dev (+ backend-dev, თუ ახალი endpoint)
-- **status:** open
+- **status:** open — 2026-10-18-ის `/fix`-ის არჩეულ სიაში არ იყო
 
 ### A-005 · should-fix · პროფილის ცვლილება სესიაში არ იწერება — reload-ის შემდეგ ძველი მონაცემი ბრუნდება და შემდეგი შენახვა მას სერვერზე აბრუნებს
 - **ფაილი:** `frontend/src/services/httpApi.js:221-223`, `frontend/src/context/AuthContext.jsx:19-23,58-62`,
@@ -97,7 +107,7 @@ Stage 1-ის გამოსწორებებში (T0–T17) რეგ�
 - **შედეგი:** მომხმარებლის მონაცემი ჩუმად ბრუნდება ძველზე, ან პროფილის შენახვა შეუძლებელი ხდება.
 - **გამოსწორება:** წარმატებისას `writeSession({ ...readSession(), user: updated })`. ტესტი `httpApi.test.js`-ში.
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `a99c818`; `httpApi.test.js` ძველ კოდზე ვარდებოდა
 
 ### A-006 · should-fix · პაროლის შეცვლის შემდეგ UI „შესულად“ რჩება, თუმცა სესია უკვე გაუქმებულია
 - **ფაილი:** `frontend/src/pages/Account/ChangePassword.jsx:44-51`, `frontend/src/context/AuthContext.jsx:64`;
@@ -111,7 +121,7 @@ Stage 1-ის გამოსწორებებში (T0–T17) რეგ�
 - **გამოსწორება:** უმარტივესი: წარმატებისას `clearSession()` + `setUser(null)` და ნავიგაცია login-ზე ტექსტით
   „პაროლი შეიცვალა — შედით ახლით“ (i18n ორივე ფაილში). ტესტი.
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `79a2619`; `ChangePassword.test.jsx` და `httpApi.test.js` ძველ კოდზე ვარდებოდა
 
 ### A-007 · should-fix · ფონური მოთხოვნის 401 საჯარო გვერდიდან (მთავრის ჩათვლით) login-ზე გადაჰყავს
 - **ფაილი:** `frontend/src/services/session.js:108-112,186-189`, `frontend/src/services/httpClient.js:209-215`,
@@ -127,7 +137,34 @@ Stage 1-ის გამოსწორებებში (T0–T17) რეგ�
   გადამისამართების გარეშე. გადამისამართება მხოლოდ დაცულ გვერდებზე (`RequireAuth`, admin): flag `request()`-ში ან
   `setSessionLostHandler`-ით. ტესტი: საჯარო გვერდზე ვადაგასული სესია → სტუმარი, გადამისამართება არ ხდება.
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `8581878`; `sessionLost.test.js` ძველ კოდზე ვარდებოდა. re-review-მ A-018 იპოვა
+
+### A-017 · should-fix · სწორი პაროლი პაროლს/email-ს მაინც ცვლის, თუ ანგარიში hash-ის დროს დაიბლოკა
+- **ნაპოვნია:** A-001-ის მიზნობრივ re-review-ში (security-auditor)
+- **ფაილი:** `backend/app/services/auth.py` (`change_password`, `update_profile`-ის email-ის ნაწილი)
+- **სცენარი:** lock მოწმდებოდა მოთხოვნის დასაწყისში წაკითხულ row-ზე, hash-ის შემდეგ ჩაწერა კი უპირობო იყო. ნაპარავი
+  token + ბევრი IP-დან ერთდროული ცდები: არასწორები ანგარიშს ბლოკავს, მაგრამ მათ შორის მყოფი სწორი პაროლი მაინც
+  ცვლის პაროლს ან email-ს (email → სამუდამო ხელში ჩაგდება forgot-password-ით).
+- **გამოსწორება:** ორივე ჩაწერა პირობითი `UPDATE ... RETURNING`-ია (`_unlocked(now)` და უცვლელი password hash),
+  როგორც login-ის `_clear_failures`. row არ დაბრუნდა → 429 (დაბლოკილია) ან 400 `INVALID_CURRENT_PASSWORD` (პაროლი
+  შუალედში შეიცვალა, არ ითვლება). reset token იშლება მხოლოდ email-ის UPDATE-ის წარმატების შემდეგ.
+- **owner:** backend-dev
+- **status:** fixed (verified) — `c12a05e`; 4 ახალი ტესტი („lock hash-ის დროს“ → 429, პაროლი/email უცვლელი) ძველ
+  კოდზე ვარდებოდა (`200 != 429`, `200 != 400`). რეალური პარალელური burst Postgres-ზე არ გაშვებულა — ტესტი
+  ცვლილებას `verify_password_async`-ის შიგნით სვამს. re-review (security-auditor): დახურულია.
+
+### A-018 · should-fix · ჩატვირთვისას დასრულებული სესია „კალათა ანგარიშზე ვერ შეინახა“-დ ჩანდა
+- **ნაპოვნია:** A-007-ის მიზნობრივ re-review-ში (code-reviewer)
+- **ფაილი:** `frontend/src/context/CartAccountSync.jsx`
+- **სცენარი:** ვადაგასული სესიით დაბრუნება (onrender-ზე — ნებისმიერი ვიზიტი 30 წუთის შემდეგ) → `GET /cart` 401 →
+  refresh ვერ ხერხდება → `setUser(null)` sign-out-ად აღიქმებოდა და ჩანდა `cart.keptInBrowser` („ანგარიშზე შენახვა
+  ვერ მოხერხდა“) — შენახვა არც უცდია. სესიის დასრულება არსად ეწერა, ამიტომ checkout-ზე შეკვეთა შეიძლებოდა ჩუმად
+  სტუმრისად გაფორმებულიყო.
+- **გამოსწორება:** სესიის დასრულება (`subscribeSessionEnded`) sign-out-ისგან გაირჩევა: კალათა იგივენაირად რჩება,
+  toast — `errors.sessionExpired`. ხელით sign-out უცვლელია.
+- **owner:** frontend-dev
+- **status:** fixed (verified) — `6741f9c`; „a session that ended“ ტესტი ძველ კოდზე ვარდებოდა. checkout-ის ფორმის
+  წინასწარი შევსება გამოსულის მონაცემებით უცვლელია (ახლა შეტყობინება ჩანს). re-review (code-reviewer): დახურულია.
 
 ---
 
@@ -192,6 +229,63 @@ Stage 1-ის გამოსწორებებში (T0–T17) რეგ�
 - **გამოსწორება:** ბრძანებაში `VOLTBOX_NO_DOTENV=1 JWT_SECRET=<dummy ≥32>`, როგორც CI-ში (`backend.yml:83`).
 - **owner:** backend-dev · **status:** open
 
+### A-019 · nit · restore/merge-ის შემდეგ ანგარიშის საკუთარი კალათა ისევ PUT-ით იგზავნება და marker-ს აყენებს
+- **ნაპოვნია:** A-003-ის მიზნობრივ re-review-ში (code-reviewer)
+- **ფაილი:** `frontend/src/context/CartContext.jsx` (save effect, `restoreFromAccount`, `mergeWithAccount`)
+- **სცენარი:** სერვერიდან მოსული `HYDRATE` save effect-ს უშვებს: marker ყენდება და იგივე შიგთავსი `PUT`-ით მიდის. tab
+  ~1 წამში დაიხურა ან ეს `PUT` ჩავარდა → marker რჩება → შემდეგი ჩატვირთვა ძველ კალათას merge-ს უკეთებს და, თუ შუალედში
+  სხვა მოწყობილობაზე შეკვეთა გაფორმდა, ნაყიდი ხაზები ბრუნდება (A-003 მცირე ფანჯარაში).
+- **გამოსწორება:** სერვერის `HYDRATE`-ის შემდეგი ერთი save გამოიტოვოს (არც marker, არც `PUT`).
+- **owner:** frontend-dev · **status:** fixed (verified) — `73ae127`; „not sent back after a restore/merge“ ტესტები
+  ძველ კოდზე ვარდებოდა (marker დგებოდა, PUT იგზავნებოდა). re-review (code-reviewer): დახურულია. მეორე tab-ის გზა — A-023.
+
+### A-020 · nit · 5/წთ ლიმიტი სახელის/ტელეფონის ჩვეულებრივ შენახვაზეც მოქმედებს
+- **ნაპოვნია:** A-001-ის re-review-ში (security-auditor)
+- **ფაილი:** `backend/app/api/v1/routes/auth.py` (`update_me`)
+- **სცენარი / შედეგი:** მე-6 შენახვა წუთში → 429 `RATE_LIMITED`. ჩვეულებრივ გამოყენებაში არ ხდება; ტექსტი სწორია.
+- **გამოსწორება (თუ საჭიროა):** ლიმიტი მხოლოდ email-ის შეცვლაზე.
+- **owner:** backend-dev · **status:** open
+
+### A-021 · nit · წარმატებული პაროლის/email-ის შეცვლა `failed_login_count`-ს არ ანულებს
+- **ნაპოვნია:** A-001-ის დეველოპერის report-ში
+- **ფაილი:** `backend/app/services/auth.py` (`change_password`, `update_profile`)
+- **სცენარი / შედეგი:** ამ route-ებზე დაშვებული შეცდომები ერთ lock-ში გროვდება, სანამ შემდეგი login ან reset არ
+  გაანულებს. იშვიათად შეიძლება lock ადრე მოვიდეს.
+- **გამოსწორება:** წარმატებისას პირობითი გასუფთავება, როგორც `_clear_failures`.
+- **owner:** backend-dev · **status:** open
+
+### A-022 · nit · reset-link-ისა და პაროლის/email-ის ერთდროული შეცვლა deadlock-ს იძლევა (წინასწარ არსებული)
+- **ნაპოვნია:** A-017-ის re-review-ში (security-auditor)
+- **ფაილი:** `backend/app/services/auth.py` (`reset_password` vs `change_password` → `revoke_all`, email-ის შეცვლა)
+- **სცენარი / შედეგი:** `reset_password` ჯერ reset-token-ის row-ს იღებს, მერე `users`-ს; პაროლის/email-ის შეცვლა —
+  პირიქით. ერთსა და იმავე წამში ორივე → Postgres deadlock → ერთს 500. მეორე სრულდება, უსაფრთხოება არ ზიანდება.
+- **გამოსწორება:** `reset_password`-მა `users`-ის row token-ის `DELETE`-მდე აიღოს.
+- **owner:** backend-dev · **status:** open
+
+### A-023 · nit · მეორე tab-ის storage HYDRATE ანგარიშის კალათას ისევ PUT-ით აგზავნის და marker-ს აყენებს (წინასწარ არსებული)
+- **ნაპოვნია:** A-019-ის re-review-ში (code-reviewer)
+- **ფაილი:** `frontend/src/context/CartContext.jsx` (`handleStorage`, save effect)
+- **სცენარი / შედეგი:** tab A ანგარიშის კალათას აღადგენს და `cart:v1`-ს წერს; tab B storage event-ზე HYDRATE-ს
+  აკეთებს `fromAccount`-ის გარეშე, საერთო marker-ს აყენებს და იგივეს PUT-ით აგზავნის. B ~1 წამში დაიხურა ან PUT
+  დაიკარგა → შემდეგი ჩატვირთვა merge-ს გააკეთებს. ძალიან ვიწრო ფანჯარა.
+- **გამოსწორება:** storage-ის HYDRATE ლოკალურ ცვლილებად არ ჩაითვალოს (PUT-ზე პასუხისმგებელია tab, რომელმაც ჩაწერა).
+- **owner:** frontend-dev · **status:** open
+
+### A-024 · nit · ტესტი „a later manual sign-out … still says the cart stayed“ flag-ის განულებას არ ამოწმებს
+- **ნაპოვნია:** A-018-ის re-review-ში (code-reviewer)
+- **ფაილი:** `frontend/src/context/CartAccountSync.test.jsx:306-319`
+- **სცენარი / შედეგი:** ტესტი სესიას წინასწარ არ ასრულებს, ამიტომ გაივლიდა კოდზეც, რომელიც flag-ს არასდროს ანულებს.
+- **გამოსწორება:** `endSession()` → ხელახლა შესვლა → ხელით გასვლა → KEPT, არა EXPIRED.
+- **owner:** frontend-dev · **status:** open
+
+### A-025 · nit · A-003-ის ორ ტესტში `saveCart.mock.calls`-ის ციკლი A-019-ის შემდეგ ცარიელზე გადის
+- **ნაპოვნია:** A-019-ის re-review-ში (code-reviewer)
+- **ფაილი:** `frontend/src/context/CartAccountSync.test.jsx:443,457`
+- **სცენარი / შედეგი:** ციკლის assert-ები აღარაფერს ამოწმებს (ტესტები სხვა assert-ებით — merge არ გაიგზავნა, კალათა
+  ცარიელია — მაინც აზრიანია).
+- **გამოსწორება:** `expect(api.saveCart).not.toHaveBeenCalled()`.
+- **owner:** frontend-dev · **status:** open
+
 ---
 
 ## შესამოწმებელი (დაუდასტურებელი)
@@ -205,6 +299,12 @@ Stage 1-ის გამოსწორებებში (T0–T17) რეგ�
 - **`ORDER_RATE_LIMIT` (5/წთ; 30/დღე, IP-ზე)** ითვლის 401→refresh→retry წყვილს და `INSUFFICIENT_STOCK`-ით
   უარყოფილ ცდებსაც. Georgian mobile CGNAT-ზე ბევრ მყიდველს ერთი IP აქვს. ამ მასშტაბზე სავარაუდოდ OK-ია, მაგრამ
   არ გაზომილა.
+- **multi-tab sign-out / სესიის დასრულება** (code-reviewer, re-review). `auth:v1`-ზე storage listener არ არის:
+  ერთ tab-ში გასვლა მეორემ არ იცის, მისი შემდეგი save token-ის გარეშე ვარდება და marker-ს ტოვებს. ზიანი მხოლოდ შემდეგ
+  ნამდვილ შესვლაზეა შესაძლებელი (merge ისედაც ეშვება). დადასტურებული არ არის.
+- **ტესტი „do not swallow a change that lands in the same batch as the hydrate“** (A-019) შეიძლება ერთ render-ს არ
+  ამოწმებდეს (click და HYDRATE სხვადასხვა lane-ზე) — ძველ კოდზეც გადიოდა. production-ის შედეგი ორივე შემთხვევაში
+  სწორია; გარანტია `items !== accountItems`-ის იდენტობაზეა, მსჯელობით და არა ტესტით.
 - **CI-ის ნაწილები, რომლებიც ლოკალურად არ გაშვებულა:** e2e (Playwright), Docker image build და API surface,
   frontend mock-data export და shape check.
 
