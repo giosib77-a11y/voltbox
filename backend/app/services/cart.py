@@ -123,6 +123,18 @@ async def get_cart(db: AsyncSession, user_id: uuid.UUID, *, lang: Language) -> l
     return await _resolve(db, _clean(stored.items if stored else []), lang=lang)
 
 
+async def quote_cart(
+    db: AsyncSession, items: list[dict[str, Any]] | None, *, lang: Language
+) -> list[dict[str, Any]]:
+    """A cart that is not saved, priced from today's catalogue.
+
+    For a guest, whose basket lives only in the browser with the snapshot taken
+    when each product was added. Same resolution as the saved cart, so the two
+    cannot disagree; nothing is written.
+    """
+    return await _resolve(db, _clean(items), lang=lang)
+
+
 async def _store(db: AsyncSession, user_id: uuid.UUID, wanted: dict[uuid.UUID, int]) -> None:
     """Write the cart, creating the row if this account has never had one.
 

@@ -140,9 +140,10 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
   admin audit log stores IP. No card data is ever handled.
 - Secrets only in `backend/.env` (never read or committed) and Render env;
   `SUPABASE_SERVICE_ROLE_KEY` backend-only.
-- Rate limits per client IP (`app/core/rate_limit.py`): auth 5/min, guest order
-  lookup 10/min, client error reports 20/min, everything else 60/min; password
-  reset also 3/hour per email address. Redis-backed in production; client IP
+- Rate limits per client IP (`app/core/rate_limit.py`): auth 5/min (incl. password
+  change and profile update), `POST /orders` 5/min and 30/day, guest order lookup
+  10/min, client error reports 20/min, guest cart quote (`POST /cart/quote`) 30/min,
+  everything else 60/min; password reset also 3/hour per email address. Redis-backed in production; client IP
   only through `FORWARDED_ALLOW_IPS` (never `*`).
 - Production startup refuses unsafe config (CORS `*`, missing
   `TRUSTED_HOSTS`/`FORWARDED_ALLOW_IPS`, short `JWT_SECRET`, ...).
@@ -169,6 +170,17 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
+
+### 2026-10-18 — Guest carts are priced by a public `POST /cart/quote` (audit A-004)
+- Decision: a public, rate-limited (30/min per IP) endpoint returns today's price, stock and
+  name for a guest's cart lines; the storefront refreshes a guest's cart with it when the
+  cart or checkout opens. It stores nothing and ignores any token. Approved by the owner.
+- Reason: a guest's snapshot was taken when the product was added and nothing refreshed
+  it, so checkout could show a total (and a free-delivery threshold) the server would not
+  charge. Signed-in carts were already fresh through `GET /cart`.
+- Alternatives considered: the existing product endpoints, one request per line.
+- Why rejected: up to 20 requests per page, and no shared resolution with the saved cart -
+  the quote uses the same `services/cart._resolve`, so the two cannot disagree.
 
 ### 2026-10-10 — Order and cart share one size cap (20 lines, 10 units)
 - Decision: orders and saved carts both take at most 20 products and 10 units each.

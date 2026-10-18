@@ -81,6 +81,12 @@ CLIENT_ERROR_RATE_LIMIT = "20/minute"
 #: Idempotency-Key replay counts as a request like any other.
 ORDER_RATE_LIMIT = "5/minute;30/day"
 
+#: Pricing a guest's cart (`POST /cart/quote`). The storefront calls it once
+#: when a guest opens the cart or checkout, so thirty a minute is generous for
+#: a shopper who edits the basket as they go, while a script walking the
+#: catalogue id by id through this public endpoint meets the limit quickly.
+CART_QUOTE_RATE_LIMIT = "30/minute"
+
 DEFAULT_LIMIT = "60/minute"
 
 #: What slowapi gets when no Redis is configured: counters in this process only.

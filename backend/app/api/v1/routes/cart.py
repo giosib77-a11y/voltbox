@@ -1,21 +1,30 @@
-"""კალათის მარშრუტები — მხოლოდ ავტორიზებულებისთვის.
+"""კალათის მარშრუტები — შენახვა მხოლოდ ავტორიზებულებისთვის, `POST /quote` ყველასთვის.
 
 A guest has no account to hang a cart on, so theirs stays in the browser and
-these routes simply do not apply to them. For everyone else the browser is
-still where shopping happens - every `+` and `-` is local and instant - and
-this is the copy that survives a different device or a cleared browser.
+the saving routes (GET, PUT, DELETE, `POST /merge`) do not apply to them. For
+everyone else the browser is still where shopping happens - every `+` and `-`
+is local and instant - and this is the copy that survives a different device or
+a cleared browser.
 
 `PUT` replaces, `POST /merge` folds in. The difference matters exactly once: at
 sign-in, when the person may have a basket in this browser *and* one saved from
 somewhere else, and replacing would throw one of them away without asking.
 
+`POST /quote` is the one public route here. A guest's snapshot is taken when
+the product is added and nothing else refreshes it, so the cart and checkout ask
+this for today's price and stock before showing a total the server would not
+charge. It stores nothing, ignores any token (an expired one must not turn a
+guest into a 401) and is rate limited, because it answers for any product id a
+stranger sends.
+
 Each answer names its products in the page's `lang`, like the catalogue does.
 """
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
 
 from app.core.deps import CurrentUser, Db
 from app.core.language import DEFAULT_LANGUAGE, LanguageQuery
+from app.core.rate_limit import CART_QUOTE_RATE_LIMIT, limiter
 from app.schemas.cart import CartOut, CartRequest
 from app.services import cart as cart_service
 
@@ -70,6 +79,25 @@ async def merge_cart(
     items = await cart_service.merge_cart(db, user.id, _payload(payload), lang=lang)
     await db.commit()
     return CartOut(items=items)
+
+
+@router.post(
+    "/quote",
+    summary="Price a cart that is not saved",
+    description=(
+        "For a guest, whose cart lives only in the browser. Public: any "
+        "Authorization header is ignored. Each line comes back with the "
+        "catalogue's price, old price, stock, name and image as they are now; "
+        "a product that is archived, inactive or unknown is absent rather than "
+        "an error. Nothing is stored. Rate limited per address."
+    ),
+    response_model=CartOut,
+)
+@limiter.limit(CART_QUOTE_RATE_LIMIT)
+async def quote_cart(
+    request: Request, db: Db, payload: CartRequest, lang: LanguageQuery = DEFAULT_LANGUAGE
+) -> CartOut:
+    return CartOut(items=await cart_service.quote_cart(db, _payload(payload), lang=lang))
 
 
 @router.delete("", summary="Empty the saved cart", status_code=status.HTTP_204_NO_CONTENT)
