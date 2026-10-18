@@ -62,6 +62,11 @@ class Order(UUIDPrimaryKey, Timestamps, Base):
     # and on guest orders placed before migration 0013.
     lookup_token_hash: Mapped[str | None] = mapped_column(String(64))
 
+    # The admin order trash. NULL is a live order; a timestamp is the moment an
+    # admin moved it to the trash, from where it can be restored. It is
+    # hard-deleted 30 days after this value (services/order_trash.py).
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan", lazy="selectin"
     )
@@ -96,6 +101,14 @@ class Order(UUIDPrimaryKey, Timestamps, Base):
         # the dashboard would just start scanning the table.
         Index("ix_orders_status", "status"),
         Index("ix_orders_created_at", text("created_at DESC")),
+        # Declared here as well as created in migration 0016, for the same
+        # reason as the two above: autogenerate would otherwise propose
+        # dropping it. Partial because only trashed rows are ever looked up
+        # through it (the trash list, the retention sweep); the live rows are
+        # nearly the whole table and need no index on this column.
+        Index(
+            "ix_orders_deleted_at", "deleted_at", postgresql_where=text("deleted_at IS NOT NULL")
+        ),
     )
 
 

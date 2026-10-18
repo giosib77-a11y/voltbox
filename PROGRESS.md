@@ -22,7 +22,7 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
 
 ## Tasks
 
-- [ ] **T18 · Migration 0016: `orders.deleted_at` + partial index**
+- [x] **T18 · Migration 0016: `orders.deleted_at` + partial index**
   owner: backend-dev
   files: backend/alembic/versions/0016_orders_deleted_at.py (new), backend/app/db/models/orders.py, backend/tests/test_order_trash_schema.py (new)
   depends: —
@@ -201,6 +201,11 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
   `backend/app/api/v1/routes/admin/orders.py` likewise (T19 → T20).
 
 ## Backlog (needs user decision)
+
+- Design nits from DESIGN.md (2026-10-18, designer): admin palette misses AA on ink-500/ink-100 (4.37),
+  danger-fg/danger-50 (4.41) and control border ink-300/white (1.66); admin uses accent (orange) as its main
+  colour while the palette says accent is for prices; four focus styles; two badge systems; raw `rounded-lg`/
+  `text-[11px]` instead of tokens; admin has no mobile navigation below `md` (low).
 
 - **Stage 2 — two proposed Accepted Risks** (PROJECT.md → Accepted Risks): a permanently deleted
   order is gone (only the audit row remains), and deleting never returns stock. Owner to confirm.
