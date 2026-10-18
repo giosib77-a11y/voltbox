@@ -436,6 +436,40 @@ describe('register payload', () => {
   });
 });
 
+describe('updateProfile and the stored session', () => {
+  it('writes the server user into the stored session and keeps the token', async () => {
+    // The form is restored from `auth:v1` on a full load; if the edit stays only
+    // in React state, the old name/email comes back and the next save sends it.
+    writeSession({ user: { id: 'u1', firstName: 'Gio', email: 'a@b.ge' }, token: 'tok' });
+    const updated = { id: 'u1', firstName: 'Giorgi', email: 'b@b.ge' };
+    global.fetch = vi.fn(async () => reply(updated));
+
+    const result = await httpApi.updateProfile({ firstName: 'Giorgi', email: 'b@b.ge' });
+
+    expect(result).toEqual(updated);
+    expect(readSession()).toEqual({ user: updated, token: 'tok' });
+  });
+
+  it('does not create a session when there is none', async () => {
+    global.fetch = vi.fn(async () => reply({ id: 'u1', firstName: 'Giorgi' }));
+
+    await httpApi.updateProfile({ firstName: 'Giorgi' });
+
+    expect(readSession()).toBeNull();
+  });
+
+  it('leaves the stored session alone when the update is rejected', async () => {
+    writeSession({ user: { id: 'u1', firstName: 'Gio' }, token: 'tok' });
+    global.fetch = vi.fn(async () =>
+      reply({ error: { code: 'INVALID_CURRENT_PASSWORD', message: 'bad' } }, 400),
+    );
+
+    await expect(httpApi.updateProfile({ firstName: 'X' })).rejects.toBeTruthy();
+
+    expect(readSession().user.firstName).toBe('Gio');
+  });
+});
+
 describe('guest order lookup', () => {
   const placeOrder = (answer) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply(answer, 201)));

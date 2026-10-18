@@ -219,7 +219,12 @@ export async function getProfile() {
 
 // PATCH /auth/me
 export async function updateProfile(patch) {
-  return request('/auth/me', { method: 'PATCH', body: patch });
+  const updated = await request('/auth/me', { method: 'PATCH', body: patch });
+  // The form is restored from the stored session on a full load; without this
+  // the old name/email comes back and the next save sends it to the server.
+  const session = readSession();
+  if (session) writeSession({ ...session, user: updated });
+  return updated;
 }
 
 // POST /auth/change-password
