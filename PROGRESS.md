@@ -237,6 +237,10 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
 
 ## Backlog (needs user decision)
 
+- Admin trash list (2026-10-18 re-check): at 390px the row buttons sit in the table's own horizontal scroll, like
+  the live list's right-hand columns; after a permanent delete answers 404/409 the dialog closes and the row goes
+  without saying why (a toast "შეკვეთა უკვე წაშლილია" would) (low).
+
 - Stage 2 finish-check nits (2026-10-18): `docs/migrations/0016_orders_deleted_at.sql` could start with a
   `DO $$ ... RAISE EXCEPTION ... $$` guard so a wrong head rolls everything back instead of relying on the
   `UPDATE 1` check (the owner confirmed head 0015, same pattern as Stage 1); after a restore/delete that empties the
@@ -471,12 +475,19 @@ Unverified (check before acting):
 
 ## Last Session
 - Date: 2026-10-18
-- Done: planned Stage 2 (order trash): PROJECT.md (scope, Business Rules → Order trash, Data, API
-  Contract, Decision Log, two proposed Accepted Risks, assumptions under Open Questions) and this
-  file (T18–T23). Nothing implemented.
-- Verification: none run — planning only; no code, database or git state changed.
-- Known issues / blockers: the two proposed Accepted Risks wait for the owner.
-- Next: T18; then T19, T21 and T23 in parallel; T20; T22.
+- Done: Stage 2 (admin order trash) T18–T25, all `[x]`. Commits: aa3aa9f plan, 600c12d design (DESIGN.md),
+  a2d3ac1 T18, 9206339 T23, 7ce60a1 T19, 062a5bc T20, c82fa5c T21, fb971f6 T22, e066975 finish-check,
+  a1d0397 T24, 5739ccf T25.
+- Finish-check: code-reviewer and security-auditor 0 critical; browser-tester ran every trash flow on a scratch
+  stack (stock unchanged through trash/restore/delete). Two should-fix (admin toast never shown; trash list
+  buttons off-screen at 1280px) fixed in round 1 (T24, T25) and re-checked in the browser at HEAD 5739ccf: pass.
+- Verification at 5739ccf (tester): ruff, format (167 files), mypy (148 files), pytest 1097 passed; alembic
+  upgrade head 0001→0016 + `alembic check` clean on a scratch DB; eslint clean, vitest 656 passed, http and mock
+  builds pass.
+- Not verified: the 30-day automatic purge in real time (tests set `deleted_at` 31 days back); migration 0016 on
+  live (the owner pastes docs/migrations/0016_orders_deleted_at.sql); dark theme and /en (admin is ka/light only).
+- Known issues / blockers: none. The two proposed Accepted Risks (PROJECT.md) wait for the owner.
+- Next: the owner reviews, merges to main, runs the Stage 2 Deploy plan (migration → backend → frontend).
 
 ## Stage 1 — Done
 Stage 1 — Audit fixes (closed by the owner 2026-10-10; T0–T17 done)
