@@ -128,8 +128,10 @@ Deployment state, as far as the repository shows (2026-10-10):
     start of `GET /admin/orders`, so an expired order disappears the next time the order
     list is opened; `purgeAt` is when it becomes eligible, not a promise of the exact minute.
   - **Permanent delete** (by hand or automatic) removes the order, its items and status
-    history (CASCADE). The `admin_audit_log` row (`order.purge`) is the only record left
-    (Accepted Risks → proposed).
+    history (CASCADE). What is left is in `admin_audit_log`, which has no FK to the order: the
+    `order.purge` row (number, status, total, who, when) and the order's earlier
+    `order.status` / `order.trash` / `order.restore` rows — including any free-text `note` an
+    admin typed with a status change, which the purge does not remove (Accepted Risks → proposed).
   - A product that appears only in trashed orders still cannot be deleted
     (409 `PRODUCT_IN_USE`, unchanged) until those orders are purged.
 
@@ -252,8 +254,10 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
   `require_admin` (`tests/test_admin_auth.py` enumerates every admin route). A trashed
   order must not be readable by its customer or a guest token holder, and the guest lookup
   must not tell "trashed" from "missing" (same 404 — order numbers are sequential).
-  A purge removes the order's personal data for good; its audit row keeps only order
-  number, status, total and who/when.
+  A purge removes the order's personal data from `orders`, `order_items` and
+  `order_status_history`; the `order.purge` audit row keeps only order number, status, total
+  and who/when. Not removed: a free-text `note` an admin typed with a status change, kept in that
+  change's `order.status` audit row (pre-existing; so a note should not hold customer details).
 
 ## Accepted Risks
 - **Sessions last 30 minutes on onrender.com** (owner, 2026-10-10). Storefront and API are

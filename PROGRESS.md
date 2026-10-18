@@ -178,6 +178,41 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
   no host psql is needed), it leaves `alembic current` = `0016` and `alembic check` clean.
   No backend file changes, so no gate beyond `git diff --stat` showing only this file.
 
+- [ ] **T24 · should-fix · No toast is ever shown in the admin panel**
+  owner: frontend-dev
+  files: frontend/src/admin/AdminLayout.jsx, frontend/src/admin/AdminLayout.test.jsx (new)
+  depends: T22
+  Found by the 2026-10-18 finish-check (code-reviewer and browser-tester, same cause). `OrderDetail.jsx:60`
+  calls `toast.success('შეკვეთა გადატანილია სანაგვეში')` and navigates to the list, but `ToastViewport`
+  (`components/common/Toast.jsx`) is rendered only by the storefront `components/layout/Layout.jsx:56`; the admin
+  routes (`routes.jsx:107-111`, `AdminBoundary` → `AdminLayout`) never render it, so the toast the Decision Log
+  promises ("back to `/admin/orders` with a success toast") never appears (browser screenshot
+  `e-admin-after-trash-toast.png`). `OrderDetail.test.jsx` mocks `useToast`, so it could not see this.
+  done when: `AdminLayout` renders `<ToastViewport />` once (ToastProvider already wraps the app in `main.jsx`);
+  `AdminLayout.test.jsx` renders `AdminLayout` inside the real `ToastProvider` with a child route whose page calls
+  `toast.success('…')`, and finds the text on screen — and that test fails with the viewport removed. Frontend gate
+  green; full backend gate green (run by the orchestrator).
+
+- [ ] **T25 · should-fix · The trash list's row buttons are off-screen at 1280px**
+  owner: frontend-dev
+  files: frontend/src/admin/pages/OrderList.jsx, frontend/src/admin/pages/OrderList.test.jsx
+  depends: T22
+  Found by the 2026-10-18 browser check (`test-results/browser-check/e-d-trash-list.png`, 1280x800, sidebar shown):
+  in trash mode the table (`min-w-[52rem]`) gets two extra columns ("წაშლილია", "დარჩა"), so "აღდგენა" is cut at
+  the viewport edge and "სამუდამოდ წაშლა" is reachable only by scrolling the table sideways.
+  Bundled because they are in the same component and cheap (both nits from code-reviewer/browser-tester):
+  (a) a failed permanent delete replaces the dialog's "ქმედება შეუქცევადია" description with the error, as plain
+  text without `role="alert"`; (b) on 404 `ORDER_NOT_FOUND` or 409 `ORDER_NOT_IN_TRASH` (another admin or the
+  purge got there first) the dialog keeps offering a retry that always fails and the stale row stays.
+  done when: in trash mode the table fits a 1280px viewport with the admin sidebar without horizontal scroll and
+  both row buttons are fully visible — e.g. the trash view drops columns it does not need (city, item count, or
+  merges "წაშლილია" and "დარჩა" into one cell); the live view is unchanged. The dialog keeps its description and
+  shows the error under it in an element with `role="alert"`; on 404/409 it closes and the list reloads. Tests in
+  `OrderList.test.jsx`: the trash view's column headers (what is shown and what is not), the alert keeps the
+  description, 404 and 409 close the dialog and call `listOrders` again, a network error keeps the dialog open.
+  Checked by the orchestrator in a browser at 1280px if possible, otherwise listed as Unverified. Frontend gate
+  green; full backend gate green (run by the orchestrator).
+
 ### Deploy plan — Stage 2 (to finish once T18–T23 are done; nothing here is run from the agent side)
 1. **Migration on live** — the owner pastes `docs/migrations/0016_orders_deleted_at.sql` into the
    Supabase SQL editor (live head is `0015`). Additive: a nullable column and an index; the old
@@ -201,6 +236,12 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
   `backend/app/api/v1/routes/admin/orders.py` likewise (T19 → T20).
 
 ## Backlog (needs user decision)
+
+- Stage 2 finish-check nits (2026-10-18): `docs/migrations/0016_orders_deleted_at.sql` could start with a
+  `DO $$ ... RAISE EXCEPTION ... $$` guard so a wrong head rolls everything back instead of relying on the
+  `UPDATE 1` check (the owner confirmed head 0015, same pattern as Stage 1); after a restore/delete that empties the
+  last page of the trash list, the page shows "სანაგვე ცარიელია" until the admin goes back a page (only with 20+
+  trashed orders); the order detail page is 393px wide at 390px (3px overflow, pre-existing, live orders too).
 
 - `frontend/` has no Prettier config, so a plain `prettier --write` rewrites the code style (T22 hit it and
   reverted by hand); a `.prettierrc` matching the current style (single quotes, width 100, trailing commas) (low).
@@ -424,7 +465,7 @@ Unverified (check before acting):
 
 ## Run State
 - Stage: Stage 2 — Order trash (admin)
-- Finish-check this stage: not run
+- Finish-check this stage: done (2026-10-18; code-reviewer, security-auditor, browser-tester) → T24, T25
 - Fix rounds this stage: 0/2
 - Failed attempts: —
 
