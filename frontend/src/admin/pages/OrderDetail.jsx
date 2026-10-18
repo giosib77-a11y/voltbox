@@ -10,8 +10,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router';
-import { ArrowLeft } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router';
+import { AlertTriangle, ArrowLeft, Trash2 } from 'lucide-react';
 
 import Button from '../../components/common/Button.jsx';
 import ErrorState from '../../components/common/ErrorState.jsx';
@@ -19,8 +19,9 @@ import Skeleton from '../../components/common/Skeleton.jsx';
 import ProductImage from '../../components/common/ProductImage.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import { ORDER_STATUSES, PAYMENT_METHODS, OrderStatusBadge } from '../statuses.jsx';
-import { dateTime, money } from '../format.js';
+import { dateOnly, dateTime, money } from '../format.js';
 import * as adminApi from '../adminApi.js';
+import { useToast } from '../../hooks/useToast.js';
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -28,6 +29,11 @@ export default function OrderDetail() {
   const [error, setError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [pendingStatus, setPendingStatus] = useState(null);
+  // Which trash dialog is open: 'trash' | 'forever' | null.
+  const [trashDialog, setTrashDialog] = useState(null);
+  const [restoring, setRestoring] = useState(false);
+  const navigate = useNavigate();
+  const toast = useToast();
 
   const load = useCallback(() => {
     setError(null);
@@ -47,10 +53,50 @@ export default function OrderDetail() {
     }
   }
 
+  async function moveToTrash() {
+    setActionError(null);
+    try {
+      await adminApi.trashOrder(id);
+      toast.success('შეკვეთა გადატანილია სანაგვეში');
+      navigate('/admin/orders');
+    } catch (caught) {
+      setActionError(caught);
+    } finally {
+      setTrashDialog(null);
+    }
+  }
+
+  async function restore() {
+    setActionError(null);
+    setRestoring(true);
+    try {
+      setOrder(await adminApi.restoreOrder(id));
+    } catch (caught) {
+      setActionError(caught);
+    } finally {
+      setRestoring(false);
+    }
+  }
+
+  async function deleteForever() {
+    setActionError(null);
+    try {
+      await adminApi.deleteOrderForever(id);
+      navigate('/admin/orders?trash=true');
+    } catch (caught) {
+      setActionError(caught);
+    } finally {
+      setTrashDialog(null);
+    }
+  }
+
   if (error) return <ErrorState title="შეკვეთა ვერ ჩაიტვირთა" error={error} onRetry={load} />;
   if (!order) return <Skeleton className="h-96 w-full" />;
 
   const customer = order.customer || {};
+  const isTrashed = Boolean(order.deletedAt);
+  // These statuses still hold reserved units; trashing does not release them.
+  const holdsStock = ['pending', 'confirmed', 'processing'].includes(order.status);
 
   return (
     <div>
@@ -75,8 +121,27 @@ export default function OrderDetail() {
         </p>
       ) : null}
 
-      {order.allowedTransitions.length ? (
-        <div className="mb-4 flex flex-wrap gap-2">
+      {isTrashed ? (
+        <div className="mb-4 space-y-3">
+          <p className="flex flex-wrap items-center gap-1 rounded-lg bg-warning-50 px-3 py-2 text-sm text-warning-600">
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>
+              შეკვეთა სანაგვეშია და {dateOnly(order.purgeAt)} სამუდამოდ წაიშლება. სტატუსი არ
+              იცვლება.
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={restore} loading={restoring}>
+              აღდგენა
+            </Button>
+            <Button variant="danger" size="sm" onClick={() => setTrashDialog('forever')}>
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              სამუდამოდ წაშლა
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           {order.allowedTransitions.map((next) => (
             <Button
               key={next}
@@ -87,11 +152,14 @@ export default function OrderDetail() {
               {ORDER_STATUSES[next]?.label || next}
             </Button>
           ))}
+          {order.allowedTransitions.length ? null : (
+            <p className="text-sm text-ink-600">ეს შეკვეთა დასრულებულია — სტატუსი აღარ იცვლება.</p>
+          )}
+          <Button variant="danger" size="sm" onClick={() => setTrashDialog('trash')}>
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            წაშლა
+          </Button>
         </div>
-      ) : (
-        <p className="mb-4 text-sm text-ink-600">
-          ეს შეკვეთა დასრულებულია — სტატუსი აღარ იცვლება.
-        </p>
       )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
@@ -193,6 +261,30 @@ export default function OrderDetail() {
         variant={pendingStatus === 'cancelled' ? 'danger' : 'accent'}
         onConfirm={() => applyStatus(pendingStatus)}
         onClose={() => setPendingStatus(null)}
+      />
+
+      <ConfirmDialog
+        open={trashDialog === 'trash'}
+        title="შეკვეთის წაშლა"
+        description={`შეკვეთა გადავა სანაგვეში და 30 დღის შემდეგ სამუდამოდ წაიშლება; ამ ხნის განმავლობაში მისი აღდგენა შეიძლება.${
+          holdsStock
+            ? ' მარაგი არ შეიცვლება: ამ შეკვეთის ერთეულები დარჩება დაკავებული. თუ მარაგი უნდა დაბრუნდეს, ჯერ გააუქმეთ შეკვეთა.'
+            : ''
+        }`}
+        confirmLabel="წაშლა"
+        variant="danger"
+        onConfirm={moveToTrash}
+        onClose={() => setTrashDialog(null)}
+      />
+
+      <ConfirmDialog
+        open={trashDialog === 'forever'}
+        title="შეკვეთის სამუდამოდ წაშლა"
+        description="შეკვეთა სამუდამოდ წაიშლება და მისი აღდგენა შეუძლებელი იქნება. ქმედება შეუქცევადია."
+        confirmLabel="სამუდამოდ წაშლა"
+        variant="danger"
+        onConfirm={deleteForever}
+        onClose={() => setTrashDialog(null)}
       />
     </div>
   );

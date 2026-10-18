@@ -12,6 +12,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Search } from 'lucide-react';
 
+import Button from '../../components/common/Button.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import EmptyState from '../../components/common/EmptyState.jsx';
 import ErrorState from '../../components/common/ErrorState.jsx';
 import Select from '../../components/common/Select.jsx';
@@ -32,12 +34,18 @@ export default function OrderList() {
   const dateFrom = params.get('dateFrom') || '';
   const dateTo = params.get('dateTo') || '';
   const search = params.get('q') || '';
+  const trash = params.get('trash') === 'true';
 
   const [query, setQuery] = useState(search);
   const debouncedQuery = useDebounce(query, 300);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [restoring, setRestoring] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   const setParam = useCallback(
     (key, value) => {
@@ -67,6 +75,7 @@ export default function OrderList() {
         status: status || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
+        trash: trash || undefined,
       })
       .then((result) => !cancelled && setData(result))
       .catch((caught) => !cancelled && setError(caught))
@@ -74,9 +83,33 @@ export default function OrderList() {
     return () => {
       cancelled = true;
     };
-  }, [page, search, status, dateFrom, dateTo]);
+  }, [page, search, status, dateFrom, dateTo, trash, reloadToken]);
 
-  const columns = [
+  async function handleRestore(order) {
+    setActionError(null);
+    setRestoring(order.id);
+    try {
+      await adminApi.restoreOrder(order.id);
+      setReloadToken((token) => token + 1);
+    } catch (caught) {
+      setActionError(caught);
+    } finally {
+      setRestoring(null);
+    }
+  }
+
+  async function handleDeleteForever() {
+    setDeleteError(null);
+    try {
+      await adminApi.deleteOrderForever(deleting.id);
+      setDeleting(null);
+      setReloadToken((token) => token + 1);
+    } catch (caught) {
+      setDeleteError(caught);
+    }
+  }
+
+  const baseColumns = [
     {
       key: 'number',
       header: 'შეკვეთა',
@@ -130,6 +163,53 @@ export default function OrderList() {
     },
   ];
 
+  const trashColumns = [
+    {
+      key: 'deleted',
+      header: 'წაშლილია',
+      render: (order) => (
+        <span className="whitespace-nowrap text-ink-600">{dateTime(order.deletedAt)}</span>
+      ),
+    },
+    {
+      key: 'daysLeft',
+      header: 'დარჩა',
+      align: 'right',
+      render: (order) => <span className="tabular-nums">{daysLeft(order.purgeAt)} დღე</span>,
+    },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (order) => (
+        <span className="flex justify-end gap-1">
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => handleRestore(order)}
+            loading={restoring === order.id}
+            aria-label={`${order.orderNumber} — აღდგენა`}
+          >
+            აღდგენა
+          </Button>
+          <Button
+            variant="danger"
+            size="xs"
+            onClick={() => {
+              setDeleteError(null);
+              setDeleting(order);
+            }}
+            aria-label={`${order.orderNumber} — სამუდამოდ წაშლა`}
+          >
+            სამუდამოდ წაშლა
+          </Button>
+        </span>
+      ),
+    },
+  ];
+
+  const columns = trash ? [...baseColumns, ...trashColumns] : baseColumns;
+
   return (
     <div>
       <header className="mb-4">
@@ -176,20 +256,40 @@ export default function OrderList() {
         />
       </div>
 
+      <label className="mb-3 flex w-fit items-center gap-2 text-sm text-ink-700">
+        <input
+          type="checkbox"
+          checked={trash}
+          onChange={(event) => setParam('trash', event.target.checked)}
+          className="h-4 w-4 rounded border-ink-300 text-accent-600 focus:ring-accent-600/30"
+        />
+        სანაგვე
+      </label>
+
+      {actionError ? (
+        <p role="alert" className="mb-3 rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">
+          {actionError.message}
+        </p>
+      ) : null}
+
       {error ? (
         <ErrorState title="შეკვეთები ვერ ჩაიტვირთა" error={error} />
       ) : (
         <>
           <DataTable
-            caption="შეკვეთების სია"
+            caption={trash ? 'სანაგვეში მყოფი შეკვეთები' : 'შეკვეთების სია'}
             columns={columns}
             rows={data?.items || []}
             loading={loading}
             empty={
-              <EmptyState
-                title="შეკვეთა ვერ მოიძებნა"
-                description="შეცვალეთ ფილტრები ან თარიღების შუალედი."
-              />
+              trash ? (
+                <EmptyState title="სანაგვე ცარიელია" />
+              ) : (
+                <EmptyState
+                  title="შეკვეთა ვერ მოიძებნა"
+                  description="შეცვალეთ ფილტრები ან თარიღების შუალედი."
+                />
+              )
             }
           />
           {data ? (
@@ -203,6 +303,29 @@ export default function OrderList() {
           ) : null}
         </>
       )}
+
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title="შეკვეთის სამუდამოდ წაშლა"
+        description={
+          deleteError
+            ? deleteError.message
+            : `${deleting?.orderNumber} სამუდამოდ წაიშლება და მისი აღდგენა შეუძლებელი იქნება. ქმედება შეუქცევადია.`
+        }
+        confirmLabel="სამუდამოდ წაშლა"
+        variant="danger"
+        onConfirm={handleDeleteForever}
+        onClose={() => {
+          setDeleting(null);
+          setDeleteError(null);
+        }}
+      />
     </div>
   );
+}
+
+/** Whole days until the purge, rounded up and never below 0. */
+function daysLeft(purgeAt) {
+  const ms = new Date(purgeAt).getTime() - Date.now();
+  return Number.isFinite(ms) ? Math.max(0, Math.ceil(ms / 86_400_000)) : 0;
 }

@@ -149,9 +149,25 @@ export async function deleteBrand(id) {
 
 /* -------------------------------------------------------------- orders --- */
 
-// GET /admin/orders?page=&limit=&q=&status=&dateFrom=&dateTo=
+// GET /admin/orders?page=&limit=&q=&status=&dateFrom=&dateTo=&trash=
+// `trash: true` lists the trashed orders instead of the live ones.
 export async function listOrders(params = {}) {
   return request('/admin/orders', { params });
+}
+
+// POST /admin/orders/:id/trash - idempotent; the stock is not touched
+export async function trashOrder(id) {
+  return request(`/admin/orders/${encodeURIComponent(id)}/trash`, { method: 'POST' });
+}
+
+// POST /admin/orders/:id/restore - idempotent
+export async function restoreOrder(id) {
+  return request(`/admin/orders/${encodeURIComponent(id)}/restore`, { method: 'POST' });
+}
+
+// DELETE /admin/orders/:id - permanent; 409 ORDER_NOT_IN_TRASH for a live order
+export async function deleteOrderForever(id) {
+  return request(`/admin/orders/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 // GET /admin/orders/:id

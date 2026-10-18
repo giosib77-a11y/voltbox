@@ -107,7 +107,7 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
   deletes 0 rows and the order is live; purge first → the restore answers 404. Backend gate
   green; frontend gate green (JSON changed).
 
-- [ ] **T21 · Hide trashed orders from customers, guests, the dashboard and admin customers**
+- [x] **T21 · Hide trashed orders from customers, guests, the dashboard and admin customers**
   owner: backend-dev
   files: backend/app/services/order.py, backend/app/services/dashboard.py, backend/app/services/admin_customers.py, backend/tests/test_order_trash_hidden.py (new)
   depends: T18
@@ -129,7 +129,7 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
   `Idempotency-Key` (guest and signed-in) → the same `orderNumber`, order count unchanged,
   stock decremented once, no new `inventory_movements` row. Backend gate green.
 
-- [ ] **T22 · Admin trash UI (OrderDetail, OrderList)**
+- [x] **T22 · Admin trash UI (OrderDetail, OrderList)**
   owner: frontend-dev
   files: frontend/src/admin/adminApi.js, frontend/src/admin/pages/OrderList.jsx, frontend/src/admin/pages/OrderDetail.jsx, frontend/src/admin/pages/OrderList.test.jsx (new), frontend/src/admin/pages/OrderDetail.test.jsx (new)
   depends: T19, T20
@@ -201,6 +201,9 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
   `backend/app/api/v1/routes/admin/orders.py` likewise (T19 → T20).
 
 ## Backlog (needs user decision)
+
+- `frontend/` has no Prettier config, so a plain `prettier --write` rewrites the code style (T22 hit it and
+  reverted by hand); a `.prettierrc` matching the current style (single quotes, width 100, trailing commas) (low).
 
 - Design nits from DESIGN.md (2026-10-18, designer): admin palette misses AA on ink-500/ink-100 (4.37),
   danger-fg/danger-50 (4.41) and control border ink-300/white (1.66); admin uses accent (orange) as its main
