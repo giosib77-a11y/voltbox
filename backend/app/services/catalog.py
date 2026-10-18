@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import math
 from decimal import Decimal
 from typing import Any
 
@@ -357,14 +358,16 @@ async def compute_facets(
     overall_min, overall_max = prices.overall_min, prices.overall_max
     current_min, current_max = prices.current_min, prices.current_max
 
+    # Whole-number bounds that contain every price: floor the lows, ceil the highs.
+    # Truncating 129.99 to 129 made the slider's own top exclude that product.
     return {
         "values": values,
         "labels": labels,
         "price": {
-            "min": int(overall_min or 0),
-            "max": int(overall_max or 0),
-            "current_min": int(current_min or 0),
-            "current_max": int(current_max or 0),
+            "min": math.floor(overall_min or 0),
+            "max": math.ceil(overall_max or 0),
+            "current_min": math.floor(current_min or 0),
+            "current_max": math.ceil(current_max or 0),
         },
     }
 

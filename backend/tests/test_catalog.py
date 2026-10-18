@@ -195,6 +195,62 @@ async def test_price_facet_separates_bounds_from_current_range(
     assert (price["currentMin"], price["currentMax"]) == (649, 2899)
 
 
+class TestPriceBoundsContainFractionalPrices:
+    """The slider commits the facet's own `max` as the top of `price=low-high`, so
+    a bound truncated below a real price hides that product behind its own filter."""
+
+    @pytest.fixture
+    async def cables(self, db: AsyncSession) -> None:
+        category = await make_category(db, "cables")
+        brand = await make_brand(db, "Anker", "აშშ")
+        for slug, price in (("c-cheap", "10.50"), ("c-mid", "70.25"), ("c-top", "129.99")):
+            await make_product(db, category, brand, slug=slug, name=slug, price=price)
+
+    async def test_the_bounds_round_outward_and_the_top_price_survives_its_own_filter(
+        self, client: httpx.AsyncClient, cables: None
+    ) -> None:
+        body = (await client.get("/api/v1/products", params={"category": "cables"})).json()
+        price = body["facets"]["price"]
+
+        assert (price["min"], price["max"]) == (10, 130)
+
+        # What the slider sends after only the low thumb moved: the facet's own max.
+        filtered = (
+            await client.get(
+                "/api/v1/products",
+                params={"category": "cables", "price": f"50-{price['max']}"},
+            )
+        ).json()
+        assert {p["slug"] for p in filtered["items"]} == {"c-mid", "c-top"}
+
+    async def test_the_current_bounds_round_outward_under_a_filter(
+        self, client: httpx.AsyncClient, cables: None
+    ) -> None:
+        body = (
+            await client.get(
+                "/api/v1/products", params={"category": "cables", "price": "70.25-129.99"}
+            )
+        ).json()
+        price = body["facets"]["price"]
+
+        assert {p["slug"] for p in body["items"]} == {"c-mid", "c-top"}
+        assert (price["currentMin"], price["currentMax"]) == (70, 130)
+        # The slider's own range ignores the price filter.
+        assert (price["min"], price["max"]) == (10, 130)
+
+        # Re-sending the current bounds as a filter keeps every product of that set.
+        again = (
+            await client.get(
+                "/api/v1/products",
+                params={
+                    "category": "cables",
+                    "price": f"{price['currentMin']}-{price['currentMax']}",
+                },
+            )
+        ).json()
+        assert {p["slug"] for p in again["items"]} == {"c-mid", "c-top"}
+
+
 async def test_out_of_stock_products_are_listed_last(
     client: httpx.AsyncClient, catalog: dict[str, object]
 ) -> None:
