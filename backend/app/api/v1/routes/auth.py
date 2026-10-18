@@ -167,23 +167,51 @@ async def me(user: CurrentUser) -> UserOut:
     return UserOut.model_validate(user)
 
 
+# The two routes below check the current password, which a stolen access token is
+# enough to reach, so they are limited like sign-in and a wrong guess is counted
+# on the account like one (see `auth_service._wrong_current_password`). Without
+# that they guess the password at the default 60 a minute with no lock, and a
+# hit changes it. What still holds: a right password is not counted.
+#
+# The count has to outlive the request, and `get_db` rolls back on an exception -
+# see `login`. Only these two refusals commit; any other error still rolls back
+# whatever the request had changed.
+_COUNTED_REFUSALS = frozenset({"INVALID_CURRENT_PASSWORD", "TOO_MANY_LOGIN_ATTEMPTS"})
+
+
 @router.patch("/me", summary="Update the current profile", response_model=UserOut)
-async def update_me(db: Db, user: CurrentUser, payload: UpdateProfileRequest) -> UserOut:
-    updated = await auth_service.update_profile(
-        db, user=user, changes=payload.model_dump(exclude_unset=True)
-    )
+@limiter.limit(AUTH_RATE_LIMIT)
+async def update_me(
+    request: Request, db: Db, user: CurrentUser, payload: UpdateProfileRequest
+) -> UserOut:
+    try:
+        updated = await auth_service.update_profile(
+            db, user=user, changes=payload.model_dump(exclude_unset=True)
+        )
+    except AppError as error:
+        if error.code in _COUNTED_REFUSALS:
+            await db.commit()
+        raise
     await db.commit()
     return UserOut.model_validate(updated)
 
 
 @router.post("/change-password", summary="Change the password", response_model=OkOut)
-async def change_password(db: Db, user: CurrentUser, payload: ChangePasswordRequest) -> OkOut:
-    await auth_service.change_password(
-        db,
-        user=user,
-        current_password=payload.current_password,
-        new_password=payload.new_password,
-    )
+@limiter.limit(AUTH_RATE_LIMIT)
+async def change_password(
+    request: Request, db: Db, user: CurrentUser, payload: ChangePasswordRequest
+) -> OkOut:
+    try:
+        await auth_service.change_password(
+            db,
+            user=user,
+            current_password=payload.current_password,
+            new_password=payload.new_password,
+        )
+    except AppError as error:
+        if error.code in _COUNTED_REFUSALS:
+            await db.commit()
+        raise
     await db.commit()
     return OkOut()
 

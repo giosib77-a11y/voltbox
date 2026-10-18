@@ -17,7 +17,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.errors import ConflictError, UnauthorizedError, ValidationError
+from app.core.errors import AppError, ConflictError, UnauthorizedError, ValidationError
 from app.core.security import (
     PASSWORD_RESET_TTL,
     create_access_token,
@@ -98,14 +98,69 @@ async def register(
     return await _issue_session(db, user)
 
 
-def _too_many_attempts(locked_until: datetime | None) -> UnauthorizedError:
-    """The refusal of a locked account. Seconds rounded up so it never reads as "0 left"."""
+def _retry_after(locked_until: datetime | None) -> dict[str, int]:
+    """Seconds rounded up so it never reads as "0 left"."""
     remaining = 0.0 if locked_until is None else (locked_until - datetime.now(UTC)).total_seconds()
+    return {"retryAfterSeconds": max(0, ceil(remaining))}
+
+
+def _too_many_attempts(locked_until: datetime | None) -> UnauthorizedError:
+    """The refusal of a locked account, at sign-in."""
     return UnauthorizedError(
         "Too many failed sign-in attempts",
         code="TOO_MANY_LOGIN_ATTEMPTS",
-        details={"retryAfterSeconds": max(0, ceil(remaining))},
+        details=_retry_after(locked_until),
     )
+
+
+def _password_check_locked(locked_until: datetime | None) -> AppError:
+    """The same refusal for a signed-in caller who is asked for the current password.
+
+    Not a 401, deliberately: the storefront reads every 401 as an expired access
+    token, refreshes, and signs the user out when that fails. The caller here
+    holds a valid session and is being refused one thing, so it is a 429 with
+    the code and details the sign-in refusal has.
+    """
+    return AppError(
+        "Too many failed password attempts",
+        code="TOO_MANY_LOGIN_ATTEMPTS",
+        details=_retry_after(locked_until),
+        status_code=429,
+    )
+
+
+def _invalid_current_password() -> ValidationError:
+    return ValidationError(
+        "Current password is incorrect",
+        code="INVALID_CURRENT_PASSWORD",
+        details=[{"field": "currentPassword", "message": "Current password is incorrect"}],
+    )
+
+
+def _locked_now(user: User) -> bool:
+    return user.locked_until is not None and user.locked_until > datetime.now(UTC)
+
+
+async def _wrong_current_password(db: AsyncSession, user: User) -> AppError:
+    """The refusal for a current password that did not match, counted on the account.
+
+    /auth/change-password and the email change check the same password that
+    sign-in does, and a stolen access token is enough to reach them. If they
+    were not counted they would be a password oracle that /auth/login's lock
+    does not cover - and the one guess in thirty that is right would change the
+    password and end the owner's sessions. So a wrong guess here is a failed
+    attempt on the account, with the same count and the same lock as at
+    sign-in; what still holds is that a right password is not counted at all.
+
+    The route commits this refusal (and the lock one) so the count survives the
+    request - see `_record_failure`.
+    """
+    if await _record_failure(db, user):
+        return _invalid_current_password()
+    # Locked by another guess while this one was hashing: refused as locked,
+    # whatever it guessed, as `_refused_meanwhile` does at sign-in.
+    locked_until = await db.scalar(select(User.locked_until).where(User.id == user.id))
+    return _password_check_locked(locked_until)
 
 
 def _unlocked(now: datetime) -> ColumnElement[bool]:
@@ -435,12 +490,11 @@ async def change_password(
     # Ends the transaction that loaded `user`, so its connection is not held
     # through two hashes - see `login`.
     await db.commit()
+    # Before the hash, as at sign-in: the cost belongs to the owner, not the guesser.
+    if _locked_now(user):
+        raise _password_check_locked(user.locked_until)
     if not await verify_password_async(current_password, user.password_hash):
-        raise ValidationError(
-            "Current password is incorrect",
-            code="INVALID_CURRENT_PASSWORD",
-            details=[{"field": "currentPassword", "message": "Current password is incorrect"}],
-        )
+        raise await _wrong_current_password(db, user)
     user.password_hash = await hash_password_async(new_password)
     await db.flush()
     await revoke_all(db, user.id)
@@ -571,16 +625,13 @@ async def update_profile(db: AsyncSession, *, user: User, changes: dict[str, obj
             # Ends the transaction that loaded `user` first, so its connection
             # is not held through the hash - see `login`.
             await db.commit()
-            if not isinstance(current_password, str) or not await verify_password_async(
-                current_password, user.password_hash
-            ):
-                raise ValidationError(
-                    "Current password is incorrect",
-                    code="INVALID_CURRENT_PASSWORD",
-                    details=[
-                        {"field": "currentPassword", "message": "Current password is incorrect"}
-                    ],
-                )
+            if _locked_now(user):
+                raise _password_check_locked(user.locked_until)
+            if not isinstance(current_password, str):
+                # No guess was made, so nothing is counted.
+                raise _invalid_current_password()
+            if not await verify_password_async(current_password, user.password_hash):
+                raise await _wrong_current_password(db, user)
             taken = await db.scalar(
                 select(User).where(User.email == normalized, User.id != user.id)
             )

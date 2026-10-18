@@ -7,6 +7,7 @@ import httpx
 import jwt
 import pytest
 from app.core.config import settings
+from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
 from app.core.security import decode_access_token
 from app.db.models import PasswordResetToken, RefreshToken, User
 from app.db.session import get_db
@@ -909,3 +910,187 @@ async def test_an_unknown_email_still_answers_the_same_way(client: httpx.AsyncCl
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "INVALID_CREDENTIALS"
+
+
+# ── the same guessing game, played with a stolen access token ────────────────
+#
+# /auth/change-password and the email change on PATCH /auth/me both check the
+# current password. With a token and no limit on them they are a password oracle
+# that /auth/login's per-IP limit and per-account lock do not cover.
+
+
+async def _wrong_current_password(
+    client: httpx.AsyncClient, headers: dict[str, str], route: str, times: int
+) -> httpx.Response:
+    response = None
+    for _ in range(times):
+        if route == "change-password":
+            response = await client.post(
+                "/api/v1/auth/change-password",
+                headers=headers,
+                json={"currentPassword": "definitely-not-it", "newPassword": "brandnewpass9"},
+            )
+        else:
+            response = await client.patch(
+                "/api/v1/auth/me",
+                headers=headers,
+                json={"email": "thief@example.ge", "currentPassword": "definitely-not-it"},
+            )
+    assert response is not None
+    return response
+
+
+async def _locked_until(db: AsyncSession) -> datetime | None:
+    user = await db.scalar(select(User).where(User.email == REGISTRATION["email"]))
+    assert user is not None
+    await db.refresh(user)
+    return user.locked_until
+
+
+async def test_change_password_is_rate_limited_per_address(client: httpx.AsyncClient) -> None:
+    headers = await _auth_header(client)
+    per_minute = int(AUTH_RATE_LIMIT.split("/")[0])
+
+    limiter.enabled = True
+    limiter.reset()
+    try:
+        statuses = [
+            (await _wrong_current_password(client, headers, "change-password", 1)).status_code
+            for _ in range(per_minute + 1)
+        ]
+    finally:
+        limiter.reset()
+        limiter.enabled = False
+
+    assert statuses == [400] * per_minute + [429]
+
+
+async def test_profile_update_is_rate_limited_per_address(client: httpx.AsyncClient) -> None:
+    headers = await _auth_header(client)
+    per_minute = int(AUTH_RATE_LIMIT.split("/")[0])
+
+    limiter.enabled = True
+    limiter.reset()
+    try:
+        statuses = [
+            (
+                await client.patch("/api/v1/auth/me", headers=headers, json={"firstName": "ნინო"})
+            ).status_code
+            for _ in range(per_minute + 1)
+        ]
+    finally:
+        limiter.reset()
+        limiter.enabled = False
+
+    assert statuses == [200] * per_minute + [429]
+
+
+async def test_wrong_current_passwords_lock_the_account_for_change_password(
+    realistic_client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    client = realistic_client
+    headers = {"Authorization": f"Bearer {(await _register(client)).json()['token']}"}
+
+    last = await _wrong_current_password(
+        client, headers, "change-password", settings.max_failed_logins
+    )
+
+    # The guess that reaches the threshold is still just a wrong password.
+    assert last.status_code == 400
+    assert last.json()["error"]["code"] == "INVALID_CURRENT_PASSWORD"
+    # Read back from the row: `get_db` rolled the failed requests back, so the
+    # count is there only if the route committed it.
+    assert await _locked_until(db) is not None, "the failed attempts were not recorded"
+
+    # The right password is refused now - and not with a 401, which the
+    # storefront reads as an expired access token and answers by signing out.
+    refused = await client.post(
+        "/api/v1/auth/change-password",
+        headers=headers,
+        json={"currentPassword": REGISTRATION["password"], "newPassword": "brandnewpass9"},
+    )
+    assert refused.status_code == 429
+    body = refused.json()["error"]
+    assert body["code"] == "TOO_MANY_LOGIN_ATTEMPTS"
+    assert body["details"]["retryAfterSeconds"] > 0
+
+    # The password was not changed, and the lock holds for sign-in as well.
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": REGISTRATION["email"], "password": REGISTRATION["password"]},
+    )
+    assert login.status_code == 401
+    assert login.json()["error"]["code"] == "TOO_MANY_LOGIN_ATTEMPTS"
+    # The access token still works: the lock is not a sign-out.
+    assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 200
+
+
+async def test_wrong_current_passwords_lock_the_account_for_an_email_change(
+    realistic_client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    client = realistic_client
+    headers = {"Authorization": f"Bearer {(await _register(client)).json()['token']}"}
+
+    last = await _wrong_current_password(client, headers, "me", settings.max_failed_logins)
+
+    assert last.status_code == 400
+    assert last.json()["error"]["code"] == "INVALID_CURRENT_PASSWORD"
+    assert await _locked_until(db) is not None, "the failed attempts were not recorded"
+
+    refused = await client.patch(
+        "/api/v1/auth/me",
+        headers=headers,
+        json={"email": "thief@example.ge", "currentPassword": REGISTRATION["password"]},
+    )
+    assert refused.status_code == 429
+    body = refused.json()["error"]
+    assert body["code"] == "TOO_MANY_LOGIN_ATTEMPTS"
+    assert body["details"]["retryAfterSeconds"] > 0
+    me = await client.get("/api/v1/auth/me", headers=headers)
+    assert me.json()["email"] == REGISTRATION["email"]
+
+    # One count for the account, whichever door the guesses came through.
+    other_door = await client.post(
+        "/api/v1/auth/change-password",
+        headers=headers,
+        json={"currentPassword": REGISTRATION["password"], "newPassword": "brandnewpass9"},
+    )
+    assert other_door.status_code == 429
+
+
+async def test_guesses_through_both_doors_add_up_to_one_lock(
+    realistic_client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    client = realistic_client
+    headers = {"Authorization": f"Bearer {(await _register(client)).json()['token']}"}
+    through_password = settings.max_failed_logins // 2
+    through_email = settings.max_failed_logins - through_password
+
+    await _wrong_current_password(client, headers, "change-password", through_password)
+    assert await _locked_until(db) is None
+    await _wrong_current_password(client, headers, "me", through_email)
+
+    assert await _locked_until(db) is not None
+
+
+async def test_a_few_typos_do_not_stop_a_correct_password_change(
+    realistic_client: httpx.AsyncClient,
+) -> None:
+    client = realistic_client
+    session = (await _register(client)).json()
+    headers = {"Authorization": f"Bearer {session['token']}"}
+
+    await _wrong_current_password(client, headers, "change-password", 2)
+    changed = await client.post(
+        "/api/v1/auth/change-password",
+        headers=headers,
+        json={"currentPassword": REGISTRATION["password"], "newPassword": "brandnewpass9"},
+    )
+
+    assert changed.status_code == 200
+    assert (await client.post("/api/v1/auth/refresh")).status_code == 401
+    relogin = await client.post(
+        "/api/v1/auth/login",
+        json={"email": REGISTRATION["email"], "password": "brandnewpass9"},
+    )
+    assert relogin.status_code == 200
