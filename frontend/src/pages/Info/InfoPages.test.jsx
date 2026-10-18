@@ -310,6 +310,8 @@ describe('the privacy page against the code', () => {
   it('names everything the storefront keeps in the browser', async () => {
     const NAMED = {
       [STORAGE_KEYS.cart]: 'კალათის შიგთავსს',
+      // A flag about the cart (a change not yet saved to the account), no data of its own
+      [STORAGE_KEYS.cartUnsynced]: 'კალათის შიგთავსს',
       [STORAGE_KEYS.theme]: 'თემის არჩევანს',
       [STORAGE_KEYS.auth]: 'შესვლის სესიას',
       [STORAGE_KEYS.recentSearches]: 'ბოლო ძებნებს',

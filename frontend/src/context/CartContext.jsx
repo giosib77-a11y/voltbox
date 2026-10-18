@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import { MAX_CART_LINES, MAX_LINE_QTY, STORAGE_KEYS } from '../constants/index.js';
-import { readJSON, writeJSON } from '../utils/storage.js';
+import { readJSON, removeKey, writeJSON } from '../utils/storage.js';
 import { calcTotals } from '../utils/pricing.js';
 import * as api from '../services/api.js';
 
@@ -12,6 +12,22 @@ import * as api from '../services/api.js';
  * immediately regardless, so nothing on screen waits for this.
  */
 const SAVE_DEBOUNCE_MS = 800;
+
+/**
+ * Present while this browser holds a signed-in change the account has not
+ * confirmed: set before a merge or a save is sent, removed when it comes back.
+ *
+ * It lives in localStorage because the case it exists for is a page reload - a
+ * save that failed, or a tab closed inside the debounce. On the next load its
+ * presence says "merge this basket in"; its absence says the account already
+ * has everything here, so the account's cart is the one to show. Without it
+ * every load would have to merge, and a merge can only add: lines bought or
+ * removed on another device would come back.
+ *
+ * In STORAGE_KEYS like every key the storefront writes, so the privacy page's
+ * test sees it; the page names it with the cart, whose state it is.
+ */
+const UNSYNCED_KEY = STORAGE_KEYS.cartUnsynced;
 
 /**
  * A sync failure, said out loud somewhere.
@@ -228,17 +244,47 @@ export function CartProvider({ children }) {
    * basket to an account whose contents we just failed to read would overwrite
    * the one on the phone. Nothing is said to somebody who has only signed in,
    * because nothing of theirs is lost yet - sign-out is where that changes.
-   * The next page load merges again, so a blip heals itself.
+   * The unsynced marker stays set after a failure, so the next page load merges
+   * again and a blip heals itself.
    */
   const mergeWithAccount = useCallback(async () => {
+    writeJSON(UNSYNCED_KEY, true);
     try {
       const merged = await api.mergeCart(stateRef.current.items);
       dispatch({ type: ACTIONS.HYDRATE, payload: fromApi(merged) });
       savingRef.current = true;
+      removeKey(UNSYNCED_KEY);
     } catch (error) {
       noteSyncFailure('mergeCart', error);
     }
   }, []);
+
+  /**
+   * A session restored on page load: show the account's cart, unless this
+   * browser holds a change the account has not confirmed (see UNSYNCED_KEY), in
+   * which case that change is merged in first.
+   *
+   * Replacing is right when nothing is pending because the account is then the
+   * newer copy: the basket in localStorage may predate an order or an edit made
+   * on another device, and merging it would bring those lines back.
+   *
+   * A failure to read behaves like a failed merge: the basket on screen is left
+   * alone and saving stays off, since PUT /cart would overwrite what was not
+   * read. Nothing is pending then, so the next load simply tries again.
+   */
+  const restoreFromAccount = useCallback(async () => {
+    if (readJSON(UNSYNCED_KEY, false)) {
+      await mergeWithAccount();
+      return;
+    }
+    try {
+      const saved = await api.getCart();
+      dispatch({ type: ACTIONS.HYDRATE, payload: fromApi(saved) });
+      savingRef.current = true;
+    } catch (error) {
+      noteSyncFailure('getCart', error);
+    }
+  }, [mergeWithAccount]);
 
   /**
    * Sign-out: stop writing to the account, and empty the cart in this browser -
@@ -262,6 +308,9 @@ export function CartProvider({ children }) {
     const kept = !accountHoldsCartRef.current;
     savingRef.current = false;
     accountHoldsCartRef.current = false;
+    // The next sign-in merges whatever is left here, so a marker from this
+    // session would only make another account's next load wrong.
+    removeKey(UNSYNCED_KEY);
     if (!kept) dispatch({ type: ACTIONS.CLEAR });
     return kept;
   }, []);
@@ -275,10 +324,14 @@ export function CartProvider({ children }) {
     // a sign-out in that window keeps the basket rather than trusting a save
     // that has not happened yet.
     accountHoldsCartRef.current = false;
+    writeJSON(UNSYNCED_KEY, true);
+    // A newer change replaces this effect; its marker must outlive this save.
+    let superseded = false;
     const timer = setTimeout(() => {
       api.saveCart(state.items).then(
         () => {
           accountHoldsCartRef.current = true;
+          if (!superseded) removeKey(UNSYNCED_KEY);
         },
         (error) => {
           // The basket on screen is untouched; what changes is that sign-out
@@ -287,7 +340,10 @@ export function CartProvider({ children }) {
         },
       );
     }, SAVE_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      superseded = true;
+      clearTimeout(timer);
+    };
   }, [state.items, state.hydrated]);
 
   /** → the order-size limit it ran into (see cartLimitHit), or null; the caller says so. */
@@ -362,6 +418,7 @@ export function CartProvider({ children }) {
   const value = useMemo(
     () => ({
       mergeWithAccount,
+      restoreFromAccount,
       detachFromAccount,
       items: state.items,
       hydrated: state.hydrated,
@@ -388,6 +445,7 @@ export function CartProvider({ children }) {
       clear,
       restoreItem,
       mergeWithAccount,
+      restoreFromAccount,
       detachFromAccount,
     ],
   );

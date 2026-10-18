@@ -307,8 +307,12 @@ export async function saveCart(items) {
 }
 
 // POST /cart/merge?lang= — for signing in with a basket already in this
-// browser, and on every signed-in page load. Its lines replace the ones on
-// screen, names included, so they have to come back in the page's language.
+// browser, and on a page load that finds a local change the account has not
+// confirmed (CartContext's unsynced marker). Any other restored session reads
+// the account with GET /cart instead: a merge only adds, so merging a stale
+// local basket would bring back lines bought or removed on another device.
+// Its lines replace the ones on screen, names included, so they have to come
+// back in the page's language.
 export async function mergeCart(items) {
   const { items: merged } = await request('/cart/merge', {
     method: 'POST',

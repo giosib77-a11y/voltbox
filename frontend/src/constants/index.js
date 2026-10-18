@@ -67,6 +67,8 @@ export const MAX_LINE_QTY = 10;
 
 export const STORAGE_KEYS = {
   cart: 'cart:v1',
+  // A flag, not cart data: this browser holds a change the account has not confirmed.
+  cartUnsynced: 'cart-unsynced:v1',
   auth: 'auth:v1',
   users: 'users:v1',
   orders: 'orders:v1',

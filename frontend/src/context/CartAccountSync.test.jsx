@@ -21,10 +21,11 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('virtual:api-impl', async (importOriginal) => ({
   ...(await importOriginal()),
+  getCart: vi.fn(async () => []),
   mergeCart: vi.fn(async (items) => items.map((i) => ({ ...i, snapshot: { ...i.snapshot } }))),
   saveCart: vi.fn(async (items) => items),
   clearCart: vi.fn(async () => {}),
@@ -80,7 +81,45 @@ const tree = (children = <Harness />) => (
   </ToastProvider>
 );
 
-const renderSync = () => render(tree());
+const U1 = { id: 'u1' };
+
+/**
+ * Mounts as a guest whose session is already known and, given a user, signs
+ * them in afterwards - a real sign-in. Mounting with the user already there is
+ * a different event (a session restored on load), see `renderRestored`.
+ */
+function renderSync(user = null, children) {
+  authValue = { user: null, initializing: false };
+  const view = render(tree(children));
+  if (user) {
+    authValue = { user, initializing: false };
+    view.rerender(tree(children));
+  }
+  return view;
+}
+
+/** A page load with a session that was already there when auth finished. */
+function renderRestored(user = U1) {
+  authValue = { user: null, initializing: true };
+  const view = render(tree());
+  authValue = { user, initializing: false };
+  view.rerender(tree());
+  return view;
+}
+
+/** Cart lines as the API sends them. */
+const apiLine = (productId, qty) => ({
+  productId,
+  qty,
+  snapshot: { name: productId, slug: productId, image: '', price: '10.00', oldPrice: null, stock: 9 },
+});
+
+/** The same lines as this browser stores them. */
+const localLine = (productId, qty) => ({
+  productId,
+  qty,
+  snapshot: { name: productId, slug: productId, image: '', price: 10, oldPrice: null, stock: 9 },
+});
 
 /** What sign-out says when the account never confirmed it has the basket. */
 const KEPT = 'კალათა ამ ბრაუზერში დარჩა — ანგარიშზე შენახვა ვერ მოხერხდა';
@@ -93,7 +132,7 @@ beforeEach(() => {
 
 describe('CartAccountSync', () => {
   it('does nothing at all while the session is still unknown', async () => {
-    renderSync();
+    render(tree());
 
     await waitFor(() => expect(screen.getByTestId('count')).toBeInTheDocument());
     expect(api.mergeCart).not.toHaveBeenCalled();
@@ -108,8 +147,7 @@ describe('CartAccountSync', () => {
   });
 
   it('merges once when somebody signs in', async () => {
-    authValue = { user: { id: 'u1' }, initializing: false };
-    renderSync();
+    renderSync(U1);
 
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
   });
@@ -117,8 +155,7 @@ describe('CartAccountSync', () => {
   it('does not merge again when the same user is simply re-read', async () => {
     // A refresh and a profile edit both produce a new user object. Neither is
     // a sign-in, and merging on each would be a request per refresh.
-    authValue = { user: { id: 'u1' }, initializing: false };
-    const { rerender } = renderSync();
+    const { rerender } = renderSync(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
 
     authValue = { user: { id: 'u1', firstName: 'changed' }, initializing: false };
@@ -128,8 +165,7 @@ describe('CartAccountSync', () => {
   });
 
   it('merges again when a different account signs in', async () => {
-    authValue = { user: { id: 'u1' }, initializing: false };
-    const { rerender } = renderSync();
+    const { rerender } = renderSync(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
 
     authValue = { user: { id: 'u2' }, initializing: false };
@@ -139,8 +175,7 @@ describe('CartAccountSync', () => {
   });
 
   it('saves what is added after signing in to the account', async () => {
-    authValue = { user: { id: 'u1' }, initializing: false };
-    renderSync();
+    renderSync(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
 
     screen.getByText('add').click();
@@ -156,8 +191,7 @@ describe('CartAccountSync', () => {
   });
 
   it('empties the cart on this browser when they sign out', async () => {
-    authValue = { user: { id: 'u1' }, initializing: false };
-    const { rerender } = renderSync();
+    const { rerender } = renderSync(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
 
     screen.getByText('add').click();
@@ -187,8 +221,7 @@ describe('CartAccountSync', () => {
     // out then emptied a basket that had never been anywhere.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     api.mergeCart.mockRejectedValueOnce(new Error('the server is not there'));
-    authValue = { user: { id: 'u1' }, initializing: false };
-    const { rerender } = renderSync();
+    const { rerender } = renderSync(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
     // Said somewhere, which is exactly what the empty catch did not do.
     await waitFor(() =>
@@ -209,8 +242,7 @@ describe('CartAccountSync', () => {
   });
 
   it('keeps the basket when a save failed, however well the merge went', async () => {
-    authValue = { user: { id: 'u1' }, initializing: false };
-    const { rerender } = renderSync();
+    const { rerender } = renderSync(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
 
     // Let the save that follows the merge land first, so the account is known
@@ -251,14 +283,13 @@ describe('emptying the cart', () => {
     );
   }
 
-  const renderClear = () => render(tree(<ClearHarness />));
+  const renderClear = (user) => renderSync(user, <ClearHarness />);
 
   it('tells the account at once rather than waiting for the debounce', async () => {
     // Placing an order and emptying by hand are both followed by leaving. A tab
     // closed a moment later would otherwise leave the account holding items
     // that were just bought.
-    authValue = { user: { id: 'u1' }, initializing: false };
-    renderClear();
+    renderClear(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
 
     screen.getByText('add').click();
@@ -279,5 +310,124 @@ describe('emptying the cart', () => {
 
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('0'));
     expect(api.clearCart).not.toHaveBeenCalled();
+  });
+});
+
+describe('a session restored on page load', () => {
+  // Two devices on one account. The laptop's localStorage still holds what the
+  // phone has since bought or removed; the server cart is the truth.
+  const UNSYNCED = 'cart-unsynced:v1';
+
+  it('does not bring back lines the account no longer holds (order placed elsewhere)', async () => {
+    localStorage.setItem('cart:v1', JSON.stringify([localLine('p1', 2), localLine('p2', 1)]));
+    api.getCart.mockResolvedValueOnce([]);
+
+    renderRestored();
+
+    await waitFor(() => expect(api.getCart).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('0'));
+    expect(api.mergeCart).not.toHaveBeenCalled();
+    // Whatever is saved from here on is the account's own cart, never the old lines.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    for (const [items] of api.saveCart.mock.calls) expect(items).toEqual([]);
+  });
+
+  it('keeps a line removed on the other device removed', async () => {
+    localStorage.setItem('cart:v1', JSON.stringify([localLine('p1', 2), localLine('p2', 1)]));
+    api.getCart.mockResolvedValueOnce([apiLine('p1', 2)]);
+
+    renderRestored();
+
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
+    expect(api.mergeCart).not.toHaveBeenCalled();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    for (const [items] of api.saveCart.mock.calls) {
+      expect(items.map((i) => i.productId)).toEqual(['p1']);
+    }
+  });
+
+  it('merges a local change the account never confirmed, instead of losing it', async () => {
+    localStorage.setItem('cart:v1', JSON.stringify([localLine('p1', 2)]));
+    localStorage.setItem(UNSYNCED, 'true');
+
+    renderRestored();
+
+    await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
+    expect(api.mergeCart).toHaveBeenCalledWith([expect.objectContaining({ productId: 'p1', qty: 2 })]);
+    expect(api.getCart).not.toHaveBeenCalled();
+  });
+
+  it('recovers a save that failed: the next load merges it, the one after reads the account', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    authValue = { user: U1, initializing: false };
+    const first = renderSync(U1);
+    await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    await api.saveCart.mock.results[0].value;
+
+    api.saveCart.mockRejectedValueOnce(new Error('offline'));
+    screen.getByText('add').click();
+    await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    await expect(api.saveCart.mock.results[1].value).rejects.toThrow();
+    expect(warn).toHaveBeenCalled();
+    first.unmount();
+
+    // Reload 1: the change is still only here, so it is merged.
+    vi.clearAllMocks();
+    renderRestored();
+    await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
+    expect(api.mergeCart).toHaveBeenCalledWith([expect.objectContaining({ productId: 'p1', qty: 2 })]);
+    expect(api.getCart).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.saveCart).toHaveBeenCalled(), { timeout: 2000 });
+    await api.saveCart.mock.results[0].value;
+    cleanup();
+
+    // Reload 2: the merge and the save that followed are confirmed, so no marker.
+    vi.clearAllMocks();
+    api.getCart.mockResolvedValueOnce([]);
+    renderRestored();
+    await waitFor(() => expect(api.getCart).toHaveBeenCalledTimes(1));
+    expect(api.mergeCart).not.toHaveBeenCalled();
+  });
+
+  it('keeps the basket on screen and saving off when reading the account fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    localStorage.setItem('cart:v1', JSON.stringify([localLine('p1', 2)]));
+    api.getCart.mockRejectedValueOnce(new Error('the server is not there'));
+
+    renderRestored();
+
+    await waitFor(() =>
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('getCart'), expect.any(Error)),
+    );
+    expect(screen.getByTestId('count')).toHaveTextContent('1');
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(api.saveCart).not.toHaveBeenCalled();
+  });
+
+  it('merges a guest basket on a real sign-in even if a marker from an earlier session is gone', async () => {
+    localStorage.setItem('cart:v1', JSON.stringify([localLine('p1', 2)]));
+
+    renderSync(U1);
+
+    await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
+    expect(api.mergeCart).toHaveBeenCalledWith([expect.objectContaining({ productId: 'p1', qty: 2 })]);
+    expect(api.getCart).not.toHaveBeenCalled();
+  });
+
+  it('a sign-out leaves no marker, and the next sign-in merges', async () => {
+    localStorage.setItem('cart:v1', JSON.stringify([localLine('p1', 2)]));
+    const { rerender } = renderSync(U1);
+    await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    await api.saveCart.mock.results[0].value;
+
+    authValue = { user: null, initializing: false };
+    rerender(tree());
+    expect(localStorage.getItem(UNSYNCED)).toBeNull();
+
+    authValue = { user: { id: 'u2' }, initializing: false };
+    rerender(tree());
+    await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(2));
   });
 });

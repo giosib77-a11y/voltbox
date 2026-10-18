@@ -55,6 +55,7 @@ export const saveAddress = api.saveAddress;
 export const deleteAddress = api.deleteAddress;
 
 /* --- ანგარიშზე შენახული კალათა -------------------------------------------- */
+export const getCart = api.getCart;
 export const saveCart = api.saveCart;
 export const mergeCart = api.mergeCart;
 export const clearCart = api.clearCart;
@@ -88,6 +89,7 @@ export default {
   getAddresses,
   saveAddress,
   deleteAddress,
+  getCart,
   saveCart,
   mergeCart,
   clearCart,
