@@ -11,14 +11,24 @@
   - frontend: `npm run lint` ✅ · `npm test` ✅ **580 tests / 46 files** · build `http` ✅ · build `mock` ✅ ·
     `npm audit --omit=dev --audit-level=high` ✅ (0)
   - არ გაშვებულა: e2e workflow, Docker image build და API surface შემოწმება, frontend-ის mock-data export job.
-- **შედეგი:** 0 critical · 7 should-fix · 9 nit (აუდიტი); მიზნობრივმა re-review-ებმა დაამატა 2 should-fix (A-017,
-  A-018) და 7 nit (A-019–A-025)
+- **შედეგი:** 0 critical · 7 should-fix · 9 nit (აუდიტი); მიზნობრივმა re-review-ებმა დაამატა 3 should-fix (A-017,
+  A-018, A-026) და 10 nit (A-019–A-025, A-027–A-029)
+
+**`/fix A-004 A-022` 2026-10-18** (A-004-ზე owner-მა დაამტკიცა ახალი საჯარო `POST /cart/quote`, PROJECT.md Decision
+Log). fixed (verified): A-004, A-022 და A-004-ის re-review-ის should-fix A-026. ყველა should-fix დახურულია.
+საბოლოო შემოწმება (`c852cdc`, tester; A-026-ის შემდეგ `ce36867`-ზე იგივე ნაკრები orchestrator-მა გაუშვა): backend
+ruff ✅ · format ✅ · mypy ✅ · **pytest 1045** (baseline 1017, +28) · alembic upgrade head + check ✅ (tester);
+frontend lint ✅ · **vitest 634 / 51 ფაილი** (baseline 580 / 46, +54) · build http ✅ · build mock ✅ · npm audit 0.
+`GuestCartQuote.test.jsx`-ის ერთი ტესტი ერთხელ ჩავარდა სრულ suite-ში (localStorage effect-ის timing) — `waitFor`
+დაემატა; ამის შემდეგ 8 სრული გაშვება მწვანე. ღია: მხოლოდ nit-ები (A-008–A-016, A-020, A-021, A-023–A-025,
+A-027–A-029).
 
 **`/fix` 2026-10-18** (არჩეული: A-001 A-002 A-003 A-005 A-006 A-007; re-review-ს ახალი should-fix-ები A-017, A-018 და
 A-003-ის ფანჯარა A-019 იმავე რაუნდში).
 - fixed (verified): A-001, A-002, A-003, A-005, A-006, A-007, A-017, A-018, A-019 — თითოეულს ტესტი აქვს, რომელიც
   ძველ კოდზე ვარდებოდა; მიზნობრივმა re-review-მ (ვინც იპოვა) ყველა დახურულად ჩათვალა.
-- ღია should-fix: **A-004** (არჩეულ სიაში არ იყო). ღია nit-ები: A-008–A-016, A-020–A-025.
+- ღია should-fix: **A-004** (არჩეულ სიაში არ იყო; გასწორდა შემდეგ რაუნდში, იხ. ზემოთ). ღია nit-ები: A-008–A-016,
+  A-020–A-025.
 - საბოლოო შემოწმება (`73ae127`, tester): backend ruff ✅ · format ✅ (161) · mypy ✅ (143) · **pytest 1029** (baseline
   1017, +12) · alembic upgrade head + check ✅; frontend lint ✅ · **vitest 608 / 49 ფაილი** (baseline 580 / 46, +28) ·
   build http ✅ · build mock ✅ · npm audit 0. ბრაუზერში არცერთი გასწორება არ შემოწმებულა.
@@ -91,7 +101,11 @@ Stage 1-ის გამოსწორებებში (T0–T17) რეგ�
   საჯარო, rate limit-იანი `POST /cart/quote` იმავე `services/cart._resolve`-ით, ≤20 ხაზით, ან არსებული product
   endpoint-ები, თუ ერთი მოთხოვნით შეიძლება. გამქრალი ხაზი ამოიღება შეტყობინებით. ADD არსებულ ხაზზე snapshot-საც აახლებს.
 - **owner:** frontend-dev (+ backend-dev, თუ ახალი endpoint)
-- **status:** open — 2026-10-18-ის `/fix`-ის არჩეულ სიაში არ იყო
+- **status:** fixed (verified) — `d56ecfd` (backend: საჯარო `POST /cart/quote`, 30/წთ, იგივე `_resolve`, არაფერს
+  წერს; `TestQuote` ძველ კოდზე 404-ით ვარდებოდა) + `c852cdc` (frontend: სტუმრის Cart/Checkout ერთხელ ითხოვს quote-ს,
+  snapshot-ები ახლდება, გამქრალი/ამოწურული ხაზი იშლება, ერთი toast; `GuestCartQuote.test.jsx` ძველ კოდზე ვარდებოდა)
+  + `ce36867` (A-026). re-review (code-reviewer): თავდაპირველი ხარვეზი დახურულია; იპოვა A-026, A-027, A-028.
+  checkout-ის შეცდომის `details.productId`-ით ხაზის მონიშვნა არ გაკეთებულა (საჭირო აღარ არის — quote ხაზს წინასწარ შლის).
 
 ### A-005 · should-fix · პროფილის ცვლილება სესიაში არ იწერება — reload-ის შემდეგ ძველი მონაცემი ბრუნდება და შემდეგი შენახვა მას სერვერზე აბრუნებს
 - **ფაილი:** `frontend/src/services/httpApi.js:221-223`, `frontend/src/context/AuthContext.jsx:19-23,58-62`,
@@ -260,7 +274,9 @@ Stage 1-ის გამოსწორებებში (T0–T17) რეგ�
 - **სცენარი / შედეგი:** `reset_password` ჯერ reset-token-ის row-ს იღებს, მერე `users`-ს; პაროლის/email-ის შეცვლა —
   პირიქით. ერთსა და იმავე წამში ორივე → Postgres deadlock → ერთს 500. მეორე სრულდება, უსაფრთხოება არ ზიანდება.
 - **გამოსწორება:** `reset_password`-მა `users`-ის row token-ის `DELETE`-მდე აიღოს.
-- **owner:** backend-dev · **status:** open
+- **owner:** backend-dev · **status:** fixed (verified) — `141490d` + docstring `4ce7b12`; ახალი ტესტი
+  (`test_orders_concurrency.py`, interleaving იძულებითაა) ძველ კოდზე 3/3 გაშვებაში deadlock-ით ვარდებოდა. re-review
+  (security-auditor): დახურულია, ერთჯერადობა და შეცდომის პასუხი უცვლელია; იპოვა A-029.
 
 ### A-023 · nit · მეორე tab-ის storage HYDRATE ანგარიშის კალათას ისევ PUT-ით აგზავნის და marker-ს აყენებს (წინასწარ არსებული)
 - **ნაპოვნია:** A-019-ის re-review-ში (code-reviewer)
@@ -285,6 +301,42 @@ Stage 1-ის გამოსწორებებში (T0–T17) რეგ�
   ცარიელია — მაინც აზრიანია).
 - **გამოსწორება:** `expect(api.saveCart).not.toHaveBeenCalled()`.
 - **owner:** frontend-dev · **status:** open
+
+### A-026 · should-fix · HTTP-ზე დამატებული პროდუქტის შემდეგ ყოველი quote „ფასები განახლდა“-ს ამბობდა
+- **ნაპოვნია:** A-004-ის re-review-ში (code-reviewer)
+- **ფაილი:** `frontend/src/context/CartContext.jsx` (`snapshotOf`, `reconcileWithQuote`)
+- **სცენარი:** API პროდუქტის ფასს სტრიქონად აგზავნის (`"999.00"`), `snapshotOf` ასე ინახავდა, quote-ის ფასი კი
+  რიცხვი ხდება (999) → `!==` ყოველთვის true → სტუმარი ყოველ ჯერზე ხედავდა ცრუ შეტყობინებას და ნამდვილი ცვლილება
+  ხმაურში იკარგებოდა. mock-ში და ტესტებში არ ჩანდა (იქ ფასი რიცხვია).
+- **გამოსწორება:** `snapshotOf` რიცხვებს ინახავს, როგორც `sanitize` / `fromApi`.
+- **owner:** frontend-dev
+- **status:** fixed (verified) — `ce36867`; 3 ახალი ტესტი (API-ს ფორმის პროდუქტი, სტრიქონი ფასი) ძველ კოდზე
+  ვარდებოდა. re-review: მხოლოდ orchestrator-ის მიერ diff-ის წაკითხვით (ცვლილება 3 ხაზია).
+
+### A-027 · nit · quote-ის ლოდინისას დამატებული ხაზი „აღარ არის ხელმისაწვდომი“-თ იშლება
+- **ნაპოვნია:** A-004-ის re-review-ში (code-reviewer)
+- **ფაილი:** `frontend/src/context/CartContext.jsx` (`reconcileWithQuote`, `REFRESH`)
+- **სცენარი / შედეგი:** სტუმარი ხსნის კალათას, quote ნელია (API იღვიძებს); მეორე tab-ში ამატებს პროდუქტს Y; პირველი
+  tab storage-ით იღებს მას; quote-ის პასუხში Y არ არის → იშლება „removed“ toast-ით და ორივე tab-იდან ქრება.
+- **გამოსწორება:** REFRESH-ის payload-ში გაგზავნილი id-ები; შეიცვალოს/წაიშალოს მხოლოდ ისინი.
+- **owner:** frontend-dev · **status:** open (კომენტარი `refreshFromQuote`-ში ამას აღწერს)
+
+### A-028 · nit · ორი quote-ტესტი არყოფნას ამოწმებს პასუხის დამუშავებამდე
+- **ნაპოვნია:** A-004-ის re-review-ში (code-reviewer)
+- **ფაილი:** `frontend/src/pages/GuestCartQuote.test.jsx` („asks once, and says nothing…“, „stays usable when the quote
+  fails“)
+- **სცენარი / შედეგი:** fetch-ის გამოძახებისთანავე ამოწმებს, რომ toast არ არის — არასწორი toast მოგვიანებით რომ
+  გამოჩნდეს, ტესტი მაინც გაივლიდა.
+- **გამოსწორება:** შემოწმებამდე დამუშავების დასრულების ლოდინი (`act` / flushed promise).
+- **owner:** frontend-dev · **status:** open
+
+### A-029 · nit · ერთი reset-link-ის ორჯერ ერთდროულ გამოყენებაზე ტესტი არ არის
+- **ნაპოვნია:** A-022-ის re-review-ში (security-auditor)
+- **ფაილი:** `backend/tests/` (`test_password_reset.py:286` მიმდევრობით ამოწმებს)
+- **სცენარი / შედეგი:** „ზუსტად ერთხელ“ ორ პარალელურ ტრანზაქციაზე მსჯელობით დაცულია, ტესტით — არა.
+- **გამოსწორება:** `test_orders_concurrency.py`-ის ნიმუშით ტესტი: ორი ერთდროული reset ერთი ბმულით → ერთი 200, ერთი
+  `INVALID_RESET_TOKEN`.
+- **owner:** backend-dev · **status:** open
 
 ---
 
