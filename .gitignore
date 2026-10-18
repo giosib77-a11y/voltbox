@@ -43,3 +43,5 @@ mock.json
 
 # ერთჯერადი, `alembic upgrade --sql`-ით დაგენერირებული ფაილები
 backend/supabase-*.sql
+
+test-results/
