@@ -21,7 +21,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('virtual:api-impl', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -37,6 +37,7 @@ import { CartProvider } from './CartContext.jsx';
 import { ToastProvider } from './ToastContext.jsx';
 import ToastViewport from '../components/common/Toast.jsx';
 import { useCart } from '../hooks/useCart.js';
+import { __resetSessionStateForTests, refreshSession, writeSession } from '../services/session.js';
 
 /** A stand-in for AuthProvider whose value the test drives directly. */
 let authValue = { user: null, initializing: true };
@@ -264,6 +265,57 @@ describe('CartAccountSync', () => {
     // would lose the item and say nothing about it.
     expect(await screen.findByText(KEPT)).toBeInTheDocument();
     expect(screen.getByTestId('count')).toHaveTextContent('1');
+  });
+});
+
+describe('a session that ended', () => {
+  const EXPIRED = 'სესიის ვადა ამოიწურა. გთხოვთ, ხელახლა შეხვიდეთ.';
+
+  /** What AuthContext does when a failed refresh clears the stored session. */
+  async function endSession() {
+    writeSession({ user: U1, token: 'expired' });
+    global.fetch = vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }));
+    await act(async () => {
+      await refreshSession({ background: true });
+    });
+    authValue = { user: null, initializing: false };
+  }
+
+  beforeEach(() => {
+    __resetSessionStateForTests();
+  });
+
+  it('on page load says the session expired, not that the cart could not be saved', async () => {
+    localStorage.setItem('cart:v1', JSON.stringify([localLine('p1', 2)]));
+    api.getCart.mockImplementationOnce(async () => {
+      await endSession();
+      throw new Error('401');
+    });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const view = renderRestored();
+    await waitFor(() => expect(api.getCart).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(authValue.user).toBeNull());
+    view.rerender(tree());
+
+    expect(await screen.findByText(EXPIRED)).toBeInTheDocument();
+    expect(screen.queryByText(KEPT)).not.toBeInTheDocument();
+    expect(screen.getByTestId('count')).toHaveTextContent('1');
+  });
+
+  it('a later manual sign-out with an unconfirmed basket still says the cart stayed', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    api.mergeCart.mockRejectedValueOnce(new Error('the server is not there'));
+    const { rerender } = renderSync(U1);
+    await waitFor(() => expect(warn).toHaveBeenCalled());
+    screen.getByText('add').click();
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
+
+    authValue = { user: null, initializing: false };
+    rerender(tree());
+
+    expect(await screen.findByText(KEPT)).toBeInTheDocument();
+    expect(screen.queryByText(EXPIRED)).not.toBeInTheDocument();
   });
 });
 

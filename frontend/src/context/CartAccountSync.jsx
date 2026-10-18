@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth.js';
 import { useCart } from '../hooks/useCart.js';
 import { useToast } from '../hooks/useToast.js';
 import { t } from '../i18n/index.js';
+import { subscribeSessionEnded } from '../services/session.js';
 
 /**
  * Ties the cart to whoever is signed in.
@@ -13,7 +14,9 @@ import { t } from '../i18n/index.js';
  * account's cart instead (merging first only if this browser holds a change the
  * account has not confirmed); and empties the local one when they sign out - unless the
  * account never confirmed it holds the basket, in which case the basket stays
- * and the shopper is told it did.
+ * and the shopper is told it did. A session that ran out (a failed refresh)
+ * is told apart from a sign-out: the same basket handling, but the message is
+ * that the session expired.
  * Where it fits: rendered once at the composition root, inside both providers.
  *
  * Why a component and not a line in CartProvider: the cart must not depend on
@@ -38,6 +41,19 @@ export default function CartAccountSync() {
   // Whether auth has finished once already: a user present on that first pass
   // was restored from a session, a user appearing later signed in.
   const settled = useRef(false);
+  // Set when a failed refresh ended the session, so the user going away is read
+  // as that and not as a sign-out. The listener runs before AuthContext's state
+  // change reaches this component, so the flag is in place when the effect sees
+  // the missing user.
+  const sessionEnded = useRef(false);
+
+  useEffect(
+    () =>
+      subscribeSessionEnded(() => {
+        sessionEnded.current = true;
+      }),
+    [],
+  );
 
   useEffect(() => {
     // Nothing is known yet; acting on "no user" here would clear a real cart
@@ -55,13 +71,25 @@ export default function CartAccountSync() {
     lastUserId.current = id;
 
     if (id) {
+      sessionEnded.current = false;
       if (restored) restoreFromAccount();
       else mergeWithAccount();
-    } else if (signedOut && detachFromAccount()) {
-      // Kept, because nothing confirmed the account has it. Worth a line: the
-      // basket is still on screen after signing out, which otherwise reads as
-      // a bug, and it is no longer waiting on another device.
-      toast.info(t('cart.keptInBrowser'));
+    } else if (signedOut) {
+      const ended = sessionEnded.current;
+      sessionEnded.current = false;
+      const kept = detachFromAccount();
+      if (ended) {
+        // The session ran out, nobody signed out and no save was attempted, so
+        // "could not be saved to your account" would be the wrong reason. The
+        // basket is kept or put away exactly as for a sign-out; what the shopper
+        // needs to hear is that they are signed out, before a guest checkout.
+        toast.error(t('errors.sessionExpired'));
+      } else if (kept) {
+        // Kept, because nothing confirmed the account has it. Worth a line: the
+        // basket is still on screen after signing out, which otherwise reads as
+        // a bug, and it is no longer waiting on another device.
+        toast.info(t('cart.keptInBrowser'));
+      }
     }
   }, [user, initializing, mergeWithAccount, restoreFromAccount, detachFromAccount, toast]);
 
