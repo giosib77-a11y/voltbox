@@ -1,180 +1,209 @@
 # Progress
 
 ## Current Stage
-Stage 1 — Audit fixes (closed by the owner 2026-10-10; T0–T17 done)
+Stage 2 — Order trash (admin)
 
-Source: full audit 2026-10-10 (standard-reviewer, three slices: auth/authz/privacy;
-money/stock/data/Supabase; frontend/config/CI/Docker). Every task below was
-re-checked in the code before it was written here. Order = suggested order.
+Source: the owner's request (2026-10-18): delete an order in the admin into a trash (with a
+confirmation dialog), restore it with one button, delete it for good by hand or automatically
+after 30 days; admin only; deleting never changes stock. Rules: PROJECT.md → Business Rules →
+"Order trash"; endpoints: PROJECT.md → API Contract; reasons: Decision Log 2026-10-18.
+Planned 2026-10-18; nothing implemented yet. Order = suggested order: T18 first; then T19, T21
+and T23 can run side by side (no shared files); T20 after T19; T22 last.
+
+Rules for every task of this stage (CLAUDE.md, repeated because subagents run them):
+- Never read or open `backend/.env`; tests and probes run with `VOLTBOX_NO_DOTENV=1`
+  (`pytest` sets it itself). Every `alembic` / script run gets `VOLTBOX_NO_DOTENV=1` and an
+  explicit local `DATABASE_URL` (`postgresql://voltbox:voltbox@localhost:55432/...`).
+- Nothing runs against the live database. Migration 0016 reaches live only as reviewed SQL
+  the owner pastes (T23).
+- Backend gate: `ruff check . && ruff format --check . && mypy app scripts tests && pytest -q`.
+  Frontend gate: `npm run lint && npm test && npm run build` with `VITE_API_MODE=http` and
+  `VITE_API_MODE=mock`. A change to any file under `frontend/src` runs both gates.
 
 ## Tasks
 
-- [x] **T0 · config · Nothing but a deliberate opt-in may read `backend/.env`.**
-  Owner's rule (2026-10-10): tests and probes never read `backend/.env`. `Settings`
-  (`app/core/config.py:70`) reads `.env` from the cwd, so every `pytest` run and every
-  probe started in `backend/` loads the live Supabase URL and keys into the process.
-  Fix: `env_file=None` when `VOLTBOX_NO_DOTENV=1`; `tests/conftest.py` sets it before the
-  first import; a test that fails if `Settings` would open a `.env` under pytest.
-  CLAUDE.md already states the rule.
+- [ ] **T18 · Migration 0016: `orders.deleted_at` + partial index**
+  owner: backend-dev
+  files: backend/alembic/versions/0016_orders_deleted_at.py (new), backend/app/db/models/orders.py, backend/tests/test_order_trash_schema.py (new)
+  depends: —
+  What: `orders.deleted_at TIMESTAMPTZ NULL` (no default) and
+  `ix_orders_deleted_at (deleted_at) WHERE deleted_at IS NOT NULL`. The model declares both
+  (`Index(..., postgresql_where=text("deleted_at IS NOT NULL"))`, with a comment like the one on
+  `ix_orders_status`) so `alembic check` stays clean. No new table, so no RLS change. Downgrade
+  drops the column and index; its docstring says what that does: every trashed order becomes a
+  live order again (the trash state is lost), nothing else is touched.
+  done when: `tests/test_order_trash_schema.py` passes: `deleted_at` is `timestamp with time zone`,
+  nullable, no default; `ix_orders_deleted_at` exists and its predicate is
+  `deleted_at IS NOT NULL`. `tests/test_schema.py` (RLS on every table) still green. Locally, with
+  `VOLTBOX_NO_DOTENV=1` and `DATABASE_URL=postgresql://voltbox:voltbox@localhost:55432/voltbox`:
+  `alembic upgrade head` then `alembic check` → no new operations. (pytest's conftest runs the
+  migrations down and up, so the downgrade is exercised too.) Backend gate green.
 
-- [x] **T1 · critical · Refresh-token reuse detection is rolled back.**
-  `routes/auth.py` `refresh` raises without committing; `get_db` rolls back, so
-  `_handle_possible_reuse`'s family revoke (`services/auth.py:263`) never persists.
-  A stolen refresh cookie used first keeps its family alive. Tests pass only because
-  `conftest.py`'s `override_get_db` never rolls back.
-  Fix: commit on `UnauthorizedError` from the reuse path, as `/login` does, without
-  persisting the claim of a disabled account (`services/auth.py:364`); a test whose
-  `get_db` override rolls back on exception, proving the family stays revoked.
+- [ ] **T19 · Trash and restore; status frozen in the trash; the trash list**
+  owner: backend-dev
+  files: backend/app/services/order_trash.py (new), backend/app/services/admin_orders.py, backend/app/services/order_status.py, backend/app/schemas/admin_orders.py, backend/app/api/v1/routes/admin/orders.py, frontend/src/i18n/ka.json, frontend/src/i18n/en.json, backend/tests/test_order_trash.py (new)
+  depends: T18
+  What:
+  - `services/order_trash.py`: `TRASH_RETENTION = timedelta(days=30)` — the only place the 30
+    days live; `trash(db, order_id)` and `restore(db, order_id)`, each returning the order and
+    whether it changed. Both lock the row `FOR UPDATE` through the state machine's lock (make
+    `order_status._lock_order` public as `lock_order` — one copy). Trash on a trashed order and
+    restore on a live one change nothing (`deleted_at` keeps its first value).
+  - Routes: `POST /admin/orders/{id}/trash`, `POST /admin/orders/{id}/restore` → 200
+    `OrderDetailOut`; audit `order.trash` / `order.restore` (actor = admin,
+    `changes: {status, deletedAt}`) **only when something changed**, same transaction; commit.
+    `GET /admin/orders` gets `trash: bool = False`.
+  - `order_status.transition`: after the lock, a trashed order → 409 `ORDER_IN_TRASH`, before
+    the `INVALID_TRANSITION` check. `counts_by_status` counts live orders only.
+  - `admin_orders`: `_conditions(..., trash)` adds `deleted_at IS NULL` (default) or
+    `IS NOT NULL` (`trash=true`, ordered `deleted_at DESC, id`); `_summary` adds `deleted_at` and
+    `purge_at` (`deleted_at + TRASH_RETENTION`, else None); `get_order` returns
+    `allowed_transitions = []` for a trashed order and still returns it.
+  - `schemas/admin_orders.py`: `OrderListItem` gains `deleted_at: datetime | None`,
+    `purge_at: datetime | None` (so `OrderDetailOut` has them too).
+  - `apiErrors.ORDER_IN_TRASH` in `ka.json` and `en.json` (e.g. "შეკვეთა სანაგვეშია — ჯერ
+    აღადგინეთ." / "This order is in the trash — restore it first.").
+  - Known, left as is: `services/order.py` `cancel` (no route calls it) would turn
+    `ORDER_IN_TRASH` into `ORDER_NOT_CANCELLABLE`; that file is T21's.
+  done when: `tests/test_order_trash.py` passes, covering: trash → 200, `deletedAt` set,
+  `purgeAt` = `deletedAt` + 30 days, exactly one `order.trash` audit row with the admin as actor;
+  trash again → same `deletedAt`, still one audit row; restore → same `status` as before, both
+  fields null, one `order.restore` row; restore a live order → 200, no audit row; trash and
+  restore of an unknown id → 404 `ORDER_NOT_FOUND`; `POST /status` (pending → cancelled) on a
+  trashed order → 409 `ORDER_IN_TRASH`, and status, product stock, `inventory_movements` count
+  and `order_status_history` count unchanged; trashing a pending order leaves product stock and
+  `inventory_movements` unchanged; the detail of a trashed order → 200 with
+  `allowedTransitions: []`; default list hides it (`total` counts live orders only);
+  `trash=true` lists only trashed orders, newest deletion first, with `q` and `status` still
+  applied; `counts_by_status` excludes it. `tests/test_admin_auth.py` covers the new routes
+  (anonymous 401, customer 403) with no edit; `tests/test_error_messages.py` green. Backend gate
+  green; frontend gate green (JSON changed: `i18n.test.js` key parity).
 
-- [x] **T2 · should-fix · No migration enables RLS on `carts` and `alembic_version`.**
-  `0009_saved_cart.py` creates `carts` without RLS; `alembic_version` is created by
-  Alembic itself. A database built with `alembic upgrade head` exposes both through
-  Supabase's public Data API. Nothing tests for it.
-  Fix: migration `0015` enabling RLS on both (`public.`-qualified); a test that no
-  `public` table has `relrowsecurity = false`; same check in `scripts/verify_restore.py`.
-  Live DB: the Supabase advisor already shows RLS on 15/15 tables (owner, 2026-10-10),
-  so no live SQL is needed. The migration only makes a rebuilt database match. If it is
-  ever applied to Supabase, the owner runs the generated `public.`-qualified SQL and
-  sees it first — never `alembic upgrade` from here.
+- [ ] **T20 · Permanent delete and the 30-day purge**
+  owner: backend-dev
+  files: backend/app/services/order_trash.py, backend/app/api/v1/routes/admin/orders.py, frontend/src/i18n/ka.json, frontend/src/i18n/en.json, backend/tests/test_order_purge.py (new)
+  depends: T19
+  What:
+  - `delete_forever(db, order_id)`: lock the row; missing → 404 `ORDER_NOT_FOUND`; live → 409
+    `ORDER_NOT_IN_TRASH`; else audit `order.purge` (`{orderNumber, status, total,
+    automatic: false}`, actor = admin) and delete — items and history go by CASCADE,
+    `inventory_movements.order_id` becomes NULL by its FK. Route `DELETE /admin/orders/{id}` → 204.
+  - `purge_expired(db) -> int`: one `DELETE FROM orders WHERE deleted_at < now() - TRASH_RETENTION
+    RETURNING id, order_number, status, total`, one `order.purge` audit row per order (actor
+    NULL, `automatic: true`). `GET /admin/orders` (both modes) calls it and commits before the
+    list query.
+  - Stock: neither function calls `adjust_stock` or writes `inventory_movements`.
+  - `apiErrors.ORDER_NOT_IN_TRASH` in `ka.json` and `en.json` (e.g. "სამუდამოდ იშლება მხოლოდ
+    სანაგვეში მყოფი შეკვეთა." / "Only an order in the trash can be deleted for good.").
+  done when: `tests/test_order_purge.py` passes, covering: `DELETE` on a live order → 409
+  `ORDER_NOT_IN_TRASH`, order intact; on an unknown id → 404; on a trashed order → 204, the order,
+  its `order_items` and `order_status_history` rows gone, its `inventory_movements` rows still
+  there with `order_id IS NULL`, product stock unchanged, one `order.purge` row (actor = admin,
+  `automatic` false); an order trashed 31 days ago (set `deleted_at` directly) is gone after
+  `GET /admin/orders` and after `GET /admin/orders?trash=true`, with an `order.purge` row (actor
+  NULL, `automatic` true) and stock unchanged; one trashed 29 days ago and live orders are
+  untouched; concurrency (two sessions, as in `tests/test_orders_concurrency.py`): a restore
+  holding the row lock while `purge_expired` runs → after the restore commits, the purge
+  deletes 0 rows and the order is live; purge first → the restore answers 404. Backend gate
+  green; frontend gate green (JSON changed).
 
-- [x] **T3 · should-fix · Login/register/logout requests omit `credentials: 'include'`.**
-  `frontend/src/services/httpClient.js:172` uses fetch's default (`same-origin`).
-  The storefront calls the API cross-origin (onrender today, `voltbox.ge` →
-  `api.voltbox.ge` later), so the refresh cookie from login is never stored, every
-  session ends at 30 minutes (admin form included), and logout cannot revoke anything.
-  Fix: send credentials on API requests (at least the auth calls) + a test asserting it.
+- [ ] **T21 · Hide trashed orders from customers, guests, the dashboard and admin customers**
+  owner: backend-dev
+  files: backend/app/services/order.py, backend/app/services/dashboard.py, backend/app/services/admin_customers.py, backend/tests/test_order_trash_hidden.py (new)
+  depends: T18
+  What: `Order.deleted_at.is_(None)` in `order.list_for_user`, `get_by_number`,
+  `get_guest_order` (the same `order_not_found()` 404); in the dashboard's sales today, orders
+  today, sales total, top products and latest orders; in `admin_customers`'
+  `_orders_count_subquery`, `_total_spent_subquery` and `get_customer`'s order list. The two
+  idempotency lookups in `place_order` (`services/order.py:239`, `:281`) stay unfiltered on
+  purpose — a comment says why (a replay must never place a second order). `counts_by_status`
+  is T19's. Tests set `deleted_at` directly, so this task does not wait for T19;
+  `tests/factories.py` is not changed.
+  done when: `tests/test_order_trash_hidden.py` passes, covering: a trashed order is missing
+  from `GET /orders`; `GET /orders/{number}` → 404 `ORDER_NOT_FOUND`; the guest
+  `POST /orders/lookup` with the right token → 404 with a body identical to an unknown
+  number's; dashboard `salesToday`, `ordersToday`, `salesTotal`, `topProducts`, `latestOrders`
+  leave out a trashed delivered order and count it again once `deleted_at` is NULL; admin
+  customers list (`ordersCount`, `totalSpent`) and detail (`orders`, `ordersCount`,
+  `totalSpent`) leave it out; a replay of `POST /orders` with a trashed order's
+  `Idempotency-Key` (guest and signed-in) → the same `orderNumber`, order count unchanged,
+  stock decremented once, no new `inventory_movements` row. Backend gate green.
 
-- [x] **T4 · should-fix · Checkout with an expired token silently becomes a guest order.**
-  `core/deps.py:73` `get_optional_user` returns `None` for an invalid Bearer token;
-  the client refreshes only on 401. The order is saved with `user_id = NULL`: missing
-  from "my orders", no confirmation email.
-  Fix: header absent → guest; header present but invalid → 401 `INVALID_TOKEN`
-  (client refreshes and retries with the same Idempotency-Key). Tests for both.
+- [ ] **T22 · Admin trash UI (OrderDetail, OrderList)**
+  owner: frontend-dev
+  files: frontend/src/admin/adminApi.js, frontend/src/admin/pages/OrderList.jsx, frontend/src/admin/pages/OrderDetail.jsx, frontend/src/admin/pages/OrderList.test.jsx (new), frontend/src/admin/pages/OrderDetail.test.jsx (new)
+  depends: T19, T20
+  What (Georgian text in the components, as in the rest of `src/admin`; no i18n keys):
+  - `adminApi.js`: `trashOrder(id)` (POST `/admin/orders/:id/trash`), `restoreOrder(id)` (POST
+    `.../restore`), `deleteOrderForever(id)` (DELETE `/admin/orders/:id`); `listOrders` passes
+    `trash`.
+  - OrderDetail: "წაშლა" → `ConfirmDialog`; for pending/confirmed/processing the description
+    says the units stay reserved and to cancel first if they should return → `trashOrder` →
+    navigate to `/admin/orders` with a success toast (`useToast`). A trashed order (`deletedAt`
+    set): a banner with the purge date (`purgeAt`), no status buttons, "აღდგენა" (one click, no
+    dialog, the page shows the live order) and "სამუდამოდ წაშლა" (`ConfirmDialog` saying it
+    cannot be undone → `deleteOrderForever` → `/admin/orders?trash=true`).
+  - OrderList: a "სანაგვე" toggle bound to `?trash=true` (like the other filters, resets the
+    page); in the trash: deletion date and days left (from `purgeAt`, never below 0), per-row
+    "აღდგენა" and "სამუდამოდ წაშლა" (`ConfirmDialog`), the list reloads after each.
+  - Errors: the message from the existing `apiErrors` lookup (`error.message`), shown in the page
+    or the dialog; buttons usable again after a failure.
+  done when: `OrderDetail.test.jsx` and `OrderList.test.jsx` (mocked `adminApi`, as
+  `ProductList.test.jsx` does) pass, covering: the delete dialog shows the stock warning for
+  `pending` and not for `delivered`; confirm calls `trashOrder` once and lands on the list; a
+  trashed order shows the purge date, no status buttons, restore calls `restoreOrder` without a
+  dialog; permanent delete needs the dialog and calls `deleteOrderForever`; the trash toggle
+  calls `listOrders` with `trash: true` and puts `trash=true` in the URL; a row shows days left;
+  row restore and row delete call the API and reload; error paths — a rejected call with code
+  `ORDER_NOT_IN_TRASH` / `ORDER_IN_TRASH` (409) and a network failure — show the message and
+  leave the buttons enabled. Frontend gate green and the full backend gate green (backend tests
+  read `frontend/src`).
 
-- [x] **T5 · should-fix · Logged-in duplicate checkout returns 500.**
-  `services/order.py:273` `db.rollback()` expires the session's `user`; `owns_order`
-  then reads `user.id` (lazy load in async → `MissingGreenlet`). The order exists,
-  the shopper sees an error. Concurrency tests only use `user=None`.
-  Fix: capture `user.id` before the claim (or claim in a savepoint); concurrent
-  duplicate test with a signed-in user.
+- [ ] **T23 · Live SQL for migration 0015 → 0016**
+  owner: backend-dev
+  files: docs/migrations/0016_orders_deleted_at.sql (new)
+  depends: T18
+  What: from `backend/`, offline (connects to nothing):
+  `VOLTBOX_NO_DOTENV=1 JWT_SECRET=<any 32+ characters> DATABASE_URL=postgresql://voltbox:voltbox@localhost:55432/voltbox .venv/Scripts/alembic.exe upgrade 0015:0016 --sql`
+  (`alembic/env.py` imports `settings`, which needs `DATABASE_URL` and a `JWT_SECRET` of at
+  least 32 characters when `.env` is off — T17). Every table name hand-qualified `public.`
+  (`public.orders`, `public.alembic_version`; Supabase has its own `auth.*` tables).
+  done when: the file holds that output, qualified, with a header comment: how it was generated
+  and from which commit; the statement count between `BEGIN` and `COMMIT` (expected 3: add
+  column, create index, the `alembic_version` update — which checks `version_num = '0015'`, so
+  look for `UPDATE 1`); the checks to run after (`select version_num from public.alembic_version;`
+  → `0016`; `select data_type, is_nullable from information_schema.columns where table_schema='public'
+  and table_name='orders' and column_name='deleted_at';` → `timestamp with time zone`, `YES`).
+  Applied to a scratch local database at `0015` (inside the compose `db` container, never live;
+  no host psql is needed), it leaves `alembic current` = `0016` and `alembic check` clean.
+  No backend file changes, so no gate beyond `git diff --stat` showing only this file.
 
-- [x] **T6 · should-fix · Email change needs no password.**
-  `PATCH /auth/me` (`services/auth.py:558`) changes the email with only an access
-  token; existing reset links survive. Token (XSS / shared computer) → change email →
-  forgot-password → account taken over, once email sending is on.
-  Fix: require and verify `currentPassword` when the email actually changes; delete
-  the account's `password_reset_tokens` row. Frontend `Profile.jsx` asks for it only then.
+### Deploy plan — Stage 2 (to finish once T18–T23 are done; nothing here is run from the agent side)
+1. **Migration on live** — the owner pastes `docs/migrations/0016_orders_deleted_at.sql` into the
+   Supabase SQL editor (live head is `0015`). Additive: a nullable column and an index; the old
+   backend never reads it. The new backend reads `deleted_at` in every order query, so it must
+   exist first.
+2. **Backend** (`voltbox-api`).
+3. **Frontend** (`voltbox-storefront`). The old admin with the new backend works (trashed orders
+   are just hidden); the new admin with the old backend gets errors on the trash buttons. One
+   push to `main` starts both services and the static site usually finishes first (Stage 1 record
+   below) — a few minutes in which the trash buttons fail; no shopper-facing change.
+- Environment variables: none new, none changed.
+- After the deploy (by hand, on a test order the owner places for it, never a real one): trash it
+  → gone from the list and the dashboard, in "სანაგვე" with a purge date → restore → back with the
+  same status; trash again → "სამუდამოდ წაშლა" → gone; the product's stock is the same before and
+  after (it dropped once, at checkout).
 
-- [x] **T7 · should-fix · `POST /orders` has only the 60/min default limit.**
-  One IP can place ~60 guest orders a minute (50 lines × 99 units), holding the whole
-  catalogue out of stock and flooding the owner's Telegram; `INSUFFICIENT_STOCK`
-  returns the exact `available`. Fix: dedicated `ORDER_RATE_LIMIT` (e.g.
-  `5/minute;30/day`) on `create_order` + a route-level test.
-
-- [x] **T12 · should-fix · Guest order size cap (decided, was D3).**
-  Owner's rule (2026-10-10): at most 20 distinct products per order, at most 10 units of
-  each. Today 50 lines × 99 units (`schemas/order.py:22,63`). Applies to every order,
-  not only guests' (one schema). Fix: `max_length=20`, `qty le=10`; the frontend cart
-  must stop offering more than 10 per line / 20 lines (check `QuantityStepper`, cart
-  reducer) and say why; update `PROJECT.md` Business Rules; tests at 20/21 and 10/11.
-
-- [x] **T8 · should-fix · No request body size limit.**
-  Nothing caps the body before JSON parsing; a 24 MB unauthenticated body measured
-  ~250 MB of worker memory locally (validation 400 comes after). Render free has
-  512 MB for two workers. Fix: ASGI middleware → 413 above ~64 KB (counting chunked
-  bodies too), with the image-upload route allowed `MAX_IMAGE_BYTES` + overhead; tests.
-
-- [x] **T9 · should-fix · Renaming a brand or category leaves `search_text` stale.**
-  `services/admin_catalog.py` `update_brand` / `update_category` change the row only;
-  `search_text` embeds brand name, category name and slug. Exact search stops finding
-  those products until someone runs `scripts/reindex_search.py`.
-  Fix: recompute `search_text` for the affected products in the same transaction
-  when `name`/`slug` changes; test.
-
-- [x] **T10 · should-fix · Checkout writes no status-history start row.**
-  Only `order_status.transition` writes `OrderStatusHistory`; migration 0004
-  backfilled `pending → pending` so every order has a timeline start. New orders
-  show an empty history in the admin until the first transition.
-  Fix: write the same start row in `place_order`'s transaction; update
-  `tests/test_inventory.py:162`.
-
-- [x] **T11 · should-fix · Backend CI skips frontend files its tests read.**
-  `.github/workflows/backend.yml` paths list only `httpClient.js`; tests also read
-  `frontend/src/i18n/ka.json`, `frontend/src/constants/index.js`,
-  `frontend/src/admin/statuses.jsx`. A frontend-only PR can turn main red.
-  Fix: add the three paths (and the README gates line, see Backlog nit).
-
-- [x] **T13 · should-fix · T8 turned an oversized photo's message into "request too large, shorten the text".**
-  `core/body_limit.py` answers 413 `PAYLOAD_TOO_LARGE` for an image upload past
-  `max_image_bytes + 64 KB` (declared length and chunked), so the route's `IMAGE_TOO_LARGE`
-  with `maxBytes` (`services/storage.py:178`, `httpClient.js:92`) is reached only inside the
-  64 KB window. The owner uploading a 6–8 MB phone photo sees the wrong text. Reviewer
-  reproduced it; the code and `main.py:38` confirm it.
-  Fix: on the upload route both refusal paths answer `IMAGE_TOO_LARGE` with
-  `{"maxBytes": settings.max_image_bytes}` (`limit_for` returns code/details with the limit);
-  a test in `test_body_limit.py` for the upload 413's `code` and `maxBytes`, declared and chunked.
-
-- [x] **T14 · should-fix · `scripts/verify_restore.py` reads `backend/.env` at import.**
-  `verify_restore.py:38` calls `dotenv_values(.../.env)` to learn the live URL it must refuse.
-  CLAUDE.md: no script may read `backend/.env`; `VOLTBOX_NO_DOTENV` is not honoured here
-  (T0 covered only `Settings`). Pre-existing.
-  Fix: honour `VOLTBOX_NO_DOTENV=1` (no read, `LIVE_URL = None`) and keep the live-URL refusal
-  working another way (e.g. refuse any `--against` host that is not localhost); a test for both.
-
-- [x] **T15 · should-fix · The live footer says "demo project — data from a mock source".**
-  `Footer.jsx` rendered `t('footer.demo')` in every mode, so the http build on Render (which
-  `frontend/render.yaml` pins to `VITE_API_MODE=http`) told shoppers the data was mock.
-  Fix: the notice renders only when `VITE_API_MODE !== 'http'` (same check as `routes.jsx`);
-  the text stays in `ka.json` and `en.json` for mock. Tests: shown in mock, absent in http.
-  Check: the http `dist` has no `footer.demo` call (the sentence itself stays in the bundled
-  dictionary, so grepping the text proves nothing); the mock `dist` has it. Live shows the change
-  only after the owner redeploys the storefront.
-  **Done 2026-10-14:** `3268c71` is live and the owner checked in the browser that the footer notice is
-  gone (so the Render build is http). Backend `pytest -q` was not run for this change: Docker was
-  unreachable from the agent's shell (1009 errors, all DB connect). ruff, format and mypy are green;
-  the change touches only `Footer.jsx` and its test.
-
-- [x] **T16 · should-fix · The info pages (/delivery, /returns, /privacy, /faq) have an English title and a Georgian body.**
-  Their text was written into the components and `InfoPage.jsx` wrapped it in `lang="ka"`;
-  `i18n.test.js` skipped the six files. There is no separate "terms" page (the owner decides that later).
-  Fix: the text moved to `info.*` in `ka.json` (word for word) with the English in `en.json`; pages use
-  `t()` / `<Rich>`; `lang="ka"` and `tKa` are gone; the six files are no longer skipped by the
-  "no Georgian in components" test. Delivery wording (where, cost note, time, payment, receipt, table)
-  is all under `info.delivery`, the time is `shipping.etaDays`: a courier change is edited there only.
-  Privacy and Returns English follows the Georgian sentence for sentence.
-  Check: the old and the new Georgian HTML of the four pages, 16 variants (owner facts set/unset x email
-  on/off), compared byte for byte: identical. Frontend lint, vitest (580), both builds and backend
-  ruff, format, mypy, pytest (1009) green. New English tests: no Georgian in any page (text, aria,
-  caption, meta description), the table, links, owner facts.
-  Not translated on purpose: city names (`GET /delivery`, see Backlog) and the `SHOP_FACTS` values
-  (`returnPickup`, `warrantyPeriod`, `legalEntity`), which the owner writes in one language: on
-  `/en` they would appear as written.
-
-- [x] **T17 · should-fix · `scripts/verify_restore.py` still loads `backend/.env`, and its localhost guard has two gaps.**
-  Found by the 2026-10-14 finish-check (scope `cff0b34..HEAD`); T14's claim "never reads backend/.env" is not true.
-  `verify_restore.py:38` imports `app.db.ssl` → `app/core/config.py:331` `settings = get_settings()`, which reads
-  `.env` from the cwd. `docs/backup-restore.md:143` runs the script from `backend/`, so the live `DATABASE_URL` and
-  every key are loaded into the process (no connection to live: `--against` is local, and `build_connect_args` is
-  used only for a `supabase` URL). With `VOLTBOX_NO_DOTENV=1` the import fails instead (`jwt_secret` required), so
-  the documented command works only by loading the live `.env`. `test_the_module_does_not_read_a_dotenv` cannot see
-  it: pytest already sets the flag and has imported `app.core.config`.
-  Reproduced from a scratch cwd with a sentinel `.env` (never `backend/.env`): without the flag `settings.db_ssl_mode`
-  came from the sentinel.
-  Same guarantee, same file: (a) the positional `restored` URL is not checked at all; (b) `is_local` uses `urlsplit`,
-  but SQLAlchemy's asyncpg dialect passes `url.query` to connect, so
-  `postgresql://u:p@localhost:5432/db?host=db.x.supabase.co` passes `is_local` and connects to `db.x.supabase.co`
-  (checked with `create_connect_args`, no network).
-  Done when: the script no longer imports `app.*` settings (drop `app.db.ssl` and the `"supabase" in url` branch -
-  both URLs are local, no TLS); a subprocess test from a cwd holding a sentinel `.env`, with `VOLTBOX_NO_DOTENV`
-  and `JWT_SECRET` unset, shows the script runs to its argument check without loading it; both URLs are checked
-  with `make_url`, host in `LOCAL_HOSTS` and no `host`/`hostaddr` in the query (tests for `restored` remote and for
-  `?host=`); the docstring and `docs/backup-restore.md` say what holds.
-  **Done 2026-10-14:** the script imports nothing from `app`; `is_local` uses `make_url` and rejects `host`/`hostaddr`
-  in the query; both URLs are checked. Checked by hand from a scratch cwd with a sentinel `.env`, flag and
-  `JWT_SECRET` unset: remote `restored` and `?host=` on `--against` both exit 2. Not run: the new tests against the
-  old code (reasoned only); the subprocess test only on Windows, not on Linux CI.
+## Shared files
+<!-- Files that may appear in several tasks' files as (shared). Rule: append only (new dependency, type, route); never change or remove someone else's entry; two tasks never work on one shared file at the same time. -->
+- None. `frontend/src/i18n/ka.json` and `en.json` appear in T19 and T20 only, and T20 depends on
+  T19, so the two never run at the same time. `backend/app/services/order_trash.py` and
+  `backend/app/api/v1/routes/admin/orders.py` likewise (T19 → T20).
 
 ## Backlog (needs user decision)
+
+- **Stage 2 — two proposed Accepted Risks** (PROJECT.md → Accepted Risks): a permanently deleted
+  order is gone (only the audit row remains), and deleting never returns stock. Owner to confirm.
 
 - **City names in English** (owner, 2026-10-14: after sales start). `GET /delivery` and the checkout
   city list send Georgian names, so `/en` shows `თბილისი` in the delivery table and the city field.
@@ -382,12 +411,200 @@ Unverified (check before acting):
   sending) may reach the panel as a connection reset, i.e. `apiErrors.network`, not "photo is over 5 MB". From T8;
   not reproducible locally. Deploy checklist item 6 (photo over 5 MB on live) answers it.
 
+## Blockers
+- None.
+
 ## Run State
-- Finish-check this stage: done (2026-10-10); second run 2026-10-14 over `cff0b34..HEAD` (T13–T16, deps) → T17
-- Fix rounds this stage: 1/2
+- Stage: Stage 2 — Order trash (admin)
+- Finish-check this stage: not run
+- Fix rounds this stage: 0/2
 - Failed attempts: —
 
 ## Last Session
+- Date: 2026-10-18
+- Done: planned Stage 2 (order trash): PROJECT.md (scope, Business Rules → Order trash, Data, API
+  Contract, Decision Log, two proposed Accepted Risks, assumptions under Open Questions) and this
+  file (T18–T23). Nothing implemented.
+- Verification: none run — planning only; no code, database or git state changed.
+- Known issues / blockers: the two proposed Accepted Risks wait for the owner.
+- Next: T18; then T19, T21 and T23 in parallel; T20; T22.
+
+## Stage 1 — Done
+Stage 1 — Audit fixes (closed by the owner 2026-10-10; T0–T17 done)
+
+Source: full audit 2026-10-10 (standard-reviewer, three slices: auth/authz/privacy;
+money/stock/data/Supabase; frontend/config/CI/Docker). Every task below was
+re-checked in the code before it was written here. Order = suggested order.
+
+- [x] **T0 · config · Nothing but a deliberate opt-in may read `backend/.env`.**
+  Owner's rule (2026-10-10): tests and probes never read `backend/.env`. `Settings`
+  (`app/core/config.py:70`) reads `.env` from the cwd, so every `pytest` run and every
+  probe started in `backend/` loads the live Supabase URL and keys into the process.
+  Fix: `env_file=None` when `VOLTBOX_NO_DOTENV=1`; `tests/conftest.py` sets it before the
+  first import; a test that fails if `Settings` would open a `.env` under pytest.
+  CLAUDE.md already states the rule.
+
+- [x] **T1 · critical · Refresh-token reuse detection is rolled back.**
+  `routes/auth.py` `refresh` raises without committing; `get_db` rolls back, so
+  `_handle_possible_reuse`'s family revoke (`services/auth.py:263`) never persists.
+  A stolen refresh cookie used first keeps its family alive. Tests pass only because
+  `conftest.py`'s `override_get_db` never rolls back.
+  Fix: commit on `UnauthorizedError` from the reuse path, as `/login` does, without
+  persisting the claim of a disabled account (`services/auth.py:364`); a test whose
+  `get_db` override rolls back on exception, proving the family stays revoked.
+
+- [x] **T2 · should-fix · No migration enables RLS on `carts` and `alembic_version`.**
+  `0009_saved_cart.py` creates `carts` without RLS; `alembic_version` is created by
+  Alembic itself. A database built with `alembic upgrade head` exposes both through
+  Supabase's public Data API. Nothing tests for it.
+  Fix: migration `0015` enabling RLS on both (`public.`-qualified); a test that no
+  `public` table has `relrowsecurity = false`; same check in `scripts/verify_restore.py`.
+  Live DB: the Supabase advisor already shows RLS on 15/15 tables (owner, 2026-10-10),
+  so no live SQL is needed. The migration only makes a rebuilt database match. If it is
+  ever applied to Supabase, the owner runs the generated `public.`-qualified SQL and
+  sees it first — never `alembic upgrade` from here.
+
+- [x] **T3 · should-fix · Login/register/logout requests omit `credentials: 'include'`.**
+  `frontend/src/services/httpClient.js:172` uses fetch's default (`same-origin`).
+  The storefront calls the API cross-origin (onrender today, `voltbox.ge` →
+  `api.voltbox.ge` later), so the refresh cookie from login is never stored, every
+  session ends at 30 minutes (admin form included), and logout cannot revoke anything.
+  Fix: send credentials on API requests (at least the auth calls) + a test asserting it.
+
+- [x] **T4 · should-fix · Checkout with an expired token silently becomes a guest order.**
+  `core/deps.py:73` `get_optional_user` returns `None` for an invalid Bearer token;
+  the client refreshes only on 401. The order is saved with `user_id = NULL`: missing
+  from "my orders", no confirmation email.
+  Fix: header absent → guest; header present but invalid → 401 `INVALID_TOKEN`
+  (client refreshes and retries with the same Idempotency-Key). Tests for both.
+
+- [x] **T5 · should-fix · Logged-in duplicate checkout returns 500.**
+  `services/order.py:273` `db.rollback()` expires the session's `user`; `owns_order`
+  then reads `user.id` (lazy load in async → `MissingGreenlet`). The order exists,
+  the shopper sees an error. Concurrency tests only use `user=None`.
+  Fix: capture `user.id` before the claim (or claim in a savepoint); concurrent
+  duplicate test with a signed-in user.
+
+- [x] **T6 · should-fix · Email change needs no password.**
+  `PATCH /auth/me` (`services/auth.py:558`) changes the email with only an access
+  token; existing reset links survive. Token (XSS / shared computer) → change email →
+  forgot-password → account taken over, once email sending is on.
+  Fix: require and verify `currentPassword` when the email actually changes; delete
+  the account's `password_reset_tokens` row. Frontend `Profile.jsx` asks for it only then.
+
+- [x] **T7 · should-fix · `POST /orders` has only the 60/min default limit.**
+  One IP can place ~60 guest orders a minute (50 lines × 99 units), holding the whole
+  catalogue out of stock and flooding the owner's Telegram; `INSUFFICIENT_STOCK`
+  returns the exact `available`. Fix: dedicated `ORDER_RATE_LIMIT` (e.g.
+  `5/minute;30/day`) on `create_order` + a route-level test.
+
+- [x] **T12 · should-fix · Guest order size cap (decided, was D3).**
+  Owner's rule (2026-10-10): at most 20 distinct products per order, at most 10 units of
+  each. Today 50 lines × 99 units (`schemas/order.py:22,63`). Applies to every order,
+  not only guests' (one schema). Fix: `max_length=20`, `qty le=10`; the frontend cart
+  must stop offering more than 10 per line / 20 lines (check `QuantityStepper`, cart
+  reducer) and say why; update `PROJECT.md` Business Rules; tests at 20/21 and 10/11.
+
+- [x] **T8 · should-fix · No request body size limit.**
+  Nothing caps the body before JSON parsing; a 24 MB unauthenticated body measured
+  ~250 MB of worker memory locally (validation 400 comes after). Render free has
+  512 MB for two workers. Fix: ASGI middleware → 413 above ~64 KB (counting chunked
+  bodies too), with the image-upload route allowed `MAX_IMAGE_BYTES` + overhead; tests.
+
+- [x] **T9 · should-fix · Renaming a brand or category leaves `search_text` stale.**
+  `services/admin_catalog.py` `update_brand` / `update_category` change the row only;
+  `search_text` embeds brand name, category name and slug. Exact search stops finding
+  those products until someone runs `scripts/reindex_search.py`.
+  Fix: recompute `search_text` for the affected products in the same transaction
+  when `name`/`slug` changes; test.
+
+- [x] **T10 · should-fix · Checkout writes no status-history start row.**
+  Only `order_status.transition` writes `OrderStatusHistory`; migration 0004
+  backfilled `pending → pending` so every order has a timeline start. New orders
+  show an empty history in the admin until the first transition.
+  Fix: write the same start row in `place_order`'s transaction; update
+  `tests/test_inventory.py:162`.
+
+- [x] **T11 · should-fix · Backend CI skips frontend files its tests read.**
+  `.github/workflows/backend.yml` paths list only `httpClient.js`; tests also read
+  `frontend/src/i18n/ka.json`, `frontend/src/constants/index.js`,
+  `frontend/src/admin/statuses.jsx`. A frontend-only PR can turn main red.
+  Fix: add the three paths (and the README gates line, see Backlog nit).
+
+- [x] **T13 · should-fix · T8 turned an oversized photo's message into "request too large, shorten the text".**
+  `core/body_limit.py` answers 413 `PAYLOAD_TOO_LARGE` for an image upload past
+  `max_image_bytes + 64 KB` (declared length and chunked), so the route's `IMAGE_TOO_LARGE`
+  with `maxBytes` (`services/storage.py:178`, `httpClient.js:92`) is reached only inside the
+  64 KB window. The owner uploading a 6–8 MB phone photo sees the wrong text. Reviewer
+  reproduced it; the code and `main.py:38` confirm it.
+  Fix: on the upload route both refusal paths answer `IMAGE_TOO_LARGE` with
+  `{"maxBytes": settings.max_image_bytes}` (`limit_for` returns code/details with the limit);
+  a test in `test_body_limit.py` for the upload 413's `code` and `maxBytes`, declared and chunked.
+
+- [x] **T14 · should-fix · `scripts/verify_restore.py` reads `backend/.env` at import.**
+  `verify_restore.py:38` calls `dotenv_values(.../.env)` to learn the live URL it must refuse.
+  CLAUDE.md: no script may read `backend/.env`; `VOLTBOX_NO_DOTENV` is not honoured here
+  (T0 covered only `Settings`). Pre-existing.
+  Fix: honour `VOLTBOX_NO_DOTENV=1` (no read, `LIVE_URL = None`) and keep the live-URL refusal
+  working another way (e.g. refuse any `--against` host that is not localhost); a test for both.
+
+- [x] **T15 · should-fix · The live footer says "demo project — data from a mock source".**
+  `Footer.jsx` rendered `t('footer.demo')` in every mode, so the http build on Render (which
+  `frontend/render.yaml` pins to `VITE_API_MODE=http`) told shoppers the data was mock.
+  Fix: the notice renders only when `VITE_API_MODE !== 'http'` (same check as `routes.jsx`);
+  the text stays in `ka.json` and `en.json` for mock. Tests: shown in mock, absent in http.
+  Check: the http `dist` has no `footer.demo` call (the sentence itself stays in the bundled
+  dictionary, so grepping the text proves nothing); the mock `dist` has it. Live shows the change
+  only after the owner redeploys the storefront.
+  **Done 2026-10-14:** `3268c71` is live and the owner checked in the browser that the footer notice is
+  gone (so the Render build is http). Backend `pytest -q` was not run for this change: Docker was
+  unreachable from the agent's shell (1009 errors, all DB connect). ruff, format and mypy are green;
+  the change touches only `Footer.jsx` and its test.
+
+- [x] **T16 · should-fix · The info pages (/delivery, /returns, /privacy, /faq) have an English title and a Georgian body.**
+  Their text was written into the components and `InfoPage.jsx` wrapped it in `lang="ka"`;
+  `i18n.test.js` skipped the six files. There is no separate "terms" page (the owner decides that later).
+  Fix: the text moved to `info.*` in `ka.json` (word for word) with the English in `en.json`; pages use
+  `t()` / `<Rich>`; `lang="ka"` and `tKa` are gone; the six files are no longer skipped by the
+  "no Georgian in components" test. Delivery wording (where, cost note, time, payment, receipt, table)
+  is all under `info.delivery`, the time is `shipping.etaDays`: a courier change is edited there only.
+  Privacy and Returns English follows the Georgian sentence for sentence.
+  Check: the old and the new Georgian HTML of the four pages, 16 variants (owner facts set/unset x email
+  on/off), compared byte for byte: identical. Frontend lint, vitest (580), both builds and backend
+  ruff, format, mypy, pytest (1009) green. New English tests: no Georgian in any page (text, aria,
+  caption, meta description), the table, links, owner facts.
+  Not translated on purpose: city names (`GET /delivery`, see Backlog) and the `SHOP_FACTS` values
+  (`returnPickup`, `warrantyPeriod`, `legalEntity`), which the owner writes in one language: on
+  `/en` they would appear as written.
+
+- [x] **T17 · should-fix · `scripts/verify_restore.py` still loads `backend/.env`, and its localhost guard has two gaps.**
+  Found by the 2026-10-14 finish-check (scope `cff0b34..HEAD`); T14's claim "never reads backend/.env" is not true.
+  `verify_restore.py:38` imports `app.db.ssl` → `app/core/config.py:331` `settings = get_settings()`, which reads
+  `.env` from the cwd. `docs/backup-restore.md:143` runs the script from `backend/`, so the live `DATABASE_URL` and
+  every key are loaded into the process (no connection to live: `--against` is local, and `build_connect_args` is
+  used only for a `supabase` URL). With `VOLTBOX_NO_DOTENV=1` the import fails instead (`jwt_secret` required), so
+  the documented command works only by loading the live `.env`. `test_the_module_does_not_read_a_dotenv` cannot see
+  it: pytest already sets the flag and has imported `app.core.config`.
+  Reproduced from a scratch cwd with a sentinel `.env` (never `backend/.env`): without the flag `settings.db_ssl_mode`
+  came from the sentinel.
+  Same guarantee, same file: (a) the positional `restored` URL is not checked at all; (b) `is_local` uses `urlsplit`,
+  but SQLAlchemy's asyncpg dialect passes `url.query` to connect, so
+  `postgresql://u:p@localhost:5432/db?host=db.x.supabase.co` passes `is_local` and connects to `db.x.supabase.co`
+  (checked with `create_connect_args`, no network).
+  Done when: the script no longer imports `app.*` settings (drop `app.db.ssl` and the `"supabase" in url` branch -
+  both URLs are local, no TLS); a subprocess test from a cwd holding a sentinel `.env`, with `VOLTBOX_NO_DOTENV`
+  and `JWT_SECRET` unset, shows the script runs to its argument check without loading it; both URLs are checked
+  with `make_url`, host in `LOCAL_HOSTS` and no `host`/`hostaddr` in the query (tests for `restored` remote and for
+  `?host=`); the docstring and `docs/backup-restore.md` say what holds.
+  **Done 2026-10-14:** the script imports nothing from `app`; `is_local` uses `make_url` and rejects `host`/`hostaddr`
+  in the query; both URLs are checked. Checked by hand from a scratch cwd with a sentinel `.env`, flag and
+  `JWT_SECRET` unset: remote `restored` and `?host=` on `--against` both exit 2. Not run: the new tests against the
+  old code (reasoned only); the subprocess test only on Windows, not on Linux CI.
+
+Stage 1's last Run State and Last Session, kept as the record:
+- Finish-check this stage: done (2026-10-10); second run 2026-10-14 over `cff0b34..HEAD` (T13–T16, deps) → T17
+- Fix rounds this stage: 1/2
+- Failed attempts: —
 - 2026-10-14 finish-check over `cff0b34..HEAD`: ruff, format, mypy, pytest 1009; frontend lint, vitest 580, both
   builds (http `dist` has no `footer.demo` call, mock has it) - all green. T17 (should-fix) found and fixed the same day: pytest 1017, ruff, format, mypy green. No stage is open; the finish-check can be re-run.
 - Date: 2026-10-10
