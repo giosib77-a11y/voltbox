@@ -159,7 +159,7 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
   leave the buttons enabled. Frontend gate green and the full backend gate green (backend tests
   read `frontend/src`).
 
-- [ ] **T23 · Live SQL for migration 0015 → 0016**
+- [x] **T23 · Live SQL for migration 0015 → 0016**
   owner: backend-dev
   files: docs/migrations/0016_orders_deleted_at.sql (new)
   depends: T18
