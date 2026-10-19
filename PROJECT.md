@@ -351,6 +351,20 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-10-19 — The mockup's `line2` keeps its value on labelled controls; text fields get an AA border (T26)
+- Decision: a new colour role `outline` carries the mockup's `line2` unchanged (light #D6CDBC, dark #3A3A40,
+  admin = today's outline-button border) for borders of controls that carry their own label or icon: outline
+  and secondary buttons, round icon buttons, the categories button, the hero's outline link. `ink-300`
+  (control borders) moves to #8C8474 / #6A6A70 (≥ 3:1) and stays the boundary of text fields, select,
+  checkbox/radio and the quantity stepper. The mockup's light `gold`, `goldTxt` and `muted` move by the
+  smallest step that passes AA where they are text or a meaningful mark on the footer and the page.
+- Reason: WCAG 1.4.11 asks 3:1 only of a boundary that alone identifies the control; a labelled button is
+  identified by its label. Darkening `line2` everywhere (the first DESIGN.md draft) made every outline button
+  harsher than the mockup the owner wants reproduced. What still holds: every text and every text-field
+  boundary meets AA in both themes, and `palette.test.js` measures them.
+- How to change: if the owner wants 3:1 on every border, set `outline` = `ink-300` in the light and dark
+  palettes (one value each); no component changes.
+
 ### 2026-10-19 — Stage 3 work stays on branch `agent-system`
 - Decision: every Stage 3 commit goes on `agent-system`, one commit per task; no new branch.
   Push and merge to `main` only with the owner's approval (unchanged).

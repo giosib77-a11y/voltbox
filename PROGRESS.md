@@ -64,7 +64,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
 
 ## Tasks
 
-- [ ] **T26 · DESIGN.md from the mockup**
+- [x] **T26 · DESIGN.md from the mockup**
   owner: designer
   files: DESIGN.md
   depends: —
@@ -236,7 +236,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
 
 - [ ] **T32 · Common components (shared with the admin)**
   owner: frontend-dev
-  files: frontend/src/components/common/Button.jsx, frontend/src/components/common/Input.jsx, frontend/src/components/common/Select.jsx, frontend/src/components/common/Textarea.jsx, frontend/src/components/common/Badge.jsx, frontend/src/components/common/Breadcrumbs.jsx, frontend/src/components/common/Modal.jsx, frontend/src/components/common/Toast.jsx, frontend/src/components/common/EmptyState.jsx, frontend/src/components/common/ErrorState.jsx, frontend/src/components/common/ErrorBoundary.jsx, frontend/src/components/common/ProductImage.jsx, frontend/src/components/common/CategoryIcon.jsx, frontend/src/components/common/fields.test.jsx, frontend/src/components/common/Toast.test.jsx, frontend/src/components/common/ProductImage.test.jsx
+  files: frontend/src/components/common/Button.jsx, frontend/src/components/common/Input.jsx, frontend/src/components/common/Select.jsx, frontend/src/components/common/Textarea.jsx, frontend/src/components/common/Badge.jsx, frontend/src/components/common/Breadcrumbs.jsx, frontend/src/components/common/Modal.jsx, frontend/src/components/common/Toast.jsx, frontend/src/components/common/EmptyState.jsx, frontend/src/components/common/ErrorState.jsx, frontend/src/components/common/ErrorBoundary.jsx, frontend/src/components/common/ProductImage.jsx, frontend/src/components/common/CategoryIcon.jsx, frontend/public/images/placeholder-shop.svg (new — storefront-only; `placeholder.svg` stays, the admin shows it), frontend/src/components/common/fields.test.jsx, frontend/src/components/common/Toast.test.jsx, frontend/src/components/common/ProductImage.test.jsx
   depends: T27
   What: DESIGN.md's buttons, fields, badges, breadcrumbs, modal, toast, empty / error states, error
   screen, photo tile and the category icon's frame. The admin renders Button, Input, Select,
@@ -623,7 +623,8 @@ Unverified (check before acting):
 - Stage 3 in progress. Commits: 7449985 plan; T28 (screens.mjs: 98 shots on the pre-redesign mock build,
   exit 0; a renamed woff2 fails it — `vite preview` answers a missing file with 200 text/html, so the script
   also fails an asset served as HTML).
-- Next: T26 (designer) → T27.
+- T26: DESIGN.md rewritten (contrast table recomputed by script — 0 failures; logo, favicon and placeholder SVGs rendered at 16–96px on light and dark). Revised once: the mockup `line2` kept as a new `outline` role on labelled controls (Decision Log).
+- Next: T27.
 
 ## Stage 2 — Done
 Last session of Stage 2:
