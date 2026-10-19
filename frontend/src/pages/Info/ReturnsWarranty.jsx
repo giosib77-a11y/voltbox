@@ -2,7 +2,7 @@ import { useId } from 'react';
 import { INFO_PAGES, SHOP_FACTS } from '../../constants/index.js';
 import { t } from '../../i18n/index.js';
 import Rich from '../../i18n/Rich.jsx';
-import InfoPage, { InfoSection } from './InfoPage.jsx';
+import InfoPage, { DIAMOND_LIST_CLASS, InfoSection } from './InfoPage.jsx';
 import { ContactInline } from './Contact.jsx';
 
 /** დაბრუნება და გარანტია. */
@@ -19,7 +19,7 @@ export default function ReturnsWarranty() {
         <p id={conditionsId} className="font-semibold text-ink-900">
           {t('info.returns.conditions')}
         </p>
-        <ul aria-labelledby={conditionsId} className="list-disc space-y-1.5 pl-5">
+        <ul aria-labelledby={conditionsId} className={DIAMOND_LIST_CLASS}>
           <li>{t('info.returns.conditionUnused')}</li>
           <li>{t('info.returns.conditionPackaging')}</li>
         </ul>
@@ -32,7 +32,7 @@ export default function ReturnsWarranty() {
         <p id={stepsId} className="font-semibold text-ink-900">
           {t('info.returns.steps')}
         </p>
-        <ol aria-labelledby={stepsId} className="list-decimal space-y-1.5 pl-5">
+        <ol aria-labelledby={stepsId} className="list-decimal space-y-1.5 pl-5 marker:text-primary-700">
           <li>
             <Rich k="info.returns.stepContact" values={{ contact: <ContactInline /> }} />
           </li>

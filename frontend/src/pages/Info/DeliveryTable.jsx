@@ -27,7 +27,7 @@ export default function DeliveryTable() {
   if (!rules) return <Skeleton className="h-36 w-full" rounded="rounded-card" />;
 
   return (
-    <div className="overflow-hidden rounded-card border border-ink-200 bg-surface">
+    <div className="overflow-x-auto rounded-card border border-line bg-surface">
       <table className="w-full text-left text-sm">
         <caption className="sr-only">{t('info.delivery.tableCaption')}</caption>
         <thead className="bg-ink-100 text-ink-700">
@@ -40,7 +40,7 @@ export default function DeliveryTable() {
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-ink-200">
+        <tbody className="divide-y divide-line">
           {rules.cities.map((city) => (
             <tr key={city.name}>
               <th scope="row" className="px-4 py-3 font-medium text-ink-900">

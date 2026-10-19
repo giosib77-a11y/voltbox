@@ -2,7 +2,7 @@ import { INFO_PAGES, SHOP_FACTS } from '../../constants/index.js';
 import { useEmailEnabled } from '../../hooks/useEmailEnabled.js';
 import { t } from '../../i18n/index.js';
 import Rich from '../../i18n/Rich.jsx';
-import InfoPage, { InfoSection } from './InfoPage.jsx';
+import InfoPage, { DIAMOND_LIST_CLASS, InfoSection } from './InfoPage.jsx';
 import { ContactInline } from './Contact.jsx';
 
 /**
@@ -60,7 +60,7 @@ export default function Privacy() {
 
       <InfoSection title={t('info.privacy.shareTitle')}>
         <p>{t('info.privacy.shareIntro')}</p>
-        <ul className="list-disc space-y-1.5 pl-5">
+        <ul className={DIAMOND_LIST_CLASS}>
           <li>{t('info.privacy.shareCourier')}</li>
           <li>{t('info.privacy.shareRender')}</li>
           <li>{t('info.privacy.shareSupabase')}</li>

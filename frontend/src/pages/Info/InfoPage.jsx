@@ -18,11 +18,15 @@ export default function InfoPage({ page, description, children }) {
   usePageMeta({ description, canonical: page.path });
 
   return (
-    <div className="container-page max-w-3xl py-8 lg:py-12">
+    <div className="container-page py-5 lg:py-7">
       <Breadcrumbs items={[{ label: title }]} className="mb-4" />
-      <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">{title}</h1>
-      <div className="mt-6 space-y-8 text-sm leading-relaxed text-ink-700 sm:text-base">
-        {children}
+      <div className="max-w-[720px]">
+        <h1 className="font-serif text-[28px] font-light leading-tight text-ink-900 lg:text-4xl">
+          {title}
+        </h1>
+        <div className="mt-6 space-y-8 text-sm leading-[1.8] text-ink-700 lg:text-[15px] lg:leading-[1.85]">
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -31,7 +35,9 @@ export default function InfoPage({ page, description, children }) {
 export function InfoSection({ title, children }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-bold text-ink-900">{title}</h2>
+      <h2 className="font-serif text-[22px] font-light leading-snug text-ink-900 lg:text-2xl">
+        {title}
+      </h2>
       {children}
     </section>
   );
@@ -39,4 +45,8 @@ export function InfoSection({ title, children }) {
 
 /** ბმული ტექსტის შიგნით — ხაზგასმული, რომ ფერის გარეშეც ჩანდეს. */
 export const TEXT_LINK_CLASS =
-  'font-semibold text-primary-700 underline underline-offset-4 hover:text-primary-800';
+  'rounded-sm font-semibold text-primary-700 underline underline-offset-4 hover:text-primary-800';
+
+/** A bulleted list whose marker is the shop's small diamond (DESIGN.md §9.1). */
+export const DIAMOND_LIST_CLASS =
+  'space-y-1.5 [&>li]:relative [&>li]:pl-5 [&>li]:before:absolute [&>li]:before:left-0.5 [&>li]:before:top-[0.7em] [&>li]:before:h-1 [&>li]:before:w-1 [&>li]:before:rotate-45 [&>li]:before:bg-primary-500';

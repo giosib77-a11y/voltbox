@@ -28,23 +28,23 @@ export function ContactList() {
   return (
     <ul className="space-y-2.5">
       <li className="flex items-center gap-2.5">
-        <Phone className="h-4 w-4 shrink-0 text-ink-400" aria-hidden="true" />
+        <Phone className="h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
         <a href={CONTACT.phoneHref} className={TEXT_LINK_CLASS}>
           {CONTACT.phone}
         </a>
       </li>
       <li className="flex items-center gap-2.5">
-        <Mail className="h-4 w-4 shrink-0 text-ink-400" aria-hidden="true" />
+        <Mail className="h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
         <a href={`mailto:${CONTACT.email}`} className={TEXT_LINK_CLASS}>
           {CONTACT.email}
         </a>
       </li>
       <li className="flex items-start gap-2.5">
-        <MapPin className="mt-1 h-4 w-4 shrink-0 text-ink-400" aria-hidden="true" />
+        <MapPin className="mt-1 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
         {t('contact.address')}
       </li>
       <li className="flex items-start gap-2.5">
-        <Clock className="mt-1 h-4 w-4 shrink-0 text-ink-400" aria-hidden="true" />
+        <Clock className="mt-1 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
         {t('contact.workHours')}
       </li>
     </ul>

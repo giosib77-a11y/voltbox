@@ -1,5 +1,6 @@
 import { Home, Search } from 'lucide-react';
 import Button from '../components/common/Button.jsx';
+import { LogoMark } from '../components/layout/Logo.jsx';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import { t } from '../i18n/index.js';
 
@@ -9,11 +10,12 @@ export default function NotFound() {
 
   return (
     <div className="container-page flex min-h-[60vh] flex-col items-center justify-center py-14 text-center">
-      <p className="text-7xl font-bold tracking-tight text-primary-700 sm:text-8xl">404</p>
-      <h1 className="mt-4 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
+      <LogoMark size={96} className="text-primary-500" />
+      <p className="sr-only">404</p>
+      <h1 className="mt-6 font-serif text-[28px] font-light leading-tight text-ink-900 lg:text-4xl">
         {t('notFound.title')}
       </h1>
-      <p className="mt-2.5 max-w-md text-sm leading-relaxed text-ink-600">
+      <p className="mt-2.5 max-w-md text-sm leading-[1.8] text-ink-600">
         {t('notFound.text')}
       </p>
 
