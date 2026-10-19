@@ -52,20 +52,20 @@ export default function Orders() {
 
         return (
           <li key={order.orderNumber} className="rounded-card border border-ink-200 bg-surface">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-200 p-4">
               <div>
-                <p className="text-sm font-bold tabular-nums text-ink-900">{order.orderNumber}</p>
-                <p className="mt-0.5 text-xs text-ink-500">{formatDateTime(order.createdAt)}</p>
+                <p className="font-display text-xl font-medium lining-nums tabular-nums text-ink-900">{order.orderNumber}</p>
+                <p className="mt-0.5 text-sm text-ink-500">{formatDateTime(order.createdAt)}</p>
               </div>
               <div className="flex items-center gap-3">
                 <Badge tone={status.tone}>{status.label}</Badge>
-                <span className="text-base font-bold text-ink-900">
+                <span className="font-display text-xl font-medium lining-nums text-ink-900">
                   {formatPrice(amounts.total)}
                 </span>
               </div>
             </div>
 
-            <ul className="divide-y divide-ink-100 px-4">
+            <ul className="divide-y divide-ink-200 px-4">
               {order.items.map((item) => (
                 <li key={item.productId} className="flex items-center gap-3 py-3">
                   <Link to={`/product/${item.snapshot.slug}`} className="shrink-0">
@@ -91,7 +91,7 @@ export default function Orders() {
             </ul>
 
             {amounts.shipping !== null && (
-              <p className="border-t border-ink-100 px-4 py-2.5 text-xs text-ink-600">
+              <p className="border-t border-ink-200 px-4 py-2.5 text-xs text-ink-600">
                 {t('account.orderAmounts', {
                   subtotal: formatPrice(amounts.subtotal),
                   shipping: amounts.shipping === 0 ? t('common.free') : formatPrice(amounts.shipping),
@@ -99,13 +99,13 @@ export default function Orders() {
               </p>
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink-100 p-4 text-xs text-ink-500">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink-200 p-4 text-xs text-ink-500">
               <span>
                 {order.customer.city}, {order.customer.address}
               </span>
               <Link
                 to={`/checkout/success/${order.orderNumber}`}
-                className="font-semibold text-primary-700 underline-offset-4 hover:underline"
+                className="font-semibold text-primary-700 underline underline-offset-4 hover:text-primary-800"
               >
                 {t('account.viewDetails')}
               </Link>

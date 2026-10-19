@@ -98,13 +98,13 @@ export default function Profile() {
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="rounded-card border border-ink-200 bg-surface p-5 sm:p-6">
-      <h2 className="text-base font-bold text-ink-900">{t('account.personal')}</h2>
+    <form onSubmit={handleSubmit} noValidate className="max-w-[480px] rounded-card border border-ink-200 bg-surface p-5 sm:p-6">
+      <h2 className="font-serif text-xl font-light text-ink-900">{t('account.personal')}</h2>
       <p className="mt-1 text-sm text-ink-600">
         {t('account.personalHint')}
       </p>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+      <div className="mt-5 grid gap-4">
         <Input
           label={t('fields.firstName')}
           required

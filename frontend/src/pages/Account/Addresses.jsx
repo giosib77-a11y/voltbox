@@ -74,7 +74,7 @@ export default function Addresses() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-base font-bold text-ink-900">{t('account.savedAddresses')}</h2>
+        <h2 className="font-serif text-xl font-light text-ink-900">{t('account.savedAddresses')}</h2>
         <Button size="sm" onClick={openNew}>
           <Plus className="h-4 w-4" aria-hidden="true" />
           {t('account.add')}
@@ -98,7 +98,7 @@ export default function Addresses() {
                   <p className="flex items-center gap-2 text-sm font-semibold text-ink-900">
                     {address.label || t('fields.address')}
                     {address.isDefault && (
-                      <Badge tone="success" size="sm">
+                      <Badge tone="outline" size="sm">
                         <Star className="h-3 w-3" aria-hidden="true" />
                         {t('account.default')}
                       </Badge>

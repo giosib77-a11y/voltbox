@@ -65,8 +65,8 @@ export default function ChangePassword() {
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="max-w-md rounded-card border border-ink-200 bg-surface p-5 sm:p-6">
-      <h2 className="text-base font-bold text-ink-900">{t('auth.changePassword')}</h2>
+    <form onSubmit={handleSubmit} noValidate className="max-w-[480px] rounded-card border border-ink-200 bg-surface p-5 sm:p-6">
+      <h2 className="font-serif text-xl font-light text-ink-900">{t('auth.changePassword')}</h2>
       <p className="mt-1 text-sm text-ink-600">
         {t('account.passwordRule', { count: MIN_PASSWORD_LENGTH })}
       </p>

@@ -21,7 +21,7 @@ export default function AccountLayout() {
       <Breadcrumbs items={[{ label: t('account.title') }]} className="mb-4" />
 
       <header className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
+        <h1 className="font-serif text-[28px] font-light leading-tight text-ink-900">
           {t('account.title')}
         </h1>
         <p className="mt-1 text-sm text-ink-600">
@@ -29,19 +29,19 @@ export default function AccountLayout() {
         </p>
       </header>
 
-      <div className="lg:flex lg:gap-7">
-        <aside className="mb-5 lg:mb-0 lg:w-60 lg:shrink-0">
+      <div className="md:flex md:gap-7">
+        <aside className="mb-5 md:mb-0 md:w-56 md:shrink-0">
           <nav aria-label={t('account.nav')}>
-            <ul className="flex gap-2 overflow-x-auto rounded-card border border-ink-200 bg-surface p-2 lg:flex-col lg:gap-1">
+            <ul className="flex overflow-x-auto rounded-card border border-ink-200 bg-surface md:flex-col md:overflow-visible">
               {NAV.map((item) => (
-                <li key={item.to} className="shrink-0 lg:shrink">
+                <li key={item.to} className="shrink-0 md:shrink">
                   <NavLink
                     to={item.to}
                     className={({ isActive }) =>
-                      `flex items-center gap-2.5 whitespace-nowrap rounded-control px-3 py-2.5 text-sm font-medium transition-colors ${
+                      `flex h-11 items-center gap-2.5 whitespace-nowrap border-b-2 focus-visible:ring-inset focus-visible:ring-offset-0 px-4 text-sm font-medium transition-colors md:border-b-0 md:border-l-2 ${
                         isActive
-                          ? 'bg-primary-50 text-primary-700'
-                          : 'text-ink-700 hover:bg-ink-100'
+                          ? 'border-primary-500 bg-primary-50 text-ink-900'
+                          : 'border-transparent text-ink-600 hover:bg-ink-100'
                       }`
                     }
                   >
@@ -50,11 +50,11 @@ export default function AccountLayout() {
                   </NavLink>
                 </li>
               ))}
-              <li className="shrink-0 lg:mt-1 lg:shrink lg:border-t lg:border-ink-100 lg:pt-1">
+              <li className="shrink-0 md:shrink md:border-t md:border-ink-200">
                 <button
                   type="button"
                   onClick={logout}
-                  className="flex w-full items-center gap-2.5 whitespace-nowrap rounded-control px-3 py-2.5 text-sm font-medium text-danger-fg transition-colors hover:bg-danger-50"
+                  className="flex h-11 w-full items-center gap-2.5 whitespace-nowrap px-4 focus-visible:ring-inset focus-visible:ring-offset-0 text-sm font-medium text-danger-fg transition-colors hover:bg-danger-50"
                 >
                   <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
                   {t('nav.logout')}

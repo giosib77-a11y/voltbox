@@ -330,7 +330,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   done when: Login / ForgotPassword / ResetPassword tests green with behaviour untouched; each page
   with an error shown, both themes, both widths; C1–C8.
 
-- [ ] **T40 · Account pages**
+- [x] **T40 · Account pages**
   owner: frontend-dev
   files: frontend/src/pages/Account/AccountLayout.jsx, frontend/src/pages/Account/Orders.jsx, frontend/src/pages/Account/Profile.jsx, frontend/src/pages/Account/Addresses.jsx, frontend/src/pages/Account/ChangePassword.jsx, frontend/src/pages/Account/Orders.test.jsx, frontend/src/pages/Account/Profile.test.jsx, frontend/src/pages/Account/ChangePassword.test.jsx
   depends: T32
@@ -646,7 +646,8 @@ Unverified (check before acting):
 - T34: home per the mockup (260px column, hero with the §7 ornament, ruled benefits, diamond-framed popular categories, four product sections at §4 rhythm); `.bg-tech-grid` removed. Compared with the mockup shots at 1440 by the orchestrator too: differences are copy/data (real categories and counts, the hero sentence) and DESIGN.md's decisions (ornament, no "— 01").
 - T35: category and search (serif h1, serif filter titles, themed checkbox with a peer focus ring, slider, sort with its missing chevron, `outline` pagination); pre-existing defect fixed: the price slider's thumbs never rendered (no `border-solid` on the thumb pseudo-element). Filter, sort, price and page 2 change the URL (clicked in mock); the mobile sheet opens and closes.
 - T36: product page (light square photo tile, 64px thumbnails with a primary-500 selected border, display brand eyebrow, serif h1, display price with lining-nums, tabs with a primary underline); gallery uses `shopPlaceholder`; a keyboard-focused gallery arrow is now visible at lg. Thumbnail switching and the 10-per-line limit behave as before (browser, both themes).
-- Next: T37, T40 (running), then T38.
+- T40: account (serif h1, 14rem nav with a primary-500 left bar for the active item, a scrolling tab strip below md, 480px forms, order cards with display number and total + `lining-nums`). Orders with a placed mock order, focus rings and the end of the 390 tab strip checked in shots (review asked for both).
+- Next: T37 (running), then T38.
 
 ## Stage 2 — Done
 Last session of Stage 2:
