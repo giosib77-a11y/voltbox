@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Mail, Send } from 'lucide-react';
+import { LogoMark } from '../components/layout/Logo.jsx';
 import Button from '../components/common/Button.jsx';
 import Input from '../components/common/Input.jsx';
 import { Skeleton } from '../components/common/Skeleton.jsx';
@@ -14,7 +15,7 @@ import { CONTACT } from '../constants/index.js';
 import { t } from '../i18n/index.js';
 import Rich from '../i18n/Rich.jsx';
 
-const LINK_CLASS = 'font-semibold text-primary-700 underline-offset-4 hover:underline';
+const LINK_CLASS = 'font-medium text-primary-700 underline underline-offset-4 hover:text-primary-800';
 
 /**
  * „დაგავიწყდათ პაროლი?" — მისამართი, რომელზეც აღდგენის ბმული წავა.
@@ -79,9 +80,9 @@ export default function ForgotPassword() {
     );
   } else if (sentTo) {
     body = (
-      <div role="status" className="mt-4 space-y-2 text-sm text-ink-700">
+      <div role="status" className="mt-5 space-y-2 rounded-control bg-success-50 px-4 py-3 text-sm text-success-700">
         <p>
-          <Rich k="auth.recoverSent" values={{ email: <strong className="text-ink-900">{sentTo}</strong> }} />
+          <Rich k="auth.recoverSent" values={{ email: <strong>{sentTo}</strong> }} />
         </p>
         <p>{t('auth.recoverOnce')}</p>
       </div>
@@ -119,8 +120,9 @@ export default function ForgotPassword() {
     <div className="container-page flex justify-center py-10 lg:py-16">
       <div className="w-full max-w-md">
         <div className="rounded-card border border-ink-200 bg-surface p-6 sm:p-8">
-          <h1 className="text-2xl font-bold tracking-tight text-ink-900">{t('auth.recoverTitle')}</h1>
-          <p className="mt-1.5 text-sm text-ink-600">
+          <LogoMark size={48} className="mx-auto mb-5 text-primary-500" />
+          <h1 className="text-center font-serif text-[28px] font-light leading-tight text-ink-900">{t('auth.recoverTitle')}</h1>
+          <p className="mt-2 text-center text-sm text-ink-600">
             {t('auth.recoverIntro')}
           </p>
 

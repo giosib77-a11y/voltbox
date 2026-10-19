@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { KeyRound } from 'lucide-react';
+import { LogoMark } from '../components/layout/Logo.jsx';
 import Button from '../components/common/Button.jsx';
 import Input from '../components/common/Input.jsx';
 import { useToast } from '../hooks/useToast.js';
@@ -16,7 +17,7 @@ import {
 import { t } from '../i18n/index.js';
 
 const EMPTY = { newPassword: '', confirmPassword: '' };
-const LINK_CLASS = 'font-semibold text-primary-700 underline-offset-4 hover:underline';
+const LINK_CLASS = 'font-medium text-primary-700 underline underline-offset-4 hover:text-primary-800';
 
 /** The token from `#token=…`, or null. */
 function tokenFrom(hash) {
@@ -108,7 +109,7 @@ export default function ResetPassword() {
   let body;
   if (!token || linkDead) {
     body = (
-      <div role="alert" className="mt-4 space-y-3 text-sm text-ink-700">
+      <div role="alert" className="mt-5 space-y-3 rounded-control bg-danger-50 px-4 py-3 text-sm text-danger-fg">
         <p>
           {linkDead
             ? t('auth.linkDead')
@@ -116,7 +117,7 @@ export default function ResetPassword() {
         </p>
         {emailEnabled && (
           <p>
-            <Link to="/forgot-password" className={LINK_CLASS}>
+            <Link to="/forgot-password" className="font-semibold underline underline-offset-4">
               {t('auth.requestNewLink')}
             </Link>
           </p>
@@ -159,8 +160,9 @@ export default function ResetPassword() {
     <div className="container-page flex justify-center py-10 lg:py-16">
       <div className="w-full max-w-md">
         <div className="rounded-card border border-ink-200 bg-surface p-6 sm:p-8">
-          <h1 className="text-2xl font-bold tracking-tight text-ink-900">{t('auth.newPassword')}</h1>
-          <p className="mt-1.5 text-sm text-ink-600">
+          <LogoMark size={48} className="mx-auto mb-5 text-primary-500" />
+          <h1 className="text-center font-serif text-[28px] font-light leading-tight text-ink-900">{t('auth.newPassword')}</h1>
+          <p className="mt-2 text-center text-sm text-ink-600">
             {t('auth.resetIntro')}
           </p>
 

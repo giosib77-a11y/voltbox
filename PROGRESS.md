@@ -321,7 +321,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   form at 390 and at 1440 lands on the confirmation; checkout with errors shown and the
   confirmation, both themes; C1–C8.
 
-- [ ] **T39 · Sign-in pages**
+- [x] **T39 · Sign-in pages**
   owner: frontend-dev
   files: frontend/src/pages/Login.jsx, frontend/src/pages/Register.jsx, frontend/src/pages/ForgotPassword.jsx, frontend/src/pages/ResetPassword.jsx, frontend/src/pages/Login.test.jsx, frontend/src/pages/ForgotPassword.test.jsx, frontend/src/pages/ResetPassword.test.jsx
   depends: T32
@@ -636,7 +636,8 @@ Unverified (check before acting):
 - T32: shared components through tokens whose admin value is today's (`text-on-primary`, `shadow-btn`, `--btn-weight`, `border-outline`), `storefront:` gates, and for portals (Modal, Toast) `[:root:not(:has([data-admin]))_&]:`; opt-in Button `xl`, ProductImage `shopPlaceholder`, CategoryIcon `framed`. Admin comparison in a browser left for the finish-check (no local stack in the task).
 - T31: CategoryNav (bordered rows, gold icons, flyout, header button with `outline`), MobileMenu, Footer (`bg-footer`, LogoMark + wordmark at §7 sizes, serif headings). Layout and PageFallback already matched — unchanged. Flyout placement classes kept (test green, unedited).
 - T30: top bar and header per the mockup (round outlined theme toggle, round primary cart, underlined search with a focus-within ring); toggle persists over reload, suggestions work by keyboard (checked in a browser). Review fix: the keyboard-active suggestion row was primary-50 on surface (≈1.1:1 in dark) — now primary-100 + an inset primary-500 ring.
-- Next: T33 (running), then T39–T41.
+- T39: login, register, forgot and reset per §9.1 (448px card, LogoMark, serif h1, existing field errors and toast; reset's alert as a danger tint, forgot's status as a success tint). Forgot-password's form is not reachable in mock (email off).
+- Next: T33, T41 (running), T40.
 
 ## Stage 2 — Done
 Last session of Stage 2:

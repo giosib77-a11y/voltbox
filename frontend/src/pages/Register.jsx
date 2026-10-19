@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Eye, EyeOff, Mail, UserPlus } from 'lucide-react';
+import { LogoMark } from '../components/layout/Logo.jsx';
 import Button from '../components/common/Button.jsx';
 import Input from '../components/common/Input.jsx';
 import { useAuth } from '../hooks/useAuth.js';
@@ -79,8 +80,9 @@ export default function Register() {
     <div className="container-page flex justify-center py-10 lg:py-16">
       <div className="w-full max-w-md">
         <div className="rounded-card border border-ink-200 bg-surface p-6 sm:p-8">
-          <h1 className="text-2xl font-bold tracking-tight text-ink-900">{t('auth.register')}</h1>
-          <p className="mt-1.5 text-sm text-ink-600">
+          <LogoMark size={48} className="mx-auto mb-5 text-primary-500" />
+          <h1 className="text-center font-serif text-[28px] font-light leading-tight text-ink-900">{t('auth.register')}</h1>
+          <p className="mt-2 text-center text-sm text-ink-600">
             {t('auth.registerIntro')}
           </p>
 
@@ -153,7 +155,7 @@ export default function Register() {
             {t('auth.haveAccount')}{' '}
             <Link
               to={`/login?${QUERY_KEYS.redirect}=${encodeURIComponent(redirectTo)}`}
-              className="font-semibold text-primary-700 underline-offset-4 hover:underline"
+              className="font-medium text-primary-700 underline underline-offset-4 hover:text-primary-800"
             >
               {t('nav.login')}
             </Link>
