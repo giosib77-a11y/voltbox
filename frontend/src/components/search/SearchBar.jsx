@@ -145,6 +145,7 @@ export default function SearchBar({ defaultValue = '', autoFocus = false, onSubm
     <div ref={wrapperRef} className={`relative ${className}`}>
       <form
         role="search"
+        className="relative focus-within:ring-2 focus-within:ring-primary-500 focus-within:ring-offset-2 focus-within:ring-offset-surface"
         onSubmit={(event) => {
           event.preventDefault();
           goToResults();
@@ -154,7 +155,7 @@ export default function SearchBar({ defaultValue = '', autoFocus = false, onSubm
           {t('common.search')}
         </label>
         <Search
-          className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500"
+          className="pointer-events-none absolute left-0.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-ink-500"
           aria-hidden="true"
         />
         <input
@@ -180,7 +181,7 @@ export default function SearchBar({ defaultValue = '', autoFocus = false, onSubm
             setOpen(true);
           }}
           onKeyDown={handleKeyDown}
-          className="field-text h-11 w-full rounded-control border border-line-strong bg-ink-100 pl-10 pr-10 text-fg transition-colors placeholder:text-fg-muted hover:border-ink-400 focus:border-primary-500 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary-500/25 [&::-webkit-search-cancel-button]:hidden"
+          className="field-text h-[46px] w-full rounded-none border-0 border-b border-ink-300 bg-transparent pl-9 pr-10 text-fg transition-colors placeholder:text-fg-muted hover:border-primary-500 focus:outline-none [&::-webkit-search-cancel-button]:hidden"
         />
 
         {value && (
@@ -193,7 +194,7 @@ export default function SearchBar({ defaultValue = '', autoFocus = false, onSubm
               inputRef.current?.focus();
             }}
             aria-label={t('search.clear')}
-            className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-700"
+            className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-700 active:bg-ink-200"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>

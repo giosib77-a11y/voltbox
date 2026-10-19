@@ -28,14 +28,14 @@ export default function SearchSuggestions({
   optionId,
 }) {
   const panel =
-    'absolute left-0 right-0 top-full z-drawer mt-2 overflow-hidden rounded-card border border-ink-200 bg-ink-100 shadow-popover';
+    'absolute left-0 right-0 top-full z-drawer mt-2 overflow-hidden rounded-card border border-line bg-surface shadow-popover';
 
   /* ---------------------------------------------------------------- ბოლო ძებნები */
   if (mode === 'recent') {
     return (
       <div className={panel}>
-        <div className="flex items-center justify-between gap-2 border-b border-ink-200 px-3 py-2">
-          <span className="text-2xs font-bold uppercase tracking-wide text-ink-500">
+        <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+          <span className="text-xs text-ink-500">
             {t('common.recentSearches')}
           </span>
           <button
@@ -59,7 +59,7 @@ export default function SearchSuggestions({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onSelectRecent(term)}
                 className={`flex w-full items-center gap-3 rounded-control py-2 pl-2 pr-9 text-left transition-colors ${
-                  index === activeIndex ? 'bg-primary-50' : 'hover:bg-ink-200'
+                  index === activeIndex ? 'bg-primary-100 ring-2 ring-inset ring-primary-500' : 'hover:bg-primary-50'
                 }`}
               >
                 <Clock className="h-4 w-4 shrink-0 text-ink-500" aria-hidden="true" />
@@ -121,13 +121,13 @@ export default function SearchSuggestions({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onSelect(product)}
                 className={`flex w-full items-center gap-3 rounded-control p-2 text-left transition-colors ${
-                  index === activeIndex ? 'bg-primary-50' : 'hover:bg-ink-200'
+                  index === activeIndex ? 'bg-primary-100 ring-2 ring-inset ring-primary-500' : 'hover:bg-primary-50'
                 }`}
               >
                 <ProductImage
                   src={product.images?.[0]}
                   alt=""
-                  className="h-11 w-11 shrink-0 rounded-control border border-ink-200"
+                  className="h-11 w-11 shrink-0 rounded-control border border-line"
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-ink-900">{product.name}</span>
@@ -140,7 +140,7 @@ export default function SearchSuggestions({
             </li>
           ))}
 
-          <li role="presentation" className="mt-1 border-t border-ink-200 pt-1">
+          <li role="presentation" className="mt-1 border-t border-line pt-1">
             <button
               type="button"
               id={viewAllIndex === activeIndex ? optionId : undefined}
@@ -149,7 +149,7 @@ export default function SearchSuggestions({
               onMouseDown={(e) => e.preventDefault()}
               onClick={onViewAll}
               className={`flex w-full items-center justify-center gap-2 rounded-control p-2.5 text-sm font-semibold text-primary-700 transition-colors ${
-                viewAllIndex === activeIndex ? 'bg-primary-50' : 'hover:bg-ink-200'
+                viewAllIndex === activeIndex ? 'bg-primary-100 ring-2 ring-inset ring-primary-500' : 'hover:bg-primary-50'
               }`}
             >
               <Search className="h-4 w-4" aria-hidden="true" />

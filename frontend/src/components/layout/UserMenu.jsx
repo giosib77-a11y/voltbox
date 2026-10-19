@@ -38,9 +38,9 @@ export default function UserMenu() {
     return (
       <Link
         to="/login"
-        className="flex h-10 items-center gap-2 rounded-control px-2.5 text-sm font-medium text-ink-700 transition-colors hover:bg-ink-100 hover:text-fg"
+        className="flex h-11 items-center gap-2 rounded-control px-3 text-sm text-fg transition-colors hover:bg-ink-100 active:bg-ink-200 md:h-[46px]"
       >
-        <UserCircle2 className="h-5 w-5" aria-hidden="true" />
+        <UserCircle2 className="h-[18px] w-[18px]" aria-hidden="true" />
         <span className="hidden lg:inline">{t('nav.login')}</span>
       </Link>
     );
@@ -53,9 +53,9 @@ export default function UserMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="flex h-10 items-center gap-2 rounded-control px-2.5 text-sm font-medium text-ink-700 transition-colors hover:bg-ink-100 hover:text-fg"
+        className="flex h-11 items-center gap-2 rounded-control px-3 text-sm text-fg transition-colors hover:bg-ink-100 active:bg-ink-200 md:h-[46px]"
       >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700">
+        <span className="flex h-7 w-7 items-center justify-center rounded-pill bg-primary-100 text-xs font-bold text-primary-700">
           {(user?.firstName?.[0] || 'V').toUpperCase()}
         </span>
         <span className="hidden max-w-[7rem] truncate lg:inline">{user?.firstName}</span>
@@ -64,9 +64,9 @@ export default function UserMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-drawer mt-2 w-56 overflow-hidden rounded-card border border-ink-200 bg-ink-100 py-1.5 shadow-popover"
+          className="absolute right-0 top-full z-drawer mt-2 w-56 overflow-hidden rounded-card border border-line bg-surface py-1.5 shadow-popover"
         >
-          <div className="border-b border-ink-200 px-3 pb-2 pt-1">
+          <div className="border-b border-line px-3 pb-2 pt-1">
             <p className="truncate text-sm font-semibold text-ink-900">
               {user?.firstName} {user?.lastName}
             </p>
@@ -83,7 +83,7 @@ export default function UserMenu() {
               href="/admin"
               role="menuitem"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 border-b border-ink-200 px-3 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-50"
+              className="flex items-center gap-2.5 min-h-11 border-b border-line px-3 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-50"
             >
               <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
               {t('nav.admin')}
@@ -96,7 +96,7 @@ export default function UserMenu() {
               to={link.to}
               role="menuitem"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-3 py-2 text-sm text-ink-700 transition-colors hover:bg-ink-200 hover:text-fg"
+              className="flex items-center gap-2.5 min-h-11 px-3 py-2 text-sm text-ink-700 transition-colors hover:bg-primary-50 hover:text-fg"
             >
               <link.icon className="h-4 w-4 text-ink-500" aria-hidden="true" />
               {t(link.labelKey)}
@@ -110,7 +110,7 @@ export default function UserMenu() {
               setOpen(false);
               logout();
             }}
-            className="flex w-full items-center gap-2.5 border-t border-ink-200 px-3 py-2 text-sm text-danger-fg transition-colors hover:bg-danger-50"
+            className="flex w-full items-center gap-2.5 min-h-11 border-t border-line px-3 py-2 text-sm text-danger-fg transition-colors hover:bg-danger-50"
           >
             <LogOut className="h-4 w-4" aria-hidden="true" />
             {t('nav.logout')}

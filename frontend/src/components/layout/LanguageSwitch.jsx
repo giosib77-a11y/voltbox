@@ -28,9 +28,9 @@ export default function LanguageSwitch({ className = '', onNavigate }) {
       onClick={onNavigate}
       aria-label={label}
       title={label}
-      className={`flex h-10 items-center gap-1.5 rounded-control px-2.5 text-sm font-semibold text-ink-700 transition-colors hover:bg-ink-100 hover:text-fg ${className}`}
+      className={`flex h-11 items-center gap-2 rounded-control px-3 text-sm text-fg transition-colors hover:bg-ink-100 active:bg-ink-200 md:h-[46px] ${className}`}
     >
-      <Globe className="h-5 w-5" aria-hidden="true" />
+      <Globe className="h-[18px] w-[18px]" aria-hidden="true" />
       <span>{t('language.current')}</span>
     </a>
   );

@@ -37,33 +37,31 @@ export default function Header({ categories = [] }) {
   }, [location.pathname]);
 
   return (
-    <header className="sticky top-0 z-header border-b border-line bg-canvas/85 backdrop-blur-xl supports-[backdrop-filter]:bg-canvas/70">
-      {/* სინათლის წვრილი ხაზი header-ის ქვედა კიდეზე — მხოლოდ დეკორი */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-transparent via-primary-500/50 to-transparent"
-      />
+    <header className="sticky top-0 z-header border-b border-line bg-surface">
       {/* დამხმარე ზოლი — მხოლოდ დიდ ეკრანებზე */}
-      <div className="hidden border-b border-ink-100 lg:block">
-        <div className="container-page flex h-9 items-center justify-between text-xs text-fg-muted">
-          <p className="flex items-center gap-1.5">
-            <Truck className="h-3.5 w-3.5 text-primary-700" aria-hidden="true" />
+      <div className="hidden border-b border-line bg-canvas lg:block">
+        <div className="container-page flex items-center justify-between py-2.5 text-xs tracking-[0.04em] text-fg-muted">
+          <p className="flex items-center gap-2.5">
+            <Truck className="h-[15px] w-[15px] text-primary-500" aria-hidden="true" />
             {rules && t('header.freeDelivery', { price: formatPrice(rules.freeFrom) })}
           </p>
-          <a href={CONTACT.phoneHref} className="flex items-center gap-1.5 transition-colors hover:text-fg">
-            <Phone className="h-3.5 w-3.5" aria-hidden="true" />
+          <a
+            href={CONTACT.phoneHref}
+            className="flex items-center gap-2.5 transition-colors hover:text-primary-700"
+          >
+            <Phone className="h-3.5 w-3.5 text-primary-500" aria-hidden="true" />
             {CONTACT.phone}
           </a>
         </div>
       </div>
 
       <div className="container-page">
-        <div className="flex h-16 items-center gap-3">
+        <div className="flex h-16 items-center gap-1 md:h-auto md:gap-5 md:py-3.5">
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
             aria-label={t('header.openMenu')}
-            className="-ml-2 flex h-10 w-10 items-center justify-center rounded-control text-ink-700 transition-colors hover:bg-ink-100 hover:text-fg md:hidden"
+            className="-ml-2 flex h-11 w-11 items-center justify-center rounded-control text-ink-700 transition-colors hover:bg-ink-100 hover:text-fg active:bg-ink-200 md:hidden"
           >
             <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -78,7 +76,7 @@ export default function Header({ categories = [] }) {
             <SearchBar defaultValue={searchDefault} />
           </div>
 
-          <div className="ml-auto flex items-center gap-0.5 md:ml-0">
+          <div className="ml-auto flex items-center gap-1 md:ml-0">
             {/* On a phone the switch is in the menu: the bar has no room for it. */}
             <LanguageSwitch className="hidden md:flex" />
             <ThemeToggle />
@@ -88,7 +86,7 @@ export default function Header({ categories = [] }) {
         </div>
 
         {/* ძებნა — mobile */}
-        <div className="pb-3 md:hidden">
+        <div className="pb-2.5 md:hidden">
           <SearchBar defaultValue={searchDefault} />
         </div>
       </div>

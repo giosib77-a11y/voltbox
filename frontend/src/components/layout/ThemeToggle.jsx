@@ -19,9 +19,9 @@ export default function ThemeToggle({ className = '' }) {
       onClick={() => setTheme(next)}
       aria-label={label}
       title={label}
-      className={`flex h-10 w-10 items-center justify-center rounded-control text-ink-700 transition-colors hover:bg-ink-100 hover:text-fg ${className}`}
+      className={`flex h-11 w-11 items-center justify-center rounded-pill border border-outline text-primary-500 transition-colors hover:border-primary-500 hover:bg-primary-50 active:bg-primary-100 md:h-[46px] md:w-[46px] ${className}`}
     >
-      <Icon className="h-5 w-5" aria-hidden="true" />
+      <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
     </button>
   );
 }

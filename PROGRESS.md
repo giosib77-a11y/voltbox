@@ -204,7 +204,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   favicon rendered at 16×16 and 32×32 on a light and a dark background (screenshot) shows the mark;
   `index.html`'s icon link unchanged; C1–C8.
 
-- [ ] **T30 · Header and top bar**
+- [x] **T30 · Header and top bar**
   owner: frontend-dev
   files: frontend/src/components/layout/Header.jsx, frontend/src/components/layout/ThemeToggle.jsx, frontend/src/components/layout/LanguageSwitch.jsx, frontend/src/components/layout/UserMenu.jsx, frontend/src/components/cart/CartBadge.jsx, frontend/src/components/search/SearchBar.jsx, frontend/src/components/search/SearchSuggestions.jsx, frontend/src/components/layout/Header.test.jsx, frontend/src/components/layout/ThemeToggle.test.jsx, frontend/src/components/layout/ThemeToggle.storage.test.jsx, frontend/src/components/layout/themeTesting.js
   depends: T29
@@ -635,7 +635,8 @@ Unverified (check before acting):
 - T29: Logo (mark + VOLTBOX wordmark, header sizes) and `LogoMark` (size, className — colour in the default className) — the only copy of the path; favicon = filled gold rhombus + dark bolt, legible at 16px on light and dark tabs. Footer composes `LogoMark` itself (T31).
 - T32: shared components through tokens whose admin value is today's (`text-on-primary`, `shadow-btn`, `--btn-weight`, `border-outline`), `storefront:` gates, and for portals (Modal, Toast) `[:root:not(:has([data-admin]))_&]:`; opt-in Button `xl`, ProductImage `shopPlaceholder`, CategoryIcon `framed`. Admin comparison in a browser left for the finish-check (no local stack in the task).
 - T31: CategoryNav (bordered rows, gold icons, flyout, header button with `outline`), MobileMenu, Footer (`bg-footer`, LogoMark + wordmark at §7 sizes, serif headings). Layout and PageFallback already matched — unchanged. Flyout placement classes kept (test green, unedited).
-- Next: T30 (fixing the keyboard-active suggestion row), T33 (running), then T39–T41.
+- T30: top bar and header per the mockup (round outlined theme toggle, round primary cart, underlined search with a focus-within ring); toggle persists over reload, suggestions work by keyboard (checked in a browser). Review fix: the keyboard-active suggestion row was primary-50 on surface (≈1.1:1 in dark) — now primary-100 + an inset primary-500 ring.
+- Next: T33 (running), then T39–T41.
 
 ## Stage 2 — Done
 Last session of Stage 2:
