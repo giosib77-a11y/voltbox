@@ -26,7 +26,10 @@ Currency GEL (₾).
 - **Owner** — receives a Telegram notice for every new order (optional config).
 
 ## Current Stage
-Stage 2 — Order trash (admin) (planned 2026-10-18; tasks in PROGRESS.md).
+Stage 3 — Storefront redesign (planned 2026-10-19; tasks T26–T41 in PROGRESS.md). Frontend only:
+the shop's look follows `design-reference/Site.dc.html`; nothing the shop does changes.
+Stage 2 — Order trash (admin) is done on `agent-system` (T18–T25, finish-check 2026-10-18); its
+merge to `main` and its Deploy plan (PROGRESS.md → Stage 2 — Done) are the owner's.
 Stage 1 — Audit fixes is closed and deployed (`d25910e`, live head `0015`).
 
 Deployment state, as far as the repository shows (2026-10-10):
@@ -45,17 +48,36 @@ Deployment state, as far as the repository shows (2026-10-10):
 
 ## Scope
 ### In scope (current stage)
-- Order trash in the admin panel (owner's request, 2026-10-18): deleting an order moves it
-  to a trash (after a confirmation dialog); one-click restore from the trash; permanent
-  deletion by hand, or automatically 30 days after it was trashed. Admin only. Deleting
-  never changes stock. Rules: Business Rules → "Order trash"; endpoints: API Contract.
+- Storefront redesign (owner's request, 2026-10-19) from the mockup
+  `design-reference/Site.dc.html` (one 1440px artboard of the **home page**: top bar, header,
+  category column + hero, benefits strip, popular categories, one product row, footer; light
+  and dark themes in its `renderVals()` → `light` / `darkT`).
+  - `DESIGN.md` rewritten from the mockup by the designer: light and dark colour tokens,
+    fonts, type scale, spacing, layout widths, radii, shadows, components and states, the new
+    logo (SVG) and its favicon variant, and a per-page guide for pages the mockup does not show.
+  - Applied to every storefront page: home, category, product, search, cart, checkout, order
+    confirmation, login / register / forgot and reset password, account (orders, profile,
+    addresses, password), info pages (delivery, returns, privacy, FAQ), 404 — and to the shell
+    (top bar, header, category menu, mobile menu, footer, toasts, dialogs, loading/empty/error
+    states).
+  - The existing light/dark toggle switches between the two new themes.
+  - New logo in the header and footer; `public/favicon.svg` from it.
+  - Rules: Business Rules → "Storefront redesign"; reasons: Decision Log 2026-10-19.
 - Keep the existing behaviour, stack and conventions.
 
 ### Out of scope (for now)
-- Bulk delete / bulk restore (one order at a time).
-- Customer- or guest-side order deletion.
-- A cron job or scheduled task for the 30-day purge (no cron on the Render free plan;
-  the purge runs lazily — Decision Log 2026-10-18).
+- **Any change to the admin panel** (`frontend/src/admin/**`, its look included).
+- Any functional change: routes, data shown, forms, validation, cart/checkout/auth behaviour,
+  API calls, SEO meta. No new section, feature or text — the mockup's sample copy (hero
+  caption "N° 01 — POWER BANK", phone, email, address, hours, product names, prices) is not used.
+- Backend, API Contract, database, `render.yaml` / CSP — Stage 3 is frontend only.
+- `public/og-image.png` (the shared-link picture) and any PNG icon (apple-touch-icon, web
+  manifest) — they keep the old look for now (Open Questions).
+- Order-confirmation and password-reset emails (backend templates).
+- A new UI or icon library, CSS-in-JS, a design-token build step, Tailwind 4,
+  `@playwright/test`.
+- Order trash extras: bulk delete / bulk restore, customer- or guest-side order deletion,
+  a cron job for the 30-day purge (Decision Log 2026-10-18).
 - Online payment (cash on delivery only — ASSUMPTIONS §4.6).
 - Delivery outside Tbilisi and Rustavi (ASSUMPTIONS §4.5).
 - New features from ROADMAP P2/P3 (wishlist, reviews UI, promo codes, ...).
@@ -134,6 +156,36 @@ Deployment state, as far as the repository shows (2026-10-10):
     admin typed with a status change, which the purge does not remove (Accepted Risks → proposed).
   - A product that appears only in trashed orders still cannot be deleted
     (409 `PRODUCT_IN_USE`, unchanged) until those orders are purged.
+- **Storefront redesign** (Stage 3, owner's request 2026-10-19):
+  - **Only the look changes.** Every route, what each page shows and does, every handler,
+    form, validation message, API call, page title / meta / hreflang / JSON-LD stays as it is.
+    Markup may be rearranged only as the layout needs; accessible names, roles, landmarks and
+    heading levels stay. Tests that assert behaviour are not edited; an assertion on an old
+    class name may be updated to the new class that does the same job.
+  - **Copy comes from the current site, never from the mockup.** Text only through the
+    existing i18n keys (`frontend/src/i18n/ka.json`, `en.json`); prices from the API; contact
+    data from `frontend/src/constants/index.js` (`CONTACT`, `SHOP_FACTS`); the free-delivery
+    threshold from `GET /delivery`. A genuinely new UI label (e.g. an `aria-label`) gets a key
+    in both files. Decorative ornaments from the mockup (diamond frames, the hero's device
+    drawing, numeral eyebrows) are allowed only `aria-hidden` and without words.
+  - **The admin panel is frozen.** No file under `frontend/src/admin/` changes. The admin
+    palette and the admin value of every non-colour theme token (radius, shadow, icon stroke)
+    are pinned by `frontend/src/utils/palette.test.js`. A shared component the admin renders
+    (Button, Input, Select, Textarea, Modal, Toast, EmptyState, ErrorState, Skeleton,
+    ProductImage, ErrorBoundary) changes only through theme tokens whose admin value is today's
+    value, or through a new opt-in prop/variant the admin does not pass.
+  - **Both storefront themes meet WCAG 2.x AA**: text 4.5:1, large text (≥ 24px, or ≥ 18.66px
+    bold) 3:1, control boundaries and meaningful icons 3:1; `palette.test.js` measures every
+    pair `DESIGN.md` lists. Where a mockup value fails, AA wins with the smallest change and
+    `DESIGN.md` records both values.
+  - **Two themes, one switch.** The existing toggle and rule (the stored pick `theme:v1`,
+    else the system setting; `public/theme-init.js` before paint, `src/utils/theme.js` after)
+    switch between exactly the two `DESIGN.md` themes. No `dark:` classes (a test fails on them).
+  - **Fonts are self-hosted** (`frontend/public/fonts`, `src/fonts.css`): no request to any
+    third-party host for fonts, CSS or icons; the CSP (`font-src 'self'`, `style-src 'self'`)
+    stays as it is.
+  - **Logo and favicon**: the logo is inline SVG in the page (no image request);
+    `public/favicon.svg` is the logo's favicon variant from `DESIGN.md`.
 
 ## Data
 PostgreSQL, Alembic migrations `backend/alembic/versions/0001`–`0016` (`0016` = Stage 2,
@@ -155,6 +207,9 @@ PostgreSQL, Alembic migrations `backend/alembic/versions/0001`–`0016` (`0016` 
   Trashed orders: hard-deleted 30 days after `deleted_at` (Business Rules → Order trash).
 
 ## API Contract
+**Stage 3 (storefront redesign) adds or changes no endpoint, request, response or error code**
+— it is frontend only, and the storefront keeps calling the API exactly as it does now.
+
 This section is the contract between frontend and backend for **the endpoints added or
 changed in Stage 2**. Every other endpoint is defined by its route module under
 `backend/app/api/v1/routes/` and FastAPI's OpenAPI schema, and is unchanged.
@@ -223,7 +278,11 @@ Side effects:
   and stock, admin panel, no queues or microservices).
 - Frontend: React 18 SPA, Vite 8, Tailwind 3, React Router 7 (library mode),
   i18next; `services/api.js` contract with mock/http implementations chosen at
-  build time (ASSUMPTIONS §6.1).
+  build time (ASSUMPTIONS §6.1). Styling: Tailwind classes named by role; three themes
+  (`admin` on `:root` and `[data-admin]`, storefront `theme-light` / `theme-dark` on `<html>`)
+  resolved through CSS variables generated in `tailwind.config.js` — the only token source
+  (Stage 3 adds radius, shadow and icon-stroke tokens to the same mechanism). Icons:
+  lucide-react; fonts self-hosted.
 - Backend: Python 3.14, FastAPI, SQLAlchemy 2 (async, asyncpg), Alembic,
   Pydantic 2, PyJWT, argon2-cffi, slowapi/limits, gunicorn + uvicorn workers.
 - Database: PostgreSQL 17 (Supabase in production, Docker locally/CI).
@@ -291,6 +350,128 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
+
+### 2026-10-19 — Stage 3 work stays on branch `agent-system`
+- Decision: every Stage 3 commit goes on `agent-system`, one commit per task; no new branch.
+  Push and merge to `main` only with the owner's approval (unchanged).
+- Reason: the owner asked for it. This overrides the kit's per-task `team/<name>` branch rule
+  for this project.
+- Consequence recorded: Stage 2 (order trash) is on the same branch and not yet merged; if the
+  owner wants Stage 2 live before the redesign, `main` takes the commit Stage 3 starts from
+  (`db9a242`) first. Recorded in PROGRESS.md → Stage 3 deploy notes.
+- Alternatives considered: a `redesign` branch off `agent-system`.
+- Why rejected: the owner's explicit instruction.
+
+### 2026-10-19 — The two new themes re-point the existing `light` / `dark` palettes; `admin` is frozen and pinned
+- Decision: `tailwind.config.js` keeps its three palettes. `light` and `dark` get the mockup's
+  values (via `DESIGN.md`), each role keeping its job (`ink-50` page, `surface` cards, `ink-300`
+  control borders, `primary-600` solid fill, `primary-700` text/link, …). Roles the mockup
+  needs and the palette lacks (e.g. text on a solid fill — the mockup's dark buttons have dark
+  text, so `text-white` no longer fits; gold for ornaments and icons; footer background) are
+  added to **all three** palettes, with the admin value equal to what the admin renders today
+  (the "same tokens in every theme" test enforces the shape). Radius, shadow and the icon
+  stroke width join the same CSS-variable mechanism (`:root` / `[data-admin]` /
+  `:root:has([data-admin])` = admin = today's values; `.theme-light` / `.theme-dark` = new). A new
+  test in `palette.test.js` pins every admin value to today's literal, so an edit that would
+  move the panel fails.
+- Reason: the admin imports the shared Button, Input, Select, Textarea, Modal, Toast,
+  EmptyState, ErrorState, Skeleton and ProductImage, and Modal and Toast render through a portal
+  into `<body>` — outside `[data-storefront]`, so a `storefront:` class cannot reach them, but a
+  CSS variable on `<html>` can. Changing `rounded-control` or `shadow-popover` globally would
+  reshape the panel.
+- Alternatives considered: new storefront-only components; separate token names for the shop;
+  a copy of the shared components for the admin.
+- Why rejected: duplicates ten components or every class name, and the portals still escape
+  `[data-storefront]`; the variable mechanism already does exactly this for colour.
+- What still holds: the panel's look, its tests, `data-admin`, `public/theme-init.js` skipping
+  `/admin`.
+
+### 2026-10-19 — Mockup fonts are self-hosted, only the weights `DESIGN.md` uses
+- Decision: Cormorant Garamond (Latin display — wordmark, prices, Latin headings) and Noto Serif
+  Georgian (Georgian headings) are added as woff2 files in `frontend/public/fonts` with
+  `@font-face` + `unicode-range` in `src/fonts.css`, like the existing Noto Sans Georgian (whose
+  eight files stay — the admin uses them). Only the weights and subsets the `DESIGN.md` type
+  scale uses (planning ceiling: Cormorant Garamond latin 400/500/600, Noto Serif Georgian
+  georgian+latin 300/400/500, Noto Sans Georgian +300 only if the scale uses it). Files come
+  from the Google Fonts css2 API once, by hand (SIL OFL 1.1); `fonts.css` records where from and
+  when — its comment's reference to `scripts/fetch-fonts` is wrong (no such script) and is
+  corrected. At most two preloads in `index.html`.
+- Reason: `src/fonts.css` already rejects the Google CDN (privacy: every visitor's IP to
+  Google; two extra handshakes before first paint; no cross-site cache any more). The CSP's
+  `font-src 'self'` covers self-hosted files, so `render.yaml` does not change.
+- Alternatives considered: the mockup's Google Fonts `<link>`; `@fontsource/*` npm packages.
+- Why rejected: the first breaks the CSP and the privacy decision; the second adds dependencies
+  and lockfile churn for files that are copied once.
+
+### 2026-10-19 — `DESIGN.md` is rewritten; its admin parts move verbatim into a frozen section
+- Decision: the designer rewrites `DESIGN.md` from the mockup (owner's request). Everything the
+  admin still relies on — the admin column of the colour table and its contrast numbers, admin
+  typography, admin components (DataTable, sidebar, banners, StatusBadge, ConfirmDialog) and
+  §9 "Admin: destructive actions and trash" — moves unchanged into a final "Admin panel
+  (frozen)" section; only section numbers change.
+- Reason: Stage 2's design and the admin code refer to those rules; the panel is not part of
+  the redesign, so its spec must not be lost or silently restyled.
+- Alternatives considered: a separate `DESIGN-ADMIN.md`.
+- Why rejected: one more file to keep in step; one document with a clearly frozen part is enough.
+
+### 2026-10-19 — Pages the mockup does not show are styled from `DESIGN.md`'s components, not redesigned
+- Decision: the mockup covers the home page and the shell only. Every other page keeps its
+  current structure and content and gets the mockup's language through the shared components
+  and a per-page guide in `DESIGN.md` (hairline `line` borders, near-square radius, serif
+  headings, gold eyebrow/ornament, dark solid buttons, generous white space). No page gains or
+  loses a section.
+- Reason: "only the look changes"; a new layout per page would be a product decision the owner
+  has not made.
+- Alternatives considered: designing each page anew in the mockup's spirit.
+- Why rejected: risks functional drift and needs owner review of designs that do not exist.
+
+### 2026-10-19 — Icons stay lucide-react, thinner through one token; the logo is the only new drawing
+- Decision: keep lucide-react (already a dependency, also used by the admin). The mockup's
+  thin line (stroke ≈ 1.1–1.5) comes from one rule in `index.css`,
+  `.lucide { stroke-width: var(--icon-stroke) }`, with the admin value 2 (lucide's default, so the
+  panel is unchanged). Category icons stay `CategoryIcon` (lucide); the mockup's diamond frame
+  around them is CSS/SVG decoration. The logo mark (and its favicon variant) is the only
+  hand-drawn SVG, kept in one component (`Logo.jsx`, exporting the mark for footer and hero).
+- Reason: the simplest way to get the mockup's look without a second icon set; no component
+  passes `strokeWidth` today (checked), so the rule is the only source of the width.
+- Alternatives considered: copying the mockup's hand-drawn icons; another icon library.
+- Why rejected: hand-drawn icons have to be maintained for every new category; a library is a
+  new dependency for the same result.
+
+### 2026-10-19 — Product photos stay on a light tile in both themes
+- Decision: the `media` role (photo tile) stays light in both storefront themes, as today,
+  restyled to the mockup's light `imgBg` tone; the mockup's dark tile is used only where there
+  is no photo (placeholder), if `DESIGN.md` wants it.
+- Reason: real product photos have white backgrounds and `storefront:mix-blend-multiply`
+  blends them into the tile; on a dark tile multiply darkens the product itself. The mockup
+  shows only a placeholder icon, so it does not answer this.
+- Alternatives considered: the mockup's dark tile for photos in the dark theme.
+- Why rejected: products would render darker than they are; cutting out every photo is not
+  available (the owner uploads them as they are).
+
+### 2026-10-19 — Browser checks: one screenshot script on the existing `playwright` library
+- Decision: keep the 2026-10-18 decision (no `@playwright/test`). T28 adds
+  `frontend/scripts/e2e/screens.mjs`: against a mock-mode preview build it screenshots every
+  storefront route in both themes at 1440 and 390 px, plus the mockup itself in both themes, into
+  `test-results/screens/` (gitignored), and fails on a console error, a failed request, a request
+  to a non-local host, or a page wider than its viewport. Each frontend task and the
+  finish-check use it.
+- Reason: a visual stage needs the same repeatable look at every page in both themes; a script
+  on the installed library does it with no new dependency and no lockfile change (a Node 24 /
+  npm 11 lock has turned CI red before). Mock mode needs no backend, so every task can run it.
+- Alternatives considered: `@playwright/test` with visual snapshots; ad-hoc scripts per task.
+- Why rejected: a dependency and baseline images to maintain for a one-off redesign; ad-hoc
+  scripts would check different things each time.
+
+### 2026-10-19 — Stage 3 stays Tier 2, frontend only, no new dependency
+- Decision: no backend, API, schema or hosting change; no new runtime or dev dependency, no
+  CSS-in-JS, no UI library, no token build step — `tailwind.config.js` stays the single token
+  source and `palette.test.js` the contrast gate.
+- Reason: a visual change to an existing Tailwind app; every need (two themes, fonts, logo,
+  thin icons) fits the current tools.
+- Alternatives considered: a design-token pipeline (Style Dictionary), Tailwind 4 migration.
+- Why rejected: no second consumer of the tokens; Tailwind 4 is a migration of its own
+  (PROGRESS.md nits) and not asked for.
 
 ### 2026-10-18 — `deleted_at` is written from the application clock (T19)
 - Decision: `order_trash.trash` sets `deleted_at = datetime.now(UTC)`; `purgeAt` is that value
@@ -464,3 +645,24 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
     restored or deleted.
   - ვარაუდი (assumption): the audit rows are not shown in the panel (there is no audit
     screen today); they are read in the database when needed.
+- Stage 3 (storefront redesign), assumptions taken while planning, 2026-10-19 — correct any that is wrong:
+  - ვარაუდი (assumption): the mockup is the home page and the shell only; every other page is
+    styled by the designer in the same language (`DESIGN.md` per-page guide), without an owner
+    review of each page before it is built. The owner reviews the result at the end.
+  - ვარაუდი (assumption): where a mockup value fails WCAG AA (planning estimates: the light
+    `line2` border ≈ 1.6:1 and the dark one ≈ 1.6:1 as control borders, the light `goldTxt` on the
+    footer background ≈ 4.1:1, the light `gold` as text ≈ 3.1:1), the smallest change that passes
+    is used; `DESIGN.md` shows mockup and used values side by side.
+  - ვარაუდი (assumption): `public/og-image.png` (the picture in shared links) and PNG icons keep
+    the old look; only `favicon.svg` changes. A new og-image needs a PNG render of the new logo —
+    the owner decides when.
+  - ვარაუდი (assumption): product photos stay on a light tile in the dark theme (Decision Log
+    2026-10-19).
+  - ვარაუდი (assumption): the mockup's decorative drawings (hero device, diamond frames) are
+    used as `aria-hidden` decoration; its words are not.
+  - ვარაუდი (assumption): the `theme-color` meta in `index.html` follows the two storefront themes
+    (`media="(prefers-color-scheme: …)"`); the admin shares `index.html`, so a phone's browser bar
+    on `/admin` takes the same colour — browser chrome, not the panel.
+  - ვარაუდი (assumption): `/en` uses the same design; Latin headings and prices render in
+    Cormorant Garamond, Georgian in Noto Serif / Sans Georgian.
+  - ვარაუდი (assumption): order and password-reset emails keep their current look.

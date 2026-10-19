@@ -1,239 +1,380 @@
 # Progress
 
 ## Current Stage
-Stage 2 — Order trash (admin)
+Stage 3 — Storefront redesign
 
-Source: the owner's request (2026-10-18): delete an order in the admin into a trash (with a
-confirmation dialog), restore it with one button, delete it for good by hand or automatically
-after 30 days; admin only; deleting never changes stock. Rules: PROJECT.md → Business Rules →
-"Order trash"; endpoints: PROJECT.md → API Contract; reasons: Decision Log 2026-10-18.
-Planned 2026-10-18; nothing implemented yet. Order = suggested order: T18 first; then T19, T21
-and T23 can run side by side (no shared files); T20 after T19; T22 last.
+Source: the owner's request (2026-10-19): the whole look of the shop from the mockup
+`design-reference/Site.dc.html` (`design-reference/README.md` says how to view it). The designer
+rewrites DESIGN.md from it (light and dark colour tokens from `renderVals()` → `light` and `darkT`,
+fonts, spacing, radii, shadows, components, the new SVG logo); frontend applies it to every storefront
+page; pages the mockup does not show get the same style; the existing light/dark toggle switches
+between the two new themes; only the look is taken from the mockup — texts, prices and contact data
+stay as they are; no functional change; the admin panel is not touched; favicon from the new logo;
+work on `agent-system`, no new branch. The mockup is one 1440px artboard of the **home page and
+shell** (top bar, header, category column + hero, benefits, popular categories, one product row,
+footer). Rules: PROJECT.md → Business Rules → "Storefront redesign"; reasons: Decision Log 2026-10-19.
+Planned 2026-10-19; nothing implemented yet.
+
+Order: T26 first (everything reads DESIGN.md); T28 any time (depends on nothing). After T26: T27.
+After T27: T29 and T32 side by side. After T29: T30 and T31 side by side. After T32: T33, and T39,
+T40, T41 (side by side with each other and with T30/T31/T33). After T33: T35, T36, T37 side by side;
+T34 after T30, T31 and T33; T38 after T37. Then the finish-check.
+Between T27 and the page tasks the shop is half old, half new (e.g. in the dark theme white text on
+the new gold fill until the component that draws it is done). Expected: nothing is deployed from
+here, and the finish-check looks at the whole.
 
 Rules for every task of this stage (CLAUDE.md, repeated because subagents run them):
-- Never read or open `backend/.env`; tests and probes run with `VOLTBOX_NO_DOTENV=1`
-  (`pytest` sets it itself). Every `alembic` / script run gets `VOLTBOX_NO_DOTENV=1` and an
-  explicit local `DATABASE_URL` (`postgresql://voltbox:voltbox@localhost:55432/...`).
-- Nothing runs against the live database. Migration 0016 reaches live only as reviewed SQL
-  the owner pastes (T23).
+- Never read or open `backend/.env`; tests and probes run with `VOLTBOX_NO_DOTENV=1` (`pytest` sets
+  it itself). Any Python / `alembic` / script run gets `VOLTBOX_NO_DOTENV=1` and an explicit local
+  `DATABASE_URL` (`postgresql://voltbox:voltbox@localhost:55432/...`).
+- Nothing runs against the live database. Stage 3 has no migration.
+- Never edit anything under `.claude/`. No push, no deploy, no merge. Before every commit
+  `git branch --show-current` must say `agent-system`; otherwise stop and ask.
 - Backend gate: `ruff check . && ruff format --check . && mypy app scripts tests && pytest -q`.
   Frontend gate: `npm run lint && npm test && npm run build` with `VITE_API_MODE=http` and
-  `VITE_API_MODE=mock`. A change to any file under `frontend/src` runs both gates.
+  `VITE_API_MODE=mock`. A change to any file under `frontend/src` runs both gates (backend tests
+  read `frontend/src`).
+
+Checks for every frontend task of this stage (each task's done when ends with "C1–C8"):
+- **C1 Scope** — `git diff --stat` shows only the task's files; `git diff --stat -- frontend/src/admin`
+  is empty.
+- **C2 Copy** — no text, price, phone, email, address or hours from the mockup. Text only through
+  existing i18n keys; contact data from `constants/index.js`; the free-delivery threshold from
+  `GET /delivery`. No new key is expected (every label exists); if one is truly needed, it goes into
+  both `ka.json` and `en.json` (Shared files) and `i18n.test.js` stays green. No Georgian written in
+  a component (existing test).
+- **C3 Tokens** — no hex/rgb/hsl colour, no `dark:` class, no inline-style colour in a component;
+  colour, radius, shadow only through DESIGN.md tokens. `text-white` only on a fill whose DESIGN.md
+  text role is white; a `primary` fill takes DESIGN.md's text-on-fill role.
+- **C4 Shared with the admin** — Button, Input, Select, Textarea, Modal, Toast, EmptyState,
+  ErrorState, Skeleton, ProductImage, ErrorBoundary change only through tokens whose admin value is
+  today's, or a new opt-in prop/variant the admin does not pass; the admin-pinning test in
+  `palette.test.js` (T27) green.
+- **C5 Behaviour** — same routes, hrefs, handlers, form fields, validation, loading/empty/error
+  states, accessible names, roles, heading levels and focus order. Existing tests green; an
+  assertion on an old class name may be changed to the new class that does the same job (named in
+  the commit); a behavioural assertion is never changed, weakened, skipped or deleted.
+- **C6 Looks** — the task's routes shot with `node scripts/e2e/screens.mjs <routes>` (T28) at 1440
+  and 390 in light and dark, compared with the mockup's shots (home and shell) or DESIGN.md's page
+  guide; the script passes (no console error, failed or third-party request, no page wider than its
+  viewport); keyboard focus visible in both themes. Screens stay in `test-results/` (not committed).
+  Before T28 exists: by hand in a browser, and the report says so.
+- **C7 Fields** — every field a shopper types into keeps `.field-text` (`fieldSize.test.js`).
+- **C8 Gates** — frontend gate (lint, tests, both builds) and the full backend gate green.
 
 ## Tasks
 
-- [x] **T18 · Migration 0016: `orders.deleted_at` + partial index**
-  owner: backend-dev
-  files: backend/alembic/versions/0016_orders_deleted_at.py (new), backend/app/db/models/orders.py, backend/tests/test_order_trash_schema.py (new)
+- [ ] **T26 · DESIGN.md from the mockup**
+  owner: designer
+  files: DESIGN.md
   depends: —
-  What: `orders.deleted_at TIMESTAMPTZ NULL` (no default) and
-  `ix_orders_deleted_at (deleted_at) WHERE deleted_at IS NOT NULL`. The model declares both
-  (`Index(..., postgresql_where=text("deleted_at IS NOT NULL"))`, with a comment like the one on
-  `ix_orders_status`) so `alembic check` stays clean. No new table, so no RLS change. Downgrade
-  drops the column and index; its docstring says what that does: every trashed order becomes a
-  live order again (the trash state is lost), nothing else is touched.
-  done when: `tests/test_order_trash_schema.py` passes: `deleted_at` is `timestamp with time zone`,
-  nullable, no default; `ix_orders_deleted_at` exists and its predicate is
-  `deleted_at IS NOT NULL`. `tests/test_schema.py` (RLS on every table) still green. Locally, with
-  `VOLTBOX_NO_DOTENV=1` and `DATABASE_URL=postgresql://voltbox:voltbox@localhost:55432/voltbox`:
-  `alembic upgrade head` then `alembic check` → no new operations. (pytest's conftest runs the
-  migrations down and up, so the downgrade is exercised too.) Backend gate green.
+  What: rewrite DESIGN.md from `design-reference/Site.dc.html` (inline `style="…"`, `<helmet><style>`,
+  `renderVals()` → `light` and `darkT`) for the storefront, in a form T27 can transcribe:
+  - **Tokens, light and dark.** Every mockup token (`bg`, `surface`, `line`, `line2`, `text`, `muted`,
+    `gold`, `goldTxt`, `btnBg`, `btnTxt`, `footBg`, `glow`, `device`, `deviceLine`, `deviceShadow`,
+    `pedestal`, `placeholder`, `imgBg`) mapped to a role of `frontend/tailwind.config.js` — an
+    existing role-step by its job (the job list is that file's header comment) or a new role — or
+    marked "not used" with why. Roles the storefront draws and the mockup lacks: danger, success,
+    warning (text, tint, border), discount and old price (today `accent`), focus ring, disabled,
+    input border and fill, hover/pressed of each button, scrim, skeleton, selection. Every **new**
+    role also gets its **admin value** = what the admin renders today (e.g. text on a primary fill
+    = `#ffffff`), so the three palettes keep one shape.
+  - **Contrast table**, computed with the WCAG formula for every text/background and
+    control-border/background pair the storefront draws, both themes, in the shape of
+    `palette.test.js`'s `PAIRS` (role, minimum, foregrounds, backgrounds). Where a mockup value
+    fails: the smallest passing change, both values shown. Planner's estimates to confirm or
+    correct: light `line2` #D6CDBC on #FFFFFF ≈ 1.6:1 and dark `line2` #3A3A40 on #131315 ≈ 1.6:1
+    (fine as a decorative line, too low for a control border, 3:1); light `goldTxt` #8C6A34 on
+    `footBg` #EFEAE0 ≈ 4.1:1 and `muted` #6F6A62 on `footBg` ≈ 4.5:1 (footer); light `gold` #A8854A
+    as text ≈ 3.1:1 on `bg` (the mockup's `a:hover{color:#A8854A}` included); `btnTxt` on `btnBg`
+    ≈ 15.7:1 light, ≈ 8.6:1 dark (pass).
+  - **Typography**: families (Cormorant Garamond, Noto Serif Georgian, Noto Sans Georgian) and what
+    each sets in Georgian and in Latin (`/en`), which font draws `₾`; the scale (size, weight,
+    line-height, letter-spacing) for display, h1–h3, eyebrow, body, small, label, price, button;
+    the exact font files T27 needs (family × weight × subset — the smallest set).
+  - **Spacing and layout**: container (mockup 1320px, 24px gutters) and mobile gutters, section
+    rhythm, product grid columns per breakpoint, breakpoints, and the 390px form of each mockup
+    block (top bar, header, category column + hero, benefits, popular categories, product row,
+    footer).
+  - **Radii, shadows, icon stroke width** as theme tokens (light, dark, and admin = today's
+    values), borders, motion (existing durations and the reduced-motion rule stay unless a reason
+    is given).
+  - **Components and their states** (default, hover, active, focus-visible, disabled, loading,
+    error): top bar, header, categories button + flyout, search + suggestions, language switch,
+    theme toggle, user menu, cart button + count, mobile menu, buttons (primary, secondary, outline,
+    ghost, link, danger, icon), input, select, textarea, checkbox/radio, quantity stepper, price
+    slider, filter group, sort, pagination, breadcrumbs, badges (new, discount, stock), product
+    card, price/old price, rating stars, gallery, cart line, summary, modal, toast, empty / error /
+    loading, delivery table, footer.
+  - **The logo**: SVG markup of the mark (the mockup's diamond + bolt), the wordmark rule
+    (`SITE_NAME` in Cormorant Garamond, uppercase by CSS, tracking), sizes in header / footer /
+    mobile, colour by token (mark in `currentColor`); and a favicon SVG with fixed colours, legible
+    at 16 and 32 px on a light and a dark tab bar.
+  - **Product photo tile**: light in both themes (Decision Log 2026-10-19) — its colour, and the
+    no-photo placeholder.
+  - **Per-page guide** for pages the mockup does not show: category and search (filters, sort,
+    grid, pagination), product, cart, checkout, order confirmation, login / register / forgot /
+    reset, account (layout, orders, profile, addresses, password), info pages (+ delivery table,
+    FAQ), 404, the loading fallback, the error-boundary screen.
+  - **"Admin panel (frozen)"**: the admin parts of today's DESIGN.md (admin colour column and its
+    contrast numbers, admin typography, admin components, §9 trash) moved unchanged into a last
+    section (Decision Log 2026-10-19).
+  - No text from the mockup is proposed for the site.
+  done when: DESIGN.md has every item above; every token of `light` and `darkT` is in the token
+  table with its role or "not used"; every new role has light, dark and admin values; the contrast
+  table gives a computed ratio per pair, each ≥ its minimum (4.5 text; 3 large text, control
+  borders, meaningful icons); the logo and favicon SVGs are complete markup that renders when saved
+  as an `.svg` file (checked); the font list gives family, weight, subset and file count; the
+  "Admin panel (frozen)" section holds every admin hex of today's §2 and today's §9 word for word
+  (only headings differ); `git diff --stat` shows only DESIGN.md.
 
-- [x] **T19 · Trash and restore; status frozen in the trash; the trash list**
-  owner: backend-dev
-  files: backend/app/services/order_trash.py (new), backend/app/services/admin_orders.py, backend/app/services/order_status.py, backend/app/schemas/admin_orders.py, backend/app/api/v1/routes/admin/orders.py, frontend/src/i18n/ka.json, frontend/src/i18n/en.json, backend/tests/test_order_trash.py (new)
-  depends: T18
+- [ ] **T27 · Theme foundation: palettes, theme tokens, fonts, base styles**
+  owner: frontend-dev
+  files: frontend/tailwind.config.js, frontend/src/utils/palette.test.js, frontend/src/index.css (shared), frontend/src/fonts.css, frontend/public/fonts/*.woff2 (new files only — the eight existing stay), frontend/index.html
+  depends: T26
   What:
-  - `services/order_trash.py`: `TRASH_RETENTION = timedelta(days=30)` — the only place the 30
-    days live; `trash(db, order_id)` and `restore(db, order_id)`, each returning the order and
-    whether it changed. Both lock the row `FOR UPDATE` through the state machine's lock (make
-    `order_status._lock_order` public as `lock_order` — one copy). Trash on a trashed order and
-    restore on a live one change nothing (`deleted_at` keeps its first value).
-  - Routes: `POST /admin/orders/{id}/trash`, `POST /admin/orders/{id}/restore` → 200
-    `OrderDetailOut`; audit `order.trash` / `order.restore` (actor = admin,
-    `changes: {status, deletedAt}`) **only when something changed**, same transaction; commit.
-    `GET /admin/orders` gets `trash: bool = False`.
-  - `order_status.transition`: after the lock, a trashed order → 409 `ORDER_IN_TRASH`, before
-    the `INVALID_TRANSITION` check. `counts_by_status` counts live orders only.
-  - `admin_orders`: `_conditions(..., trash)` adds `deleted_at IS NULL` (default) or
-    `IS NOT NULL` (`trash=true`, ordered `deleted_at DESC, id`); `_summary` adds `deleted_at` and
-    `purge_at` (`deleted_at + TRASH_RETENTION`, else None); `get_order` returns
-    `allowed_transitions = []` for a trashed order and still returns it.
-  - `schemas/admin_orders.py`: `OrderListItem` gains `deleted_at: datetime | None`,
-    `purge_at: datetime | None` (so `OrderDetailOut` has them too).
-  - `apiErrors.ORDER_IN_TRASH` in `ka.json` and `en.json` (e.g. "შეკვეთა სანაგვეშია — ჯერ
-    აღადგინეთ." / "This order is in the trash — restore it first.").
-  - Known, left as is: `services/order.py` `cancel` (no route calls it) would turn
-    `ORDER_IN_TRASH` into `ORDER_NOT_CANCELLABLE`; that file is T21's.
-  done when: `tests/test_order_trash.py` passes, covering: trash → 200, `deletedAt` set,
-  `purgeAt` = `deletedAt` + 30 days, exactly one `order.trash` audit row with the admin as actor;
-  trash again → same `deletedAt`, still one audit row; restore → same `status` as before, both
-  fields null, one `order.restore` row; restore a live order → 200, no audit row; trash and
-  restore of an unknown id → 404 `ORDER_NOT_FOUND`; `POST /status` (pending → cancelled) on a
-  trashed order → 409 `ORDER_IN_TRASH`, and status, product stock, `inventory_movements` count
-  and `order_status_history` count unchanged; trashing a pending order leaves product stock and
-  `inventory_movements` unchanged; the detail of a trashed order → 200 with
-  `allowedTransitions: []`; default list hides it (`total` counts live orders only);
-  `trash=true` lists only trashed orders, newest deletion first, with `q` and `status` still
-  applied; `counts_by_status` excludes it. `tests/test_admin_auth.py` covers the new routes
-  (anonymous 401, customer 403) with no edit; `tests/test_error_messages.py` green. Backend gate
-  green; frontend gate green (JSON changed: `i18n.test.js` key parity).
+  - `light` and `dark` palettes = DESIGN.md; new roles in **all three** palettes (admin = DESIGN.md's
+    admin value, i.e. today's look); the header comment's job list updated.
+  - Radius, shadows and `--icon-stroke` become theme variables through the same plugin (`:root`,
+    `[data-admin]`, `:root:has([data-admin])` = admin = today: `control` 0.625rem, `card` 0.875rem,
+    today's `card` / `card-hover` / `popover` / `header` / `glow` shadows, stroke 2;
+    `.theme-light` / `.theme-dark` = DESIGN.md). `borderRadius` / `boxShadow` point at the variables.
+    `maxWidth.container` and new `fontFamily` entries (`display`, `serif`) per DESIGN.md; `font-sans`
+    unchanged.
+  - `index.css`: `.lucide { stroke-width: var(--icon-stroke) }` (lucide-react puts the `lucide` class
+    on every icon — check it in the rendered DOM); storefront base type (size, line-height, link
+    hover) on `[data-storefront]`, never on `body` / `:root` (the admin shares them); `.container-page`
+    gutters per DESIGN.md. Existing utility classes stay (T34 removes `.bg-tech-grid`).
+  - `fonts.css`: `@font-face` per DESIGN.md file, with `unicode-range` and `font-display: swap`; the
+    comment says where the files came from (Google Fonts css2 API, date, SIL OFL 1.1) instead of the
+    nonexistent `scripts/fetch-fonts`. Files downloaded once, by hand.
+  - `index.html`: preloads per DESIGN.md (at most two); `theme-color` as two metas with
+    `media="(prefers-color-scheme: light)"` / `dark`. The favicon link stays as it is.
+  - `palette.test.js`: `PAIRS` = DESIGN.md's contrast table; the shape test covers the new roles and
+    token groups; **new test**: every admin colour and every admin radius / shadow / stroke value
+    equals a literal copied from today's config, so any change to the panel's look fails.
+  done when: `palette.test.js` green, and the admin-pinning test fails when one admin value is
+  changed (tried by hand, reverted — the report says so); a mock `npm run build` CSS has a
+  `.theme-light` and a `.theme-dark` rule with DESIGN.md values (grep one value's `r g b`), and its
+  `:root` block still has today's admin values (grep `36 64 224`, admin `primary-600`); every new
+  woff2 loads in a preview with no 404; `grep -rn "googleapis\|gstatic" frontend/index.html
+  frontend/src` finds nothing; `frontend/render.yaml` unchanged; C1, C4, C8.
 
-- [x] **T20 · Permanent delete and the 30-day purge**
-  owner: backend-dev
-  files: backend/app/services/order_trash.py, backend/app/api/v1/routes/admin/orders.py, frontend/src/i18n/ka.json, frontend/src/i18n/en.json, backend/tests/test_order_purge.py (new)
-  depends: T19
-  What:
-  - `delete_forever(db, order_id)`: lock the row; missing → 404 `ORDER_NOT_FOUND`; live → 409
-    `ORDER_NOT_IN_TRASH`; else audit `order.purge` (`{orderNumber, status, total,
-    automatic: false}`, actor = admin) and delete — items and history go by CASCADE,
-    `inventory_movements.order_id` becomes NULL by its FK. Route `DELETE /admin/orders/{id}` → 204.
-  - `purge_expired(db) -> int`: one `DELETE FROM orders WHERE deleted_at < now() - TRASH_RETENTION
-    RETURNING id, order_number, status, total`, one `order.purge` audit row per order (actor
-    NULL, `automatic: true`). `GET /admin/orders` (both modes) calls it and commits before the
-    list query.
-  - Stock: neither function calls `adjust_stock` or writes `inventory_movements`.
-  - `apiErrors.ORDER_NOT_IN_TRASH` in `ka.json` and `en.json` (e.g. "სამუდამოდ იშლება მხოლოდ
-    სანაგვეში მყოფი შეკვეთა." / "Only an order in the trash can be deleted for good.").
-  done when: `tests/test_order_purge.py` passes, covering: `DELETE` on a live order → 409
-  `ORDER_NOT_IN_TRASH`, order intact; on an unknown id → 404; on a trashed order → 204, the order,
-  its `order_items` and `order_status_history` rows gone, its `inventory_movements` rows still
-  there with `order_id IS NULL`, product stock unchanged, one `order.purge` row (actor = admin,
-  `automatic` false); an order trashed 31 days ago (set `deleted_at` directly) is gone after
-  `GET /admin/orders` and after `GET /admin/orders?trash=true`, with an `order.purge` row (actor
-  NULL, `automatic` true) and stock unchanged; one trashed 29 days ago and live orders are
-  untouched; concurrency (two sessions, as in `tests/test_orders_concurrency.py`): a restore
-  holding the row lock while `purge_expired` runs → after the restore commits, the purge
-  deletes 0 rows and the order is live; purge first → the restore answers 404. Backend gate
-  green; frontend gate green (JSON changed).
-
-- [x] **T21 · Hide trashed orders from customers, guests, the dashboard and admin customers**
-  owner: backend-dev
-  files: backend/app/services/order.py, backend/app/services/dashboard.py, backend/app/services/admin_customers.py, backend/tests/test_order_trash_hidden.py (new)
-  depends: T18
-  What: `Order.deleted_at.is_(None)` in `order.list_for_user`, `get_by_number`,
-  `get_guest_order` (the same `order_not_found()` 404); in the dashboard's sales today, orders
-  today, sales total, top products and latest orders; in `admin_customers`'
-  `_orders_count_subquery`, `_total_spent_subquery` and `get_customer`'s order list. The two
-  idempotency lookups in `place_order` (`services/order.py:239`, `:281`) stay unfiltered on
-  purpose — a comment says why (a replay must never place a second order). `counts_by_status`
-  is T19's. Tests set `deleted_at` directly, so this task does not wait for T19;
-  `tests/factories.py` is not changed.
-  done when: `tests/test_order_trash_hidden.py` passes, covering: a trashed order is missing
-  from `GET /orders`; `GET /orders/{number}` → 404 `ORDER_NOT_FOUND`; the guest
-  `POST /orders/lookup` with the right token → 404 with a body identical to an unknown
-  number's; dashboard `salesToday`, `ordersToday`, `salesTotal`, `topProducts`, `latestOrders`
-  leave out a trashed delivered order and count it again once `deleted_at` is NULL; admin
-  customers list (`ordersCount`, `totalSpent`) and detail (`orders`, `ordersCount`,
-  `totalSpent`) leave it out; a replay of `POST /orders` with a trashed order's
-  `Idempotency-Key` (guest and signed-in) → the same `orderNumber`, order count unchanged,
-  stock decremented once, no new `inventory_movements` row. Backend gate green.
-
-- [x] **T22 · Admin trash UI (OrderDetail, OrderList)**
+- [ ] **T28 · Screenshot script: every storefront page, both themes, two widths**
   owner: frontend-dev
-  files: frontend/src/admin/adminApi.js, frontend/src/admin/pages/OrderList.jsx, frontend/src/admin/pages/OrderDetail.jsx, frontend/src/admin/pages/OrderList.test.jsx (new), frontend/src/admin/pages/OrderDetail.test.jsx (new)
-  depends: T19, T20
-  What (Georgian text in the components, as in the rest of `src/admin`; no i18n keys):
-  - `adminApi.js`: `trashOrder(id)` (POST `/admin/orders/:id/trash`), `restoreOrder(id)` (POST
-    `.../restore`), `deleteOrderForever(id)` (DELETE `/admin/orders/:id`); `listOrders` passes
-    `trash`.
-  - OrderDetail: "წაშლა" → `ConfirmDialog`; for pending/confirmed/processing the description
-    says the units stay reserved and to cancel first if they should return → `trashOrder` →
-    navigate to `/admin/orders` with a success toast (`useToast`). A trashed order (`deletedAt`
-    set): a banner with the purge date (`purgeAt`), no status buttons, "აღდგენა" (one click, no
-    dialog, the page shows the live order) and "სამუდამოდ წაშლა" (`ConfirmDialog` saying it
-    cannot be undone → `deleteOrderForever` → `/admin/orders?trash=true`).
-  - OrderList: a "სანაგვე" toggle bound to `?trash=true` (like the other filters, resets the
-    page); in the trash: deletion date and days left (from `purgeAt`, never below 0), per-row
-    "აღდგენა" and "სამუდამოდ წაშლა" (`ConfirmDialog`), the list reloads after each.
-  - Errors: the message from the existing `apiErrors` lookup (`error.message`), shown in the page
-    or the dialog; buttons usable again after a failure.
-  done when: `OrderDetail.test.jsx` and `OrderList.test.jsx` (mocked `adminApi`, as
-  `ProductList.test.jsx` does) pass, covering: the delete dialog shows the stock warning for
-  `pending` and not for `delivered`; confirm calls `trashOrder` once and lands on the list; a
-  trashed order shows the purge date, no status buttons, restore calls `restoreOrder` without a
-  dialog; permanent delete needs the dialog and calls `deleteOrderForever`; the trash toggle
-  calls `listOrders` with `trash: true` and puts `trash=true` in the URL; a row shows days left;
-  row restore and row delete call the API and reload; error paths — a rejected call with code
-  `ORDER_NOT_IN_TRASH` / `ORDER_IN_TRASH` (409) and a network failure — show the message and
-  leave the buttons enabled. Frontend gate green and the full backend gate green (backend tests
-  read `frontend/src`).
+  files: frontend/scripts/e2e/screens.mjs (new)
+  depends: —
+  What: a Node script on the installed `playwright` library, like `scripts/e2e/cart-sync.mjs` (header
+  comment in the same style: what it does, where it fits, how to run). Against a mock-mode preview
+  (`VITE_API_MODE=mock npm run build`, then `npm run preview`, :4173):
+  - routes: `/`, a category and a product (the first the mock data has), `/search?q=…` with results
+    and with none, `/cart` empty and with two lines, `/checkout` with lines, the order confirmation
+    (reached by placing a mock order through the checkout form, as a shopper), `/login`, `/register`,
+    `/forgot-password`, `/reset-password?token=…`, `/account/orders`, `/account/profile`,
+    `/account/addresses`, `/account/password` (signed in through the mock login form), the four info
+    pages, an unknown path (404), `/en/`; at 390 also the mobile menu open, at 1440 the category
+    flyout open.
+  - each in `light` and `dark` (the pick written to `localStorage['theme:v1']` before the page loads)
+    at 1440×900 and 390×844, full page → `test-results/screens/<theme>-<width>-<name>.png`.
+  - the mockup itself, served from `design-reference/` by a small `node:http` static server inside
+    the script (no dependency), in both themes (its toggle button) at 1440 →
+    `test-results/screens/mockup-<theme>-1440.png`.
+  - fails (exit ≠ 0, one line per problem) on a console error, a failed request (e.g. a font 404),
+    a request to a host other than localhost, or a page whose `scrollWidth` exceeds the viewport.
+  - optional arguments: route names, to shoot only some (`node scripts/e2e/screens.mjs home cart`).
+  done when: on today's site it writes every route × 2 themes × 2 widths plus the two mockup shots
+  and prints the count; it exits 0, or reports only real findings (listed in the report, not fixed
+  here); renaming one woff2 file makes it fail on that request (renamed back); `git status` shows no
+  screenshot (`test-results/` is ignored); `npm run lint` covers the file and is green; `git diff
+  --stat` shows only the script; no `package.json` change. No backend gate (nothing under
+  `frontend/src` changes).
 
-- [x] **T23 · Live SQL for migration 0015 → 0016**
-  owner: backend-dev
-  files: docs/migrations/0016_orders_deleted_at.sql (new)
-  depends: T18
-  What: from `backend/`, offline (connects to nothing):
-  `VOLTBOX_NO_DOTENV=1 JWT_SECRET=<any 32+ characters> DATABASE_URL=postgresql://voltbox:voltbox@localhost:55432/voltbox .venv/Scripts/alembic.exe upgrade 0015:0016 --sql`
-  (`alembic/env.py` imports `settings`, which needs `DATABASE_URL` and a `JWT_SECRET` of at
-  least 32 characters when `.env` is off — T17). Every table name hand-qualified `public.`
-  (`public.orders`, `public.alembic_version`; Supabase has its own `auth.*` tables).
-  done when: the file holds that output, qualified, with a header comment: how it was generated
-  and from which commit; the statement count between `BEGIN` and `COMMIT` (expected 3: add
-  column, create index, the `alembic_version` update — which checks `version_num = '0015'`, so
-  look for `UPDATE 1`); the checks to run after (`select version_num from public.alembic_version;`
-  → `0016`; `select data_type, is_nullable from information_schema.columns where table_schema='public'
-  and table_name='orders' and column_name='deleted_at';` → `timestamp with time zone`, `YES`).
-  Applied to a scratch local database at `0015` (inside the compose `db` container, never live;
-  no host psql is needed), it leaves `alembic current` = `0016` and `alembic check` clean.
-  No backend file changes, so no gate beyond `git diff --stat` showing only this file.
-
-- [x] **T24 · should-fix · No toast is ever shown in the admin panel**
+- [ ] **T29 · New logo and favicon**
   owner: frontend-dev
-  files: frontend/src/admin/AdminLayout.jsx, frontend/src/admin/AdminLayout.test.jsx (new)
-  depends: T22
-  Found by the 2026-10-18 finish-check (code-reviewer and browser-tester, same cause). `OrderDetail.jsx:60`
-  calls `toast.success('შეკვეთა გადატანილია სანაგვეში')` and navigates to the list, but `ToastViewport`
-  (`components/common/Toast.jsx`) is rendered only by the storefront `components/layout/Layout.jsx:56`; the admin
-  routes (`routes.jsx:107-111`, `AdminBoundary` → `AdminLayout`) never render it, so the toast the Decision Log
-  promises ("back to `/admin/orders` with a success toast") never appears (browser screenshot
-  `e-admin-after-trash-toast.png`). `OrderDetail.test.jsx` mocks `useToast`, so it could not see this.
-  done when: `AdminLayout` renders `<ToastViewport />` once (ToastProvider already wraps the app in `main.jsx`);
-  `AdminLayout.test.jsx` renders `AdminLayout` inside the real `ToastProvider` with a child route whose page calls
-  `toast.success('…')`, and finds the text on screen — and that test fails with the viewport removed. Frontend gate
-  green; full backend gate green (run by the orchestrator).
+  files: frontend/src/components/layout/Logo.jsx, frontend/public/favicon.svg, frontend/src/components/layout/Logo.test.jsx (new)
+  depends: T27
+  What: `Logo.jsx` draws DESIGN.md's mark (inline SVG, `aria-hidden`, colour by token through
+  `currentColor`) and wordmark (`SITE_NAME` set uppercase by CSS in `font-display` — no new string),
+  tagline `t('site.tagline')` as today; same props (`compact`, `className`), same link to `/` and
+  accessible name (`layout.logoLabel`). Exports the mark as `LogoMark` (size prop) for the footer,
+  mobile menu and hero — the only copy of the path. `public/favicon.svg` = DESIGN.md's favicon
+  variant (fixed colours).
+  done when: `Logo.test.jsx` passes: the link goes to `/` with the same accessible name as before,
+  the svg is `aria-hidden`, the wordmark's text is `SITE_NAME`, `compact` hides the tagline; the
+  favicon rendered at 16×16 and 32×32 on a light and a dark background (screenshot) shows the mark;
+  `index.html`'s icon link unchanged; C1–C8.
 
-- [x] **T25 · should-fix · The trash list's row buttons are off-screen at 1280px**
+- [ ] **T30 · Header and top bar**
   owner: frontend-dev
-  files: frontend/src/admin/pages/OrderList.jsx, frontend/src/admin/pages/OrderList.test.jsx
-  depends: T22
-  Found by the 2026-10-18 browser check (`test-results/browser-check/e-d-trash-list.png`, 1280x800, sidebar shown):
-  in trash mode the table (`min-w-[52rem]`) gets two extra columns ("წაშლილია", "დარჩა"), so "აღდგენა" is cut at
-  the viewport edge and "სამუდამოდ წაშლა" is reachable only by scrolling the table sideways.
-  Bundled because they are in the same component and cheap (both nits from code-reviewer/browser-tester):
-  (a) a failed permanent delete replaces the dialog's "ქმედება შეუქცევადია" description with the error, as plain
-  text without `role="alert"`; (b) on 404 `ORDER_NOT_FOUND` or 409 `ORDER_NOT_IN_TRASH` (another admin or the
-  purge got there first) the dialog keeps offering a retry that always fails and the stale row stays.
-  done when: in trash mode the table fits a 1280px viewport with the admin sidebar without horizontal scroll and
-  both row buttons are fully visible — e.g. the trash view drops columns it does not need (city, item count, or
-  merges "წაშლილია" and "დარჩა" into one cell); the live view is unchanged. The dialog keeps its description and
-  shows the error under it in an element with `role="alert"`; on 404/409 it closes and the list reloads. Tests in
-  `OrderList.test.jsx`: the trash view's column headers (what is shown and what is not), the alert keeps the
-  description, 404 and 409 close the dialog and call `listOrders` again, a network error keeps the dialog open.
-  Checked by the orchestrator in a browser at 1280px if possible, otherwise listed as Unverified. Frontend gate
-  green; full backend gate green (run by the orchestrator).
+  files: frontend/src/components/layout/Header.jsx, frontend/src/components/layout/ThemeToggle.jsx, frontend/src/components/layout/LanguageSwitch.jsx, frontend/src/components/layout/UserMenu.jsx, frontend/src/components/cart/CartBadge.jsx, frontend/src/components/search/SearchBar.jsx, frontend/src/components/search/SearchSuggestions.jsx, frontend/src/components/layout/Header.test.jsx, frontend/src/components/layout/ThemeToggle.test.jsx, frontend/src/components/layout/ThemeToggle.storage.test.jsx, frontend/src/components/layout/themeTesting.js
+  depends: T29
+  What: the mockup's top bar (free delivery from `GET /delivery` and `CONTACT.phone`, as now) and
+  header row (logo, categories button, underlined search, language, round theme toggle, account,
+  round cart with count) per DESIGN.md; at 390px today's arrangement (menu button, logo,
+  account/cart, search below) restyled. The categories button is `CategoryMenuButton` in
+  `CategoryNav.jsx` (T31). ThemeToggle keeps its rule and labels (the label names the theme it
+  switches to); it reaches the two DESIGN.md themes because the palettes do.
+  done when: Header and ThemeToggle tests green with behavioural assertions untouched; in the browser
+  the toggle switches every header element between the two themes and the pick survives a reload;
+  search suggestions open and work by keyboard as before, in both themes; C1–C8.
 
-### Deploy plan — Stage 2 (to finish once T18–T23 are done; nothing here is run from the agent side)
-1. **Migration on live** — the owner pastes `docs/migrations/0016_orders_deleted_at.sql` into the
-   Supabase SQL editor (live head is `0015`). Additive: a nullable column and an index; the old
-   backend never reads it. The new backend reads `deleted_at` in every order query, so it must
-   exist first.
-2. **Backend** (`voltbox-api`).
-3. **Frontend** (`voltbox-storefront`). The old admin with the new backend works (trashed orders
-   are just hidden); the new admin with the old backend gets errors on the trash buttons. One
-   push to `main` starts both services and the static site usually finishes first (Stage 1 record
-   below) — a few minutes in which the trash buttons fail; no shopper-facing change.
-- Environment variables: none new, none changed.
-- After the deploy (by hand, on a test order the owner places for it, never a real one): trash it
-  → gone from the list and the dashboard, in "სანაგვე" with a purge date → restore → back with the
-  same status; trash again → "სამუდამოდ წაშლა" → gone; the product's stock is the same before and
-  after (it dropped once, at checkout).
+- [ ] **T31 · Category menu, mobile menu, footer, layout shell**
+  owner: frontend-dev
+  files: frontend/src/components/layout/CategoryNav.jsx, frontend/src/components/layout/MobileMenu.jsx, frontend/src/components/layout/Footer.jsx, frontend/src/components/layout/Layout.jsx, frontend/src/components/layout/PageFallback.jsx, frontend/src/components/layout/CategoryNav.test.jsx, frontend/src/components/layout/Footer.test.jsx, frontend/src/pages/Info/footerLinks.test.jsx
+  depends: T29
+  What: `CategoryNav` (the home's category column, the header's `CategoryMenuButton` and its flyout)
+  in the mockup's bordered list with gold icons; the `MobileMenu` drawer; `Footer` per the mockup
+  (footer background, `LogoMark` + wordmark, `site.description`, the free-delivery note from
+  `GET /delivery`, category / info / contact columns from existing data and keys, bottom line; the
+  demo notice stays mock-only — T15); `Layout`'s page background and text; `PageFallback` per
+  DESIGN.md's loading state.
+  done when: `CategoryNav.test.jsx`'s placement assertions (`left-full`, `top-0`, `min-h-full`, not
+  `overflow-hidden`, `relative` on the nav) encode the flyout's position rules (comment in
+  `Home.jsx`) — they stay, or are swapped only for classes giving the same placement, with the reason
+  in the commit; `Footer.test.jsx` (demo notice in mock only) and `footerLinks.test.jsx` green with
+  behaviour untouched; flyout and mobile menu shot open in both themes; C1–C8.
+
+- [ ] **T32 · Common components (shared with the admin)**
+  owner: frontend-dev
+  files: frontend/src/components/common/Button.jsx, frontend/src/components/common/Input.jsx, frontend/src/components/common/Select.jsx, frontend/src/components/common/Textarea.jsx, frontend/src/components/common/Badge.jsx, frontend/src/components/common/Breadcrumbs.jsx, frontend/src/components/common/Modal.jsx, frontend/src/components/common/Toast.jsx, frontend/src/components/common/EmptyState.jsx, frontend/src/components/common/ErrorState.jsx, frontend/src/components/common/ErrorBoundary.jsx, frontend/src/components/common/ProductImage.jsx, frontend/src/components/common/CategoryIcon.jsx, frontend/src/components/common/fields.test.jsx, frontend/src/components/common/Toast.test.jsx, frontend/src/components/common/ProductImage.test.jsx
+  depends: T27
+  What: DESIGN.md's buttons, fields, badges, breadcrumbs, modal, toast, empty / error states, error
+  screen, photo tile and the category icon's frame. The admin renders Button, Input, Select,
+  Textarea, Modal, Toast, EmptyState, ErrorState, ErrorBoundary and ProductImage, so C4 holds
+  strictly: the look moves through tokens (colour, radius, shadow, stroke) whose admin value is
+  today's; what a token cannot carry (e.g. letter-spacing, a taller shop button) goes behind
+  `storefront:` (non-portal elements only — Modal and Toast render into `<body>`) or a new opt-in
+  prop/variant only storefront code passes. Text on a primary fill uses DESIGN.md's text-on-fill
+  role, not `text-white`.
+  done when: fields / Toast / ProductImage tests green with behaviour untouched; every admin test
+  green with no edit; the admin-pinning test green; the admin login page and a `ConfirmDialog` (e.g.
+  BrandList delete) compared in a browser with the commit before T27 on a local stack as in Stage 2's
+  browser check — identical; if that stack cannot be run, listed as Unverified for the finish-check;
+  storefront modals and toasts (portals) take the new look in both themes; C1–C8.
+
+- [ ] **T33 · Product components**
+  owner: frontend-dev
+  files: frontend/src/components/product/ProductCard.jsx, frontend/src/components/product/PriceTag.jsx, frontend/src/components/product/ProductGrid.jsx, frontend/src/components/product/ProductCarousel.jsx, frontend/src/components/product/StockBadge.jsx, frontend/src/components/product/RatingStars.jsx, frontend/src/components/product/ProductGrid.test.jsx, frontend/src/components/product/RatingStars.test.jsx, frontend/src/components/common/Skeleton.jsx
+  depends: T32
+  What: the mockup's product card (photo tile, "new" eyebrow, brand in display caps, name in serif,
+  price in display, full-width add-to-cart) and its states (discount + old price, out of stock, in
+  cart, loading); the carousel's section head (title, round prev/next) and grid; rating stars; stock
+  badge. `Skeleton.jsx` — the admin uses `Skeleton` (C4); `ProductCardSkeleton` follows the new card's
+  geometry.
+  done when: ProductGrid / RatingStars tests green with behaviour untouched; a discounted, an
+  out-of-stock and an in-cart card shot in both themes, at 1440 (columns per DESIGN.md) and 390
+  (carousel scrolls); add-to-cart still adds (existing tests and a click in the browser); C1–C8.
+
+- [ ] **T34 · Home page**
+  owner: frontend-dev
+  files: frontend/src/pages/Home.jsx, frontend/src/pages/Home.test.jsx, frontend/src/pages/HomeHero.test.jsx, frontend/src/index.css (shared — only removes `.bg-tech-grid`, which only Home uses)
+  depends: T30, T31, T33
+  What: the mockup's home: category column + hero (eyebrow `home.heroBadge`, title
+  `home.heroTitle` / `home.heroHighlight`, text, the two category buttons as now; the decorative
+  diamond / device drawing replaces `HeroMark`, `aria-hidden`), benefits strip, popular categories
+  (diamond-framed icons), the four product sections as now (the mockup's single row is the pattern
+  for each), in the mockup's spacing; 390px per DESIGN.md.
+  done when: Home and HomeHero tests green (hero links; the `aside` placement assertions under T31's
+  rule); at 1440 the home shots match `mockup-light-1440.png` / `mockup-dark-1440.png` in layout,
+  colour, type and spacing, differing only where copy, data or AA differ (listed in the report);
+  C1–C8.
+
+- [ ] **T35 · Category and search pages**
+  owner: frontend-dev
+  files: frontend/src/pages/Category.jsx, frontend/src/pages/SearchResults.jsx, frontend/src/components/catalog/ActiveFilters.jsx, frontend/src/components/catalog/FilterGroup.jsx, frontend/src/components/catalog/FilterSidebar.jsx, frontend/src/components/catalog/Pagination.jsx, frontend/src/components/catalog/PriceRangeSlider.jsx, frontend/src/components/catalog/SortSelect.jsx
+  depends: T33
+  What: per DESIGN.md's page guide: heading and breadcrumbs, filter sidebar and its mobile sheet,
+  active filter chips, sort, grid, pagination, empty and not-found states.
+  done when: `utils/filter.test.js` and the catalog tests green; filters, sort, price slider and
+  pagination still change the URL and the results (clicked through in mock mode); the mobile filter
+  sheet opens and closes; category, search with results and search without, both themes, both
+  widths; C1–C8.
+
+- [ ] **T36 · Product page**
+  owner: frontend-dev
+  files: frontend/src/pages/ProductDetails.jsx, frontend/src/components/product/ProductGallery.jsx
+  depends: T33
+  What: gallery (thumbnails and switching as now), brand, title, price / old price, stock, quantity +
+  add-to-cart, specs, related products — per DESIGN.md's page guide.
+  done when: gallery switching, the 10-per-line limit and add-to-cart behave as before (mock mode, in
+  the browser); a product with several photos, one with a discount and one out of stock, both themes,
+  both widths; C1–C8.
+
+- [ ] **T37 · Cart**
+  owner: frontend-dev
+  files: frontend/src/pages/Cart.jsx, frontend/src/components/cart/CartItem.jsx, frontend/src/components/cart/CartSummary.jsx, frontend/src/components/cart/QuantityStepper.jsx, frontend/src/pages/GuestCartQuote.test.jsx
+  depends: T33
+  What: cart lines, quantity stepper, remove / undo, summary (delivery fee and free-delivery
+  progress as now), empty cart — per DESIGN.md's page guide.
+  done when: `GuestCartQuote.test.jsx` and `context/cartLimits.test.jsx` green with behaviour
+  untouched; quantity, remove / undo and the 10 / 20 limits behave as before in the browser; empty
+  cart and two lines, both themes, both widths; C1–C8.
+
+- [ ] **T38 · Checkout and order confirmation**
+  owner: frontend-dev
+  files: frontend/src/pages/Checkout.jsx, frontend/src/pages/CheckoutSuccess.jsx, frontend/src/pages/Checkout.test.jsx, frontend/src/pages/CheckoutSuccess.test.jsx
+  depends: T37
+  What: the checkout form, delivery and payment choice, order summary, and the confirmation page —
+  per DESIGN.md's page guide.
+  done when: Checkout and CheckoutSuccess tests green with behaviour untouched (Idempotency-Key,
+  validation messages, delivery fee by city, guest vs signed in); a mock order placed through the
+  form at 390 and at 1440 lands on the confirmation; checkout with errors shown and the
+  confirmation, both themes; C1–C8.
+
+- [ ] **T39 · Sign-in pages**
+  owner: frontend-dev
+  files: frontend/src/pages/Login.jsx, frontend/src/pages/Register.jsx, frontend/src/pages/ForgotPassword.jsx, frontend/src/pages/ResetPassword.jsx, frontend/src/pages/Login.test.jsx, frontend/src/pages/ForgotPassword.test.jsx, frontend/src/pages/ResetPassword.test.jsx
+  depends: T32
+  What: login, register, forgot and reset password per DESIGN.md's page guide (the mock-auth note
+  stays mock-only — `3673e56`).
+  done when: Login / ForgotPassword / ResetPassword tests green with behaviour untouched; each page
+  with an error shown, both themes, both widths; C1–C8.
+
+- [ ] **T40 · Account pages**
+  owner: frontend-dev
+  files: frontend/src/pages/Account/AccountLayout.jsx, frontend/src/pages/Account/Orders.jsx, frontend/src/pages/Account/Profile.jsx, frontend/src/pages/Account/Addresses.jsx, frontend/src/pages/Account/ChangePassword.jsx, frontend/src/pages/Account/Orders.test.jsx, frontend/src/pages/Account/Profile.test.jsx, frontend/src/pages/Account/ChangePassword.test.jsx
+  depends: T32
+  What: account navigation, order list, profile, addresses, password change — per DESIGN.md's page
+  guide.
+  done when: Orders / Profile / ChangePassword tests green with behaviour untouched; the four pages
+  signed in (mock), both themes, both widths, with the account navigation usable at 390; C1–C8.
+
+- [ ] **T41 · Info pages and 404**
+  owner: frontend-dev
+  files: frontend/src/pages/Info/InfoPage.jsx, frontend/src/pages/Info/DeliveryTerms.jsx, frontend/src/pages/Info/DeliveryTable.jsx, frontend/src/pages/Info/ReturnsWarranty.jsx, frontend/src/pages/Info/Privacy.jsx, frontend/src/pages/Info/Faq.jsx, frontend/src/pages/Info/Contact.jsx, frontend/src/pages/Info/InfoPages.test.jsx, frontend/src/pages/NotFound.jsx
+  depends: T32
+  What: the four info pages (sections, delivery table, FAQ, contact block) and the 404 — per
+  DESIGN.md's page guide. Their text stays under `info.*` (T16).
+  done when: `InfoPages.test.jsx` (no Georgian on `/en`, owner facts, links) green with behaviour
+  untouched; the delivery table readable at 390 without page overflow; the four pages and the 404,
+  both themes, both widths; C1–C8.
+
+Finish-check (orchestrator; not a task): code-reviewer, security-auditor (fonts, favicon, no
+third-party request, CSP unchanged) and browser-tester — `screens.mjs` over every route, both themes,
+both widths; the home against the mockup's shots; `/en` spot checks; the admin panel (dashboard,
+product list and form, order list and detail with `ConfirmDialog`, a toast) compared with the commit
+before T27 on a local stack as in Stage 2 — it must be unchanged.
+
+### Deploy notes — Stage 3 (nothing here is run from the agent side)
+- Frontend only: no migration, no backend change, no environment variable, `render.yaml` unchanged.
+  After the owner merges to `main`, the storefront (`voltbox-storefront`) rebuilds.
+- Stage 2 is on the same branch and not merged yet (Stage 2 — Done → Deploy plan). If Stage 2 should
+  go live before the redesign, `main` takes `db9a242` (the commit Stage 3 starts from) first.
+- After the deploy (by hand): home, a category, a product, cart, checkout in both themes on a phone
+  and a desktop; the toggle switches and the pick survives a reload; the tab shows the new favicon
+  (browsers cache favicons — a hard reload may be needed); `/admin` looks as before.
 
 ## Shared files
 <!-- Files that may appear in several tasks' files as (shared). Rule: append only (new dependency, type, route); never change or remove someone else's entry; two tasks never work on one shared file at the same time. -->
 - None. `frontend/src/i18n/ka.json` and `en.json` appear in T19 and T20 only, and T20 depends on
   T19, so the two never run at the same time. `backend/app/services/order_trash.py` and
   `backend/app/api/v1/routes/admin/orders.py` likewise (T19 → T20).
+- Stage 3: `frontend/src/index.css` — T27 (tokens, base styles) and T34 (removes `.bg-tech-grid`
+  only); T34 comes after T27 through T33.
+- Stage 3: `frontend/src/i18n/ka.json`, `frontend/src/i18n/en.json` — no task is expected to touch
+  them (every label exists; copy does not change). A task that truly needs a new key adds it to both
+  files (append only, never rewording an existing key) only after the orchestrator confirms no other
+  running task is editing them.
 
 ## Backlog (needs user decision)
 
@@ -468,9 +609,9 @@ Unverified (check before acting):
 - None.
 
 ## Run State
-- Stage: Stage 2 — Order trash (admin)
-- Finish-check this stage: done (2026-10-18; code-reviewer, security-auditor, browser-tester) → T24, T25
-- Fix rounds this stage: 1/2
+- Stage: Stage 3 — Storefront redesign
+- Finish-check this stage: not run
+- Fix rounds this stage: 0/2
 - Failed attempts: —
 
 ## Last Session
@@ -488,6 +629,238 @@ Unverified (check before acting):
   live (the owner pastes docs/migrations/0016_orders_deleted_at.sql); dark theme and /en (admin is ka/light only).
 - Known issues / blockers: none. The two proposed Accepted Risks (PROJECT.md) wait for the owner.
 - Next: the owner reviews, merges to main, runs the Stage 2 Deploy plan (migration → backend → frontend).
+
+## Stage 2 — Done
+Stage 2 — Order trash (admin) (T18–T25 done 2026-10-18; finish-check done, fix rounds 1/2)
+
+Source: the owner's request (2026-10-18): delete an order in the admin into a trash (with a
+confirmation dialog), restore it with one button, delete it for good by hand or automatically
+after 30 days; admin only; deleting never changes stock. Rules: PROJECT.md → Business Rules →
+"Order trash"; endpoints: PROJECT.md → API Contract; reasons: Decision Log 2026-10-18.
+Planned 2026-10-18; nothing implemented yet. Order = suggested order: T18 first; then T19, T21
+and T23 can run side by side (no shared files); T20 after T19; T22 last.
+
+Rules for every task of this stage (CLAUDE.md, repeated because subagents run them):
+- Never read or open `backend/.env`; tests and probes run with `VOLTBOX_NO_DOTENV=1`
+  (`pytest` sets it itself). Every `alembic` / script run gets `VOLTBOX_NO_DOTENV=1` and an
+  explicit local `DATABASE_URL` (`postgresql://voltbox:voltbox@localhost:55432/...`).
+- Nothing runs against the live database. Migration 0016 reaches live only as reviewed SQL
+  the owner pastes (T23).
+- Backend gate: `ruff check . && ruff format --check . && mypy app scripts tests && pytest -q`.
+  Frontend gate: `npm run lint && npm test && npm run build` with `VITE_API_MODE=http` and
+  `VITE_API_MODE=mock`. A change to any file under `frontend/src` runs both gates.
+
+- [x] **T18 · Migration 0016: `orders.deleted_at` + partial index**
+  owner: backend-dev
+  files: backend/alembic/versions/0016_orders_deleted_at.py (new), backend/app/db/models/orders.py, backend/tests/test_order_trash_schema.py (new)
+  depends: —
+  What: `orders.deleted_at TIMESTAMPTZ NULL` (no default) and
+  `ix_orders_deleted_at (deleted_at) WHERE deleted_at IS NOT NULL`. The model declares both
+  (`Index(..., postgresql_where=text("deleted_at IS NOT NULL"))`, with a comment like the one on
+  `ix_orders_status`) so `alembic check` stays clean. No new table, so no RLS change. Downgrade
+  drops the column and index; its docstring says what that does: every trashed order becomes a
+  live order again (the trash state is lost), nothing else is touched.
+  done when: `tests/test_order_trash_schema.py` passes: `deleted_at` is `timestamp with time zone`,
+  nullable, no default; `ix_orders_deleted_at` exists and its predicate is
+  `deleted_at IS NOT NULL`. `tests/test_schema.py` (RLS on every table) still green. Locally, with
+  `VOLTBOX_NO_DOTENV=1` and `DATABASE_URL=postgresql://voltbox:voltbox@localhost:55432/voltbox`:
+  `alembic upgrade head` then `alembic check` → no new operations. (pytest's conftest runs the
+  migrations down and up, so the downgrade is exercised too.) Backend gate green.
+
+- [x] **T19 · Trash and restore; status frozen in the trash; the trash list**
+  owner: backend-dev
+  files: backend/app/services/order_trash.py (new), backend/app/services/admin_orders.py, backend/app/services/order_status.py, backend/app/schemas/admin_orders.py, backend/app/api/v1/routes/admin/orders.py, frontend/src/i18n/ka.json, frontend/src/i18n/en.json, backend/tests/test_order_trash.py (new)
+  depends: T18
+  What:
+  - `services/order_trash.py`: `TRASH_RETENTION = timedelta(days=30)` — the only place the 30
+    days live; `trash(db, order_id)` and `restore(db, order_id)`, each returning the order and
+    whether it changed. Both lock the row `FOR UPDATE` through the state machine's lock (make
+    `order_status._lock_order` public as `lock_order` — one copy). Trash on a trashed order and
+    restore on a live one change nothing (`deleted_at` keeps its first value).
+  - Routes: `POST /admin/orders/{id}/trash`, `POST /admin/orders/{id}/restore` → 200
+    `OrderDetailOut`; audit `order.trash` / `order.restore` (actor = admin,
+    `changes: {status, deletedAt}`) **only when something changed**, same transaction; commit.
+    `GET /admin/orders` gets `trash: bool = False`.
+  - `order_status.transition`: after the lock, a trashed order → 409 `ORDER_IN_TRASH`, before
+    the `INVALID_TRANSITION` check. `counts_by_status` counts live orders only.
+  - `admin_orders`: `_conditions(..., trash)` adds `deleted_at IS NULL` (default) or
+    `IS NOT NULL` (`trash=true`, ordered `deleted_at DESC, id`); `_summary` adds `deleted_at` and
+    `purge_at` (`deleted_at + TRASH_RETENTION`, else None); `get_order` returns
+    `allowed_transitions = []` for a trashed order and still returns it.
+  - `schemas/admin_orders.py`: `OrderListItem` gains `deleted_at: datetime | None`,
+    `purge_at: datetime | None` (so `OrderDetailOut` has them too).
+  - `apiErrors.ORDER_IN_TRASH` in `ka.json` and `en.json` (e.g. "შეკვეთა სანაგვეშია — ჯერ
+    აღადგინეთ." / "This order is in the trash — restore it first.").
+  - Known, left as is: `services/order.py` `cancel` (no route calls it) would turn
+    `ORDER_IN_TRASH` into `ORDER_NOT_CANCELLABLE`; that file is T21's.
+  done when: `tests/test_order_trash.py` passes, covering: trash → 200, `deletedAt` set,
+  `purgeAt` = `deletedAt` + 30 days, exactly one `order.trash` audit row with the admin as actor;
+  trash again → same `deletedAt`, still one audit row; restore → same `status` as before, both
+  fields null, one `order.restore` row; restore a live order → 200, no audit row; trash and
+  restore of an unknown id → 404 `ORDER_NOT_FOUND`; `POST /status` (pending → cancelled) on a
+  trashed order → 409 `ORDER_IN_TRASH`, and status, product stock, `inventory_movements` count
+  and `order_status_history` count unchanged; trashing a pending order leaves product stock and
+  `inventory_movements` unchanged; the detail of a trashed order → 200 with
+  `allowedTransitions: []`; default list hides it (`total` counts live orders only);
+  `trash=true` lists only trashed orders, newest deletion first, with `q` and `status` still
+  applied; `counts_by_status` excludes it. `tests/test_admin_auth.py` covers the new routes
+  (anonymous 401, customer 403) with no edit; `tests/test_error_messages.py` green. Backend gate
+  green; frontend gate green (JSON changed: `i18n.test.js` key parity).
+
+- [x] **T20 · Permanent delete and the 30-day purge**
+  owner: backend-dev
+  files: backend/app/services/order_trash.py, backend/app/api/v1/routes/admin/orders.py, frontend/src/i18n/ka.json, frontend/src/i18n/en.json, backend/tests/test_order_purge.py (new)
+  depends: T19
+  What:
+  - `delete_forever(db, order_id)`: lock the row; missing → 404 `ORDER_NOT_FOUND`; live → 409
+    `ORDER_NOT_IN_TRASH`; else audit `order.purge` (`{orderNumber, status, total,
+    automatic: false}`, actor = admin) and delete — items and history go by CASCADE,
+    `inventory_movements.order_id` becomes NULL by its FK. Route `DELETE /admin/orders/{id}` → 204.
+  - `purge_expired(db) -> int`: one `DELETE FROM orders WHERE deleted_at < now() - TRASH_RETENTION
+    RETURNING id, order_number, status, total`, one `order.purge` audit row per order (actor
+    NULL, `automatic: true`). `GET /admin/orders` (both modes) calls it and commits before the
+    list query.
+  - Stock: neither function calls `adjust_stock` or writes `inventory_movements`.
+  - `apiErrors.ORDER_NOT_IN_TRASH` in `ka.json` and `en.json` (e.g. "სამუდამოდ იშლება მხოლოდ
+    სანაგვეში მყოფი შეკვეთა." / "Only an order in the trash can be deleted for good.").
+  done when: `tests/test_order_purge.py` passes, covering: `DELETE` on a live order → 409
+  `ORDER_NOT_IN_TRASH`, order intact; on an unknown id → 404; on a trashed order → 204, the order,
+  its `order_items` and `order_status_history` rows gone, its `inventory_movements` rows still
+  there with `order_id IS NULL`, product stock unchanged, one `order.purge` row (actor = admin,
+  `automatic` false); an order trashed 31 days ago (set `deleted_at` directly) is gone after
+  `GET /admin/orders` and after `GET /admin/orders?trash=true`, with an `order.purge` row (actor
+  NULL, `automatic` true) and stock unchanged; one trashed 29 days ago and live orders are
+  untouched; concurrency (two sessions, as in `tests/test_orders_concurrency.py`): a restore
+  holding the row lock while `purge_expired` runs → after the restore commits, the purge
+  deletes 0 rows and the order is live; purge first → the restore answers 404. Backend gate
+  green; frontend gate green (JSON changed).
+
+- [x] **T21 · Hide trashed orders from customers, guests, the dashboard and admin customers**
+  owner: backend-dev
+  files: backend/app/services/order.py, backend/app/services/dashboard.py, backend/app/services/admin_customers.py, backend/tests/test_order_trash_hidden.py (new)
+  depends: T18
+  What: `Order.deleted_at.is_(None)` in `order.list_for_user`, `get_by_number`,
+  `get_guest_order` (the same `order_not_found()` 404); in the dashboard's sales today, orders
+  today, sales total, top products and latest orders; in `admin_customers`'
+  `_orders_count_subquery`, `_total_spent_subquery` and `get_customer`'s order list. The two
+  idempotency lookups in `place_order` (`services/order.py:239`, `:281`) stay unfiltered on
+  purpose — a comment says why (a replay must never place a second order). `counts_by_status`
+  is T19's. Tests set `deleted_at` directly, so this task does not wait for T19;
+  `tests/factories.py` is not changed.
+  done when: `tests/test_order_trash_hidden.py` passes, covering: a trashed order is missing
+  from `GET /orders`; `GET /orders/{number}` → 404 `ORDER_NOT_FOUND`; the guest
+  `POST /orders/lookup` with the right token → 404 with a body identical to an unknown
+  number's; dashboard `salesToday`, `ordersToday`, `salesTotal`, `topProducts`, `latestOrders`
+  leave out a trashed delivered order and count it again once `deleted_at` is NULL; admin
+  customers list (`ordersCount`, `totalSpent`) and detail (`orders`, `ordersCount`,
+  `totalSpent`) leave it out; a replay of `POST /orders` with a trashed order's
+  `Idempotency-Key` (guest and signed-in) → the same `orderNumber`, order count unchanged,
+  stock decremented once, no new `inventory_movements` row. Backend gate green.
+
+- [x] **T22 · Admin trash UI (OrderDetail, OrderList)**
+  owner: frontend-dev
+  files: frontend/src/admin/adminApi.js, frontend/src/admin/pages/OrderList.jsx, frontend/src/admin/pages/OrderDetail.jsx, frontend/src/admin/pages/OrderList.test.jsx (new), frontend/src/admin/pages/OrderDetail.test.jsx (new)
+  depends: T19, T20
+  What (Georgian text in the components, as in the rest of `src/admin`; no i18n keys):
+  - `adminApi.js`: `trashOrder(id)` (POST `/admin/orders/:id/trash`), `restoreOrder(id)` (POST
+    `.../restore`), `deleteOrderForever(id)` (DELETE `/admin/orders/:id`); `listOrders` passes
+    `trash`.
+  - OrderDetail: "წაშლა" → `ConfirmDialog`; for pending/confirmed/processing the description
+    says the units stay reserved and to cancel first if they should return → `trashOrder` →
+    navigate to `/admin/orders` with a success toast (`useToast`). A trashed order (`deletedAt`
+    set): a banner with the purge date (`purgeAt`), no status buttons, "აღდგენა" (one click, no
+    dialog, the page shows the live order) and "სამუდამოდ წაშლა" (`ConfirmDialog` saying it
+    cannot be undone → `deleteOrderForever` → `/admin/orders?trash=true`).
+  - OrderList: a "სანაგვე" toggle bound to `?trash=true` (like the other filters, resets the
+    page); in the trash: deletion date and days left (from `purgeAt`, never below 0), per-row
+    "აღდგენა" and "სამუდამოდ წაშლა" (`ConfirmDialog`), the list reloads after each.
+  - Errors: the message from the existing `apiErrors` lookup (`error.message`), shown in the page
+    or the dialog; buttons usable again after a failure.
+  done when: `OrderDetail.test.jsx` and `OrderList.test.jsx` (mocked `adminApi`, as
+  `ProductList.test.jsx` does) pass, covering: the delete dialog shows the stock warning for
+  `pending` and not for `delivered`; confirm calls `trashOrder` once and lands on the list; a
+  trashed order shows the purge date, no status buttons, restore calls `restoreOrder` without a
+  dialog; permanent delete needs the dialog and calls `deleteOrderForever`; the trash toggle
+  calls `listOrders` with `trash: true` and puts `trash=true` in the URL; a row shows days left;
+  row restore and row delete call the API and reload; error paths — a rejected call with code
+  `ORDER_NOT_IN_TRASH` / `ORDER_IN_TRASH` (409) and a network failure — show the message and
+  leave the buttons enabled. Frontend gate green and the full backend gate green (backend tests
+  read `frontend/src`).
+
+- [x] **T23 · Live SQL for migration 0015 → 0016**
+  owner: backend-dev
+  files: docs/migrations/0016_orders_deleted_at.sql (new)
+  depends: T18
+  What: from `backend/`, offline (connects to nothing):
+  `VOLTBOX_NO_DOTENV=1 JWT_SECRET=<any 32+ characters> DATABASE_URL=postgresql://voltbox:voltbox@localhost:55432/voltbox .venv/Scripts/alembic.exe upgrade 0015:0016 --sql`
+  (`alembic/env.py` imports `settings`, which needs `DATABASE_URL` and a `JWT_SECRET` of at
+  least 32 characters when `.env` is off — T17). Every table name hand-qualified `public.`
+  (`public.orders`, `public.alembic_version`; Supabase has its own `auth.*` tables).
+  done when: the file holds that output, qualified, with a header comment: how it was generated
+  and from which commit; the statement count between `BEGIN` and `COMMIT` (expected 3: add
+  column, create index, the `alembic_version` update — which checks `version_num = '0015'`, so
+  look for `UPDATE 1`); the checks to run after (`select version_num from public.alembic_version;`
+  → `0016`; `select data_type, is_nullable from information_schema.columns where table_schema='public'
+  and table_name='orders' and column_name='deleted_at';` → `timestamp with time zone`, `YES`).
+  Applied to a scratch local database at `0015` (inside the compose `db` container, never live;
+  no host psql is needed), it leaves `alembic current` = `0016` and `alembic check` clean.
+  No backend file changes, so no gate beyond `git diff --stat` showing only this file.
+
+- [x] **T24 · should-fix · No toast is ever shown in the admin panel**
+  owner: frontend-dev
+  files: frontend/src/admin/AdminLayout.jsx, frontend/src/admin/AdminLayout.test.jsx (new)
+  depends: T22
+  Found by the 2026-10-18 finish-check (code-reviewer and browser-tester, same cause). `OrderDetail.jsx:60`
+  calls `toast.success('შეკვეთა გადატანილია სანაგვეში')` and navigates to the list, but `ToastViewport`
+  (`components/common/Toast.jsx`) is rendered only by the storefront `components/layout/Layout.jsx:56`; the admin
+  routes (`routes.jsx:107-111`, `AdminBoundary` → `AdminLayout`) never render it, so the toast the Decision Log
+  promises ("back to `/admin/orders` with a success toast") never appears (browser screenshot
+  `e-admin-after-trash-toast.png`). `OrderDetail.test.jsx` mocks `useToast`, so it could not see this.
+  done when: `AdminLayout` renders `<ToastViewport />` once (ToastProvider already wraps the app in `main.jsx`);
+  `AdminLayout.test.jsx` renders `AdminLayout` inside the real `ToastProvider` with a child route whose page calls
+  `toast.success('…')`, and finds the text on screen — and that test fails with the viewport removed. Frontend gate
+  green; full backend gate green (run by the orchestrator).
+
+- [x] **T25 · should-fix · The trash list's row buttons are off-screen at 1280px**
+  owner: frontend-dev
+  files: frontend/src/admin/pages/OrderList.jsx, frontend/src/admin/pages/OrderList.test.jsx
+  depends: T22
+  Found by the 2026-10-18 browser check (`test-results/browser-check/e-d-trash-list.png`, 1280x800, sidebar shown):
+  in trash mode the table (`min-w-[52rem]`) gets two extra columns ("წაშლილია", "დარჩა"), so "აღდგენა" is cut at
+  the viewport edge and "სამუდამოდ წაშლა" is reachable only by scrolling the table sideways.
+  Bundled because they are in the same component and cheap (both nits from code-reviewer/browser-tester):
+  (a) a failed permanent delete replaces the dialog's "ქმედება შეუქცევადია" description with the error, as plain
+  text without `role="alert"`; (b) on 404 `ORDER_NOT_FOUND` or 409 `ORDER_NOT_IN_TRASH` (another admin or the
+  purge got there first) the dialog keeps offering a retry that always fails and the stale row stays.
+  done when: in trash mode the table fits a 1280px viewport with the admin sidebar without horizontal scroll and
+  both row buttons are fully visible — e.g. the trash view drops columns it does not need (city, item count, or
+  merges "წაშლილია" and "დარჩა" into one cell); the live view is unchanged. The dialog keeps its description and
+  shows the error under it in an element with `role="alert"`; on 404/409 it closes and the list reloads. Tests in
+  `OrderList.test.jsx`: the trash view's column headers (what is shown and what is not), the alert keeps the
+  description, 404 and 409 close the dialog and call `listOrders` again, a network error keeps the dialog open.
+  Checked by the orchestrator in a browser at 1280px if possible, otherwise listed as Unverified. Frontend gate
+  green; full backend gate green (run by the orchestrator).
+
+### Deploy plan — Stage 2 (to finish once T18–T23 are done; nothing here is run from the agent side)
+1. **Migration on live** — the owner pastes `docs/migrations/0016_orders_deleted_at.sql` into the
+   Supabase SQL editor (live head is `0015`). Additive: a nullable column and an index; the old
+   backend never reads it. The new backend reads `deleted_at` in every order query, so it must
+   exist first.
+2. **Backend** (`voltbox-api`).
+3. **Frontend** (`voltbox-storefront`). The old admin with the new backend works (trashed orders
+   are just hidden); the new admin with the old backend gets errors on the trash buttons. One
+   push to `main` starts both services and the static site usually finishes first (Stage 1 record
+   below) — a few minutes in which the trash buttons fail; no shopper-facing change.
+- Environment variables: none new, none changed.
+- After the deploy (by hand, on a test order the owner places for it, never a real one): trash it
+  → gone from the list and the dashboard, in "სანაგვე" with a purge date → restore → back with the
+  same status; trash again → "სამუდამოდ წაშლა" → gone; the product's stock is the same before and
+  after (it dropped once, at checkout).
+
+Stage 2's last Run State, kept as the record:
+- Finish-check this stage: done (2026-10-18; code-reviewer, security-auditor, browser-tester) → T24, T25
+- Fix rounds this stage: 1/2
+- Failed attempts: —
 
 ## Stage 1 — Done
 Stage 1 — Audit fixes (closed by the owner 2026-10-10; T0–T17 done)
