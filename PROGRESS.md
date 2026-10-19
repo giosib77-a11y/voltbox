@@ -189,7 +189,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   --stat` shows only the script; no `package.json` change. No backend gate (nothing under
   `frontend/src` changes).
 
-- [ ] **T29 · New logo and favicon**
+- [x] **T29 · New logo and favicon**
   owner: frontend-dev
   files: frontend/src/components/layout/Logo.jsx, frontend/public/favicon.svg, frontend/src/components/layout/Logo.test.jsx (new)
   depends: T27
@@ -626,7 +626,8 @@ Unverified (check before acting):
 - T26: DESIGN.md rewritten (contrast table recomputed by script — 0 failures; logo, favicon and placeholder SVGs rendered at 16–96px on light and dark). Revised once: the mockup `line2` kept as a new `outline` role on labelled controls (Decision Log).
 - T27: palettes, theme tokens (radius, shadow, icon stroke, focus radius, button weight), 3 variable woff2, base styles on `[data-storefront]`; admin pinned by test (a changed admin value fails it — tried). Gates: eslint, vitest 662, both builds; ruff, mypy 148, pytest 1097.
 - screens.mjs: `SCREENS_ORIGIN` / `SCREENS_DIR` so two tasks can shoot side by side (own preview port, own folder).
-- Next: T29 and T32 side by side.
+- T29: Logo (mark + VOLTBOX wordmark, header sizes) and `LogoMark` (size, className — colour in the default className) — the only copy of the path; favicon = filled gold rhombus + dark bolt, legible at 16px on light and dark tabs. Footer composes `LogoMark` itself (T31).
+- Next: T32 (running), then T30, T31, T33.
 
 ## Stage 2 — Done
 Last session of Stage 2:
