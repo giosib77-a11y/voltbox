@@ -300,7 +300,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   the browser); a product with several photos, one with a discount and one out of stock, both themes,
   both widths; C1–C8.
 
-- [ ] **T37 · Cart**
+- [x] **T37 · Cart**
   owner: frontend-dev
   files: frontend/src/pages/Cart.jsx, frontend/src/components/cart/CartItem.jsx, frontend/src/components/cart/CartSummary.jsx, frontend/src/components/cart/QuantityStepper.jsx, frontend/src/pages/GuestCartQuote.test.jsx
   depends: T33
@@ -647,7 +647,8 @@ Unverified (check before acting):
 - T35: category and search (serif h1, serif filter titles, themed checkbox with a peer focus ring, slider, sort with its missing chevron, `outline` pagination); pre-existing defect fixed: the price slider's thumbs never rendered (no `border-solid` on the thumb pseudo-element). Filter, sort, price and page 2 change the URL (clicked in mock); the mobile sheet opens and closes.
 - T36: product page (light square photo tile, 64px thumbnails with a primary-500 selected border, display brand eyebrow, serif h1, display price with lining-nums, tabs with a primary underline); gallery uses `shopPlaceholder`; a keyboard-focused gallery arrow is now visible at lg. Thumbnail switching and the 10-per-line limit behave as before (browser, both themes).
 - T40: account (serif h1, 14rem nav with a primary-500 left bar for the active item, a scrolling tab strip below md, 480px forms, order cards with display number and total + `lining-nums`). Orders with a placed mock order, focus rings and the end of the 390 tab strip checked in shots (review asked for both).
-- Next: T37 (running), then T38.
+- T37: cart (serif h1, light photo tiles with `shopPlaceholder`, serif names, display prices and total with `lining-nums`, line-coloured dividers); stepper frame stays ink-300 (field boundary). Quantity, the 10-per-line clamp, remove and undo behave as before (browser).
+- Next: T38.
 
 ## Stage 2 — Done
 Last session of Stage 2:

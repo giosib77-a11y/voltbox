@@ -48,8 +48,8 @@ export default function Cart() {
 
   if (items.length === 0) {
     return (
-      <div className="container-page py-6 lg:py-10">
-        <Breadcrumbs items={[{ label: t('cart.title') }]} className="mb-5" />
+      <div className="container-page py-5 lg:py-7">
+        <Breadcrumbs items={[{ label: t('cart.title') }]} className="mb-4" />
         <EmptyState
           icon={ShoppingCart}
           title={t('cart.emptyTitle')}
@@ -66,18 +66,18 @@ export default function Cart() {
       <Breadcrumbs items={[{ label: t('cart.title') }]} className="mb-4" />
 
       <div className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
+        <h1 className="font-serif text-[28px] font-light leading-tight text-ink-900 lg:text-4xl">
           {t('cart.title')}
-          <span className="ml-2 text-base font-medium text-ink-500">{t('cart.units', { count: itemsCount })}</span>
+          <span className="ml-2 font-sans text-base font-normal text-ink-500">{t('cart.units', { count: itemsCount })}</span>
         </h1>
         <Button variant="link" size="sm" className="px-0" onClick={clear}>
           {t('cart.clear')}
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:gap-7">
-        <div className="rounded-card border border-ink-200 bg-surface px-4 sm:px-5">
-          <ul className="divide-y divide-ink-100">
+      <div className="grid items-start gap-6 lg:grid-cols-[1fr_22.5rem] lg:gap-7">
+        <div className="rounded-card border border-line bg-surface px-4 sm:px-6">
+          <ul className="divide-y divide-line">
             {items.map((item) => (
               <CartItem
                 key={item.productId}
@@ -90,7 +90,7 @@ export default function Cart() {
         </div>
 
         <div>
-          <div className="lg:sticky lg:top-[8.5rem]">
+          <div className="lg:sticky lg:top-[8.75rem]">
             <CartSummary
               subtotal={subtotal}
               shipping={shipping}

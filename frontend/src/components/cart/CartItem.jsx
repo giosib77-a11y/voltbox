@@ -16,12 +16,13 @@ export default function CartItem({ item, onQtyChange, onRemove }) {
   const maxQty = snapshot.stock > 0 ? Math.min(snapshot.stock, MAX_LINE_QTY) : 1;
 
   return (
-    <li className="flex gap-3 py-4 sm:gap-4">
+    <li className="flex gap-3 py-5 sm:gap-4">
       <Link to={`/product/${snapshot.slug}`} className="shrink-0" aria-label={snapshot.name}>
         <ProductImage
           src={snapshot.image}
           alt={snapshot.name}
-          className="h-20 w-20 rounded-control border border-ink-200 sm:h-24 sm:w-24"
+          shopPlaceholder
+          className="h-[72px] w-[72px] border border-line sm:h-[88px] sm:w-[88px]"
         />
       </Link>
 
@@ -30,7 +31,7 @@ export default function CartItem({ item, onQtyChange, onRemove }) {
           <div className="min-w-0">
             <Link
               to={`/product/${snapshot.slug}`}
-              className="line-clamp-2-fallback text-sm font-semibold leading-snug text-ink-900 hover:text-primary-700 sm:text-base"
+              className="line-clamp-2-fallback font-serif text-[15px] font-normal leading-snug text-fg hover:text-primary-700 sm:text-base"
             >
               {snapshot.name}
             </Link>
@@ -48,7 +49,7 @@ export default function CartItem({ item, onQtyChange, onRemove }) {
             type="button"
             onClick={() => onRemove(productId)}
             aria-label={t('cart.removeItem', { name: snapshot.name })}
-            className="-mr-1.5 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-danger-50 hover:text-danger-fg"
+            className="-mr-1.5 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-control text-ink-600 transition-colors hover:bg-danger-50 hover:text-danger-fg"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -63,7 +64,7 @@ export default function CartItem({ item, onQtyChange, onRemove }) {
             onChange={(next) => onQtyChange(productId, next)}
             label={t('cart.itemQuantity', { name: snapshot.name })}
           />
-          <span className="text-base font-bold text-ink-900">{formatPrice(lineTotal)}</span>
+          <span className="font-display text-xl font-medium lining-nums text-ink-900">{formatPrice(lineTotal)}</span>
         </div>
         {qty >= MAX_LINE_QTY && (
           <p className="text-xs text-ink-500">{t('cart.maxPerProduct', { count: MAX_LINE_QTY })}</p>

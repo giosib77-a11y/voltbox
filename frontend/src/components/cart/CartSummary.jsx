@@ -32,8 +32,8 @@ export default function CartSummary({
   const known = shipping !== null && total !== null;
 
   return (
-    <div className={`rounded-card border border-ink-200 bg-surface p-5 ${className}`}>
-      <h2 className="text-base font-bold text-ink-900">{t('cart.summary')}</h2>
+    <div className={`rounded-card border border-line bg-surface p-5 sm:p-6 ${className}`}>
+      <h2 className="font-serif text-lg font-normal text-fg">{t('cart.summary')}</h2>
 
       <dl className="mt-4 space-y-2.5 text-sm">
         <div className="flex items-baseline justify-between gap-4">
@@ -66,12 +66,12 @@ export default function CartSummary({
           </div>
         )}
 
-        <div className="border-t border-ink-200 pt-3">
+        <div className="border-t border-line pt-3">
           <div className="flex items-baseline justify-between gap-4">
             <dt className="text-base font-bold text-ink-900">
               {known ? t('common.total') : t('cart.totalWithoutDelivery')}
             </dt>
-            <dd className="text-xl font-bold text-ink-900">{formatPrice(known ? total : subtotal)}</dd>
+            <dd className="font-display text-[30px] font-semibold leading-none lining-nums text-ink-900">{formatPrice(known ? total : subtotal)}</dd>
           </div>
         </div>
       </dl>
