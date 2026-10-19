@@ -222,12 +222,12 @@ export default function Checkout() {
         className="mb-4"
       />
 
-      <h1 className="mb-5 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
+      <h1 className="mb-5 font-serif text-[28px] font-light leading-tight text-ink-900 lg:text-4xl">
         {t('common.checkout')}
       </h1>
 
       {!isAuthenticated && (
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-card border border-primary-200 bg-primary-50 px-4 py-3">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-primary-50 px-4 py-3">
           <p className="flex items-center gap-2 text-sm text-primary-900">
             <LogIn className="h-4 w-4 shrink-0" aria-hidden="true" />
             {t('checkout.loginBanner')}
@@ -243,8 +243,8 @@ export default function Checkout() {
 
       <form onSubmit={handleSubmit} noValidate className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:gap-7">
         <div className="space-y-5">
-          <fieldset className="rounded-card border border-ink-200 bg-surface p-5">
-            <legend className="px-1 text-base font-bold text-ink-900">{t('checkout.recipient')}</legend>
+          <fieldset className="rounded-card border border-line bg-surface p-5 sm:p-6">
+            <legend className="px-1 font-serif text-lg font-normal text-fg">{t('checkout.recipient')}</legend>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Input
@@ -304,7 +304,7 @@ export default function Checkout() {
               <button
                 type="button"
                 onClick={reloadRules}
-                className="mt-2 text-sm font-semibold text-primary-700 underline-offset-4 hover:underline"
+                className="mt-2 rounded-control text-sm font-semibold text-primary-700 underline-offset-4 hover:underline"
               >
                 {t('common.retry')}
               </button>
@@ -348,29 +348,40 @@ export default function Checkout() {
             </div>
           </fieldset>
 
-          <fieldset className="rounded-card border border-ink-200 bg-surface p-5">
-            <legend className="px-1 text-base font-bold text-ink-900">{t('checkout.payment')}</legend>
+          <fieldset className="rounded-card border border-line bg-surface p-5 sm:p-6">
+            <legend className="px-1 font-serif text-lg font-normal text-fg">{t('checkout.payment')}</legend>
             <div className="mt-4 space-y-2.5">
-              {OFFERED_PAYMENT_METHODS.map((method) => (
-                <label
-                  key={method.value}
-                  className={`flex cursor-pointer items-center gap-3 rounded-control border px-4 py-3 transition-colors ${
-                    values.paymentMethod === method.value
-                      ? 'border-primary-500 bg-primary-50'
-                      : 'border-ink-200 hover:border-ink-300'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value={method.value}
-                    checked={values.paymentMethod === method.value}
-                    onChange={(e) => handleChange('paymentMethod', e.target.value)}
-                    className="h-4 w-4 accent-primary-600"
-                  />
-                  <span className="text-sm font-medium text-ink-800">{t(`payment.${method.value}`)}</span>
-                </label>
-              ))}
+              {OFFERED_PAYMENT_METHODS.map((method) => {
+                const selected = values.paymentMethod === method.value;
+                return (
+                  <label
+                    key={method.value}
+                    className={`flex cursor-pointer items-center gap-3 rounded-control border px-4 py-3 transition-colors ${
+                      selected
+                        ? 'border-primary-500 bg-primary-50 ring-1 ring-inset ring-primary-500'
+                        : 'border-ink-300 hover:border-primary-500 hover:bg-primary-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value={method.value}
+                      checked={selected}
+                      onChange={(e) => handleChange('paymentMethod', e.target.value)}
+                      className="peer sr-only"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-surface ${
+                        selected ? 'border-primary-600 bg-primary-600' : 'border-ink-300 bg-surface'
+                      }`}
+                    >
+                      {selected && <span className="h-2 w-2 rounded-full bg-on-primary" />}
+                    </span>
+                    <span className="text-sm font-medium text-ink-800">{t(`payment.${method.value}`)}</span>
+                  </label>
+                );
+              })}
             </div>
             <p className="mt-3 flex items-center gap-2 text-xs text-ink-500">
               <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -381,15 +392,16 @@ export default function Checkout() {
 
         <div>
           <div className="lg:sticky lg:top-[8.5rem]">
-            <div className="mb-4 rounded-card border border-ink-200 bg-surface p-4">
-              <h2 className="text-sm font-bold text-ink-900">{t('checkout.orderUnits', { count: itemsCount })}</h2>
+            <div className="mb-4 rounded-card border border-line bg-surface p-4 sm:p-5">
+              <h2 className="font-serif text-base font-medium text-fg">{t('checkout.orderUnits', { count: itemsCount })}</h2>
               <ul className="mt-3 space-y-3">
                 {items.map((item) => (
                   <li key={item.productId} className="flex items-center gap-3">
                     <ProductImage
                       src={item.snapshot.image}
                       alt=""
-                      className="h-12 w-12 shrink-0 rounded-control border border-ink-200"
+                      shopPlaceholder
+                      className="h-12 w-12 shrink-0 border border-line"
                     />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-medium text-ink-800">
@@ -399,7 +411,7 @@ export default function Checkout() {
                         {item.qty} × {formatPrice(item.snapshot.price)}
                       </span>
                     </span>
-                    <span className="shrink-0 text-sm font-semibold text-ink-900">
+                    <span className="shrink-0 font-display text-base font-medium lining-nums text-ink-900">
                       {formatPrice(item.snapshot.price * item.qty)}
                     </span>
                   </li>

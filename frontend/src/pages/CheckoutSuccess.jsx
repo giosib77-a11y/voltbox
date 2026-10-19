@@ -28,7 +28,7 @@ export default function CheckoutSuccess() {
 
   if (loading) {
     return (
-      <div className="container-page max-w-3xl py-10">
+      <div className="container-page max-w-[640px] py-10">
         <Skeleton className="mx-auto h-16 w-16" rounded="rounded-full" />
         <Skeleton className="mx-auto mt-5 h-8 w-72" />
         <Skeleton className="mt-8 h-64 w-full" rounded="rounded-card" />
@@ -38,7 +38,7 @@ export default function CheckoutSuccess() {
 
   if (error) {
     return (
-      <div className="container-page max-w-3xl py-14">
+      <div className="container-page max-w-[640px] py-14">
         {error.status === 404 ? (
           <EmptyState
             title={t('order.notFound')}
@@ -77,20 +77,29 @@ export default function CheckoutSuccess() {
   const amounts = orderAmounts(order.totals);
 
   return (
-    <div className="container-page max-w-3xl py-8 lg:py-12">
+    <div className="container-page max-w-[640px] py-8 lg:py-12">
       <div className="text-center">
         <span
-          className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${
-            cancelled ? 'bg-ink-100' : 'bg-success-50'
-          }`}
+          className="relative mx-auto flex h-[70px] w-[70px] items-center justify-center text-primary-500"
+          aria-hidden="true"
         >
+          <svg
+            viewBox="0 0 70 70"
+            className="absolute inset-0 h-full w-full opacity-60"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth=".8"
+            strokeLinejoin="round"
+          >
+            <path d="M35 2 68 35 35 68 2 35z" />
+          </svg>
           {cancelled ? (
-            <XCircle className="h-9 w-9 text-ink-500" aria-hidden="true" />
+            <XCircle className="icon-fine h-7 w-7 text-ink-500" />
           ) : (
-            <CheckCircle2 className="h-9 w-9 text-success-600" aria-hidden="true" />
+            <CheckCircle2 className="icon-fine h-7 w-7 text-success-600" />
           )}
         </span>
-        <h1 className="mt-5 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
+        <h1 className="mt-5 font-serif text-[28px] font-light leading-tight text-ink-900 lg:text-4xl">
           {cancelled ? t('order.cancelledTitle') : delivered ? t('order.deliveredTitle') : t('order.receivedTitle')}
         </h1>
         <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-ink-600">
@@ -105,22 +114,22 @@ export default function CheckoutSuccess() {
           <Badge tone={status.tone}>{status.label}</Badge>
         </div>
 
-        <div className="mt-5 inline-flex items-center gap-2 rounded-card border border-ink-200 bg-surface px-4 py-2.5">
+        <div className="mt-5 inline-flex items-center gap-2 rounded-card border border-line bg-surface px-4 py-2.5">
           <span className="text-sm text-ink-500">{t('order.number')}</span>
-          <strong className="text-base tabular-nums text-ink-900">{order.orderNumber}</strong>
+          <strong className="font-display text-2xl font-medium tabular-nums lining-nums text-ink-900">{order.orderNumber}</strong>
           <button
             type="button"
             onClick={copyOrderNumber}
             aria-label={t('order.copy')}
-            className="ml-1 flex h-8 w-8 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-800"
+            className="ml-1 flex h-8 w-8 items-center justify-center rounded-control text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900"
           >
             <Copy className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      <section className="mt-8 rounded-card border border-ink-200 bg-surface p-5 sm:p-6">
-        <h2 className="text-base font-bold text-ink-900">{t('order.details')}</h2>
+      <section className="mt-8 rounded-card border border-line bg-surface p-5 sm:p-6">
+        <h2 className="font-serif text-lg font-normal text-fg">{t('order.details')}</h2>
 
         <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
           <div>
@@ -158,30 +167,31 @@ export default function CheckoutSuccess() {
           )}
         </dl>
 
-        <ul className="mt-6 divide-y divide-ink-100 border-t border-ink-200 pt-2">
+        <ul className="mt-6 divide-y divide-line border-t border-line pt-2">
           {order.items.map((item) => (
             <li key={item.productId} className="flex items-center gap-3 py-3">
               <ProductImage
                 src={item.snapshot.image}
                 alt=""
-                className="h-14 w-14 shrink-0 rounded-control border border-ink-200"
+                shopPlaceholder
+                className="h-14 w-14 shrink-0 border border-line"
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-ink-900">
+                <span className="block truncate font-serif text-[15px] text-fg">
                   {item.snapshot.name}
                 </span>
                 <span className="block text-xs text-ink-500">
                   {item.qty} × {formatPrice(item.snapshot.price)}
                 </span>
               </span>
-              <span className="shrink-0 text-sm font-semibold text-ink-900">
+              <span className="shrink-0 font-display text-lg font-medium lining-nums text-ink-900">
                 {formatPrice(item.snapshot.price * item.qty)}
               </span>
             </li>
           ))}
         </ul>
 
-        <dl className="mt-4 space-y-2 border-t border-ink-200 pt-4 text-sm">
+        <dl className="mt-4 space-y-2 border-t border-line pt-4 text-sm">
           {amounts.shipping !== null && (
             <>
               <div className="flex justify-between">
@@ -196,9 +206,9 @@ export default function CheckoutSuccess() {
               </div>
             </>
           )}
-          <div className="flex justify-between border-t border-ink-100 pt-2">
+          <div className="flex justify-between border-t border-line pt-2">
             <dt className="text-base font-bold text-ink-900">{t('common.total')}</dt>
-            <dd className="text-lg font-bold text-ink-900">{formatPrice(amounts.total)}</dd>
+            <dd className="font-display text-[26px] font-semibold leading-none lining-nums text-ink-900">{formatPrice(amounts.total)}</dd>
           </div>
         </dl>
 

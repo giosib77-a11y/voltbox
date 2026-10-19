@@ -310,7 +310,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   untouched; quantity, remove / undo and the 10 / 20 limits behave as before in the browser; empty
   cart and two lines, both themes, both widths; C1–C8.
 
-- [ ] **T38 · Checkout and order confirmation**
+- [x] **T38 · Checkout and order confirmation**
   owner: frontend-dev
   files: frontend/src/pages/Checkout.jsx, frontend/src/pages/CheckoutSuccess.jsx, frontend/src/pages/Checkout.test.jsx, frontend/src/pages/CheckoutSuccess.test.jsx
   depends: T37
@@ -648,7 +648,9 @@ Unverified (check before acting):
 - T36: product page (light square photo tile, 64px thumbnails with a primary-500 selected border, display brand eyebrow, serif h1, display price with lining-nums, tabs with a primary underline); gallery uses `shopPlaceholder`; a keyboard-focused gallery arrow is now visible at lg. Thumbnail switching and the 10-per-line limit behave as before (browser, both themes).
 - T40: account (serif h1, 14rem nav with a primary-500 left bar for the active item, a scrolling tab strip below md, 480px forms, order cards with display number and total + `lining-nums`). Orders with a placed mock order, focus rings and the end of the 390 tab strip checked in shots (review asked for both).
 - T37: cart (serif h1, light photo tiles with `shopPlaceholder`, serif names, display prices and total with `lining-nums`, line-coloured dividers); stepper frame stays ink-300 (field boundary). Quantity, the 10-per-line clamp, remove and undo behave as before (browser).
-- Next: T38.
+- T38: checkout (serif headings, payment radio cards with a drawn circle and a peer focus ring, selected card primary-500 + inset ring so it does not shift) and confirmation (diamond-framed status icon, display order number and amounts with `lining-nums`). Mock orders placed at 1440 and 390 in both themes land on the confirmation; empty submit shows the field errors as before.
+- All Stage 3 tasks done at this commit: frontend gate (eslint, vitest 668, both builds) green.
+- Next: finish-check.
 
 ## Stage 2 — Done
 Last session of Stage 2:
