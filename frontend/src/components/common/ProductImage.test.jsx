@@ -74,4 +74,24 @@ describe('ProductImage', () => {
     expect(screen.getByAltText('ტ')).toHaveAttribute('src', '/b.png');
     expect(container.querySelector('.animate-pulse')).not.toBeNull();
   });
+
+  it('draws the shop placeholder only when asked, and still stops pulsing if that fails too', () => {
+    const SHOP = '/images/placeholder-shop.svg';
+    const { container } = render(<ProductImage src={null} shopPlaceholder alt="ტ" />);
+    const img = screen.getByAltText('ტ');
+    expect(img).toHaveAttribute('src', SHOP);
+
+    fireEvent.error(img);
+
+    expect(container.querySelector('.animate-pulse')).toBeNull();
+  });
+
+  it('falls back to the shop placeholder when its source fails', () => {
+    render(<ProductImage src="/gone.png" shopPlaceholder alt="ტ" />);
+    const img = screen.getByAltText('ტ');
+
+    fireEvent.error(img);
+
+    expect(img).toHaveAttribute('src', '/images/placeholder-shop.svg');
+  });
 });

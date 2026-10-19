@@ -59,7 +59,7 @@ export default class ErrorBoundary extends Component {
           <button
             type="button"
             onClick={this.handleReload}
-            className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-control bg-primary-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
+            className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-control bg-primary-600 px-5 text-sm font-semibold text-on-primary transition-colors hover:bg-primary-hover"
           >
             {t('errorBoundary.home')}
           </button>

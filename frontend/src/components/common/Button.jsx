@@ -9,17 +9,18 @@ import { Loader2 } from 'lucide-react';
 
 const VARIANTS = {
   primary:
-    'bg-primary-600 text-white shadow-sm hover:bg-primary-hover active:bg-primary-press disabled:bg-primary-300',
+    'bg-primary-600 text-on-primary shadow-btn hover:bg-primary-hover active:bg-primary-press disabled:bg-primary-300',
   secondary:
-    'bg-ink-900 text-surface shadow-sm hover:bg-ink-800 active:bg-ink-950 disabled:bg-ink-400',
+    'bg-ink-900 text-surface shadow-btn hover:bg-ink-800 active:bg-ink-950 disabled:bg-ink-400',
   accent:
-    'bg-accent-600 text-white shadow-sm hover:bg-accent-700 active:bg-accent-800 disabled:bg-accent-200',
+    'bg-accent-600 text-white shadow-btn hover:bg-accent-700 active:bg-accent-800 disabled:bg-accent-200',
   outline:
-    'border border-ink-300 bg-surface text-ink-800 hover:border-primary-400 hover:bg-primary-50 hover:text-primary-700 active:bg-primary-100 disabled:text-ink-400',
+    'border border-outline bg-surface text-ink-800 hover:border-primary-400 hover:bg-primary-50 hover:text-primary-700 active:bg-primary-100 disabled:text-ink-400 ' +
+    'storefront:hover:border-primary-500 storefront:disabled:border-ink-200',
   ghost:
     'text-ink-700 hover:bg-ink-100 active:bg-ink-200 disabled:text-ink-400',
   danger:
-    'bg-danger-600 text-white shadow-sm hover:bg-danger-700 active:bg-danger-700 disabled:bg-danger-500/50',
+    'bg-danger-600 text-white shadow-btn hover:bg-danger-700 active:bg-danger-700 disabled:bg-danger-500/50',
   link: 'text-primary-700 underline-offset-4 hover:underline disabled:text-ink-400',
 };
 
@@ -28,11 +29,14 @@ const SIZES = {
   sm: 'h-9 px-3.5 text-sm gap-2 rounded-control',
   md: 'h-11 px-5 text-sm gap-2 rounded-control',
   lg: 'h-12 px-6 text-base gap-2.5 rounded-control',
+  // opt-in, DESIGN.md §6: the hero's call to action. The admin never passes it.
+  xl: 'h-[54px] px-[30px] text-sm gap-3.5 rounded-control',
   icon: 'h-10 w-10 rounded-control',
 };
 
 const BASE =
-  'inline-flex items-center justify-center font-semibold transition-colors duration-150 ' +
+  'inline-flex items-center justify-center transition-colors duration-150 ' +
+  '[font-weight:var(--btn-weight)] [letter-spacing:var(--btn-tracking)] ' +
   'disabled:cursor-not-allowed select-none whitespace-nowrap';
 
 const Button = forwardRef(function Button(

@@ -17,7 +17,7 @@ const Textarea = forwardRef(function Textarea(
   return (
     <div className="w-full">
       {label && (
-        <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-ink-800">
+        <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-ink-800 storefront:text-[13px] storefront:tracking-[0.02em]">
           {label}
           {required && <span className="ml-0.5 text-danger-fg" aria-hidden="true">*</span>}
         </label>
@@ -34,7 +34,7 @@ const Textarea = forwardRef(function Textarea(
           'placeholder:text-ink-500 focus:outline-none focus:ring-2',
           error
             ? 'border-danger-500 focus:border-danger-500 focus:ring-danger-500/30'
-            : 'border-ink-300 focus:border-primary-500 focus:ring-primary-500/30',
+            : 'border-ink-300 focus:border-primary-500 focus:ring-primary-500/30 storefront:enabled:hover:border-primary-500',
           className,
         ]
           .filter(Boolean)

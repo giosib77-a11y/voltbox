@@ -234,7 +234,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   in the commit; `Footer.test.jsx` (demo notice in mock only) and `footerLinks.test.jsx` green with
   behaviour untouched; flyout and mobile menu shot open in both themes; C1–C8.
 
-- [ ] **T32 · Common components (shared with the admin)**
+- [x] **T32 · Common components (shared with the admin)**
   owner: frontend-dev
   files: frontend/src/components/common/Button.jsx, frontend/src/components/common/Input.jsx, frontend/src/components/common/Select.jsx, frontend/src/components/common/Textarea.jsx, frontend/src/components/common/Badge.jsx, frontend/src/components/common/Breadcrumbs.jsx, frontend/src/components/common/Modal.jsx, frontend/src/components/common/Toast.jsx, frontend/src/components/common/EmptyState.jsx, frontend/src/components/common/ErrorState.jsx, frontend/src/components/common/ErrorBoundary.jsx, frontend/src/components/common/ProductImage.jsx, frontend/src/components/common/CategoryIcon.jsx, frontend/public/images/placeholder-shop.svg (new — storefront-only; `placeholder.svg` stays, the admin shows it), frontend/src/components/common/fields.test.jsx, frontend/src/components/common/Toast.test.jsx, frontend/src/components/common/ProductImage.test.jsx
   depends: T27
@@ -627,7 +627,8 @@ Unverified (check before acting):
 - T27: palettes, theme tokens (radius, shadow, icon stroke, focus radius, button weight), 3 variable woff2, base styles on `[data-storefront]`; admin pinned by test (a changed admin value fails it — tried). Gates: eslint, vitest 662, both builds; ruff, mypy 148, pytest 1097.
 - screens.mjs: `SCREENS_ORIGIN` / `SCREENS_DIR` so two tasks can shoot side by side (own preview port, own folder).
 - T29: Logo (mark + VOLTBOX wordmark, header sizes) and `LogoMark` (size, className — colour in the default className) — the only copy of the path; favicon = filled gold rhombus + dark bolt, legible at 16px on light and dark tabs. Footer composes `LogoMark` itself (T31).
-- Next: T32 (running), then T30, T31, T33.
+- T32: shared components through tokens whose admin value is today's (`text-on-primary`, `shadow-btn`, `--btn-weight`, `border-outline`), `storefront:` gates, and for portals (Modal, Toast) `[:root:not(:has([data-admin]))_&]:`; opt-in Button `xl`, ProductImage `shopPlaceholder`, CategoryIcon `framed`. Admin comparison in a browser left for the finish-check (no local stack in the task).
+- Next: T30, T31 (running), T33, then T39–T41.
 
 ## Stage 2 — Done
 Last session of Stage 2:

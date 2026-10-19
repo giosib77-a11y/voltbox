@@ -9,14 +9,14 @@ import { t } from '../../i18n/index.js';
  */
 export default function Breadcrumbs({ items = [], className = '' }) {
   return (
-    <nav aria-label={t('breadcrumbs.label')} className={`text-sm ${className}`}>
+    <nav aria-label={t('breadcrumbs.label')} className={`text-xs ${className}`}>
       <ol className="flex flex-wrap items-center gap-1 text-ink-500">
         <li className="flex items-center gap-1">
           <Link
             to="/"
-            className="flex items-center gap-1 rounded-sm transition-colors hover:text-primary-700"
+            className="flex items-center gap-1 rounded-sm transition-colors hover:text-primary-700 hover:underline"
           >
-            <Home className="h-3.5 w-3.5" aria-hidden="true" />
+            <Home className="h-3 w-3" aria-hidden="true" />
             <span>{t('breadcrumbs.home')}</span>
           </Link>
         </li>
@@ -26,15 +26,15 @@ export default function Breadcrumbs({ items = [], className = '' }) {
           return (
             <Fragment key={`${item.label}-${index}`}>
               <li aria-hidden="true" className="flex items-center">
-                <ChevronLeft className="h-3.5 w-3.5 text-ink-400" />
+                <ChevronLeft className="h-3 w-3 text-ink-400" />
               </li>
               <li>
                 {item.to && !isLast ? (
-                  <Link to={item.to} className="rounded-sm transition-colors hover:text-primary-700">
+                  <Link to={item.to} className="rounded-sm transition-colors hover:text-primary-700 hover:underline">
                     {item.label}
                   </Link>
                 ) : (
-                  <span className="font-medium text-ink-800" aria-current={isLast ? 'page' : undefined}>
+                  <span className="font-medium text-ink-900" aria-current={isLast ? 'page' : undefined}>
                     {item.label}
                   </span>
                 )}

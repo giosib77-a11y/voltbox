@@ -1,9 +1,11 @@
 /**
  * პატარა ბეჯი — „ახალი“, „-20%“, „მარაგში არ არის“ და ა.შ.
+ * The admin does not render this component: DESIGN.md §6 sets it directly
+ * (2px corners, 0.04em tracking, text-on-fill on the primary tone).
  */
 
 const TONES = {
-  new: 'bg-primary-600 text-white',
+  new: 'bg-primary-600 text-on-primary',
   discount: 'bg-accent-600 text-white',
   danger: 'bg-ink-900 text-surface',
   success: 'bg-success-50 text-success-700 ring-1 ring-inset ring-success-500/25',
@@ -20,7 +22,7 @@ const SIZES = {
 export default function Badge({ tone = 'neutral', size = 'md', className = '', children }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-pill font-semibold leading-tight ${
+      className={`inline-flex items-center gap-1 rounded-control font-semibold leading-tight tracking-[0.04em] ${
         TONES[tone] || TONES.neutral
       } ${SIZES[size] || SIZES.md} ${className}`}
     >

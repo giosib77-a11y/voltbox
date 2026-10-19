@@ -6,6 +6,10 @@ import { useEffect, useState } from 'react';
  */
 
 const FALLBACK_SRC = '/images/placeholder.svg';
+// DESIGN.md §8: the shop's drawing for a missing photo, with no ground of its
+// own (the tile gives it). Opt-in through `shopPlaceholder`; the admin shows
+// the old file and does not pass it.
+const SHOP_FALLBACK_SRC = '/images/placeholder-shop.svg';
 
 export default function ProductImage({
   src,
@@ -14,14 +18,16 @@ export default function ProductImage({
   imgClassName = '',
   loading = 'lazy',
   sizes,
+  shopPlaceholder = false,
 }) {
+  const fallbackSrc = shopPlaceholder ? SHOP_FALLBACK_SRC : FALLBACK_SRC;
   const [status, setStatus] = useState('loading');
-  const [currentSrc, setCurrentSrc] = useState(src || FALLBACK_SRC);
+  const [currentSrc, setCurrentSrc] = useState(src || fallbackSrc);
 
   useEffect(() => {
-    setCurrentSrc(src || FALLBACK_SRC);
+    setCurrentSrc(src || fallbackSrc);
     setStatus('loading');
-  }, [src]);
+  }, [src, fallbackSrc]);
 
   return (
     <div className={`relative overflow-hidden bg-media ${className}`}>
@@ -36,8 +42,8 @@ export default function ProductImage({
         sizes={sizes}
         onLoad={() => setStatus('loaded')}
         onError={() => {
-          if (currentSrc !== FALLBACK_SRC) {
-            setCurrentSrc(FALLBACK_SRC);
+          if (currentSrc !== fallbackSrc) {
+            setCurrentSrc(fallbackSrc);
           } else {
             setStatus('loaded');
           }

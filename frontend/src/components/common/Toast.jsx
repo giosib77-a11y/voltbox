@@ -8,20 +8,24 @@ import { t } from '../../i18n/index.js';
  * მდგომარეობას მართავს ToastContext — ეს კომპონენტი მხოლოდ ხატავს.
  */
 
+// The shop's toast (DESIGN.md §6) is a 1px line with a 3px stripe in the status
+// colour; the admin keeps its tinted border. Toast is a portal outside
+// [data-storefront], so the shop side is told apart the way Modal does it:
+// no [data-admin] anywhere in the document.
 const STYLES = {
   success: {
     icon: CheckCircle2,
-    wrapper: 'border-success-500/30 bg-surface',
+    wrapper: 'border-success-500/30 bg-surface [:root:not(:has([data-admin]))_&]:border-line [:root:not(:has([data-admin]))_&]:border-l-[3px] [:root:not(:has([data-admin]))_&]:border-l-success-600',
     iconClass: 'text-success-600',
   },
   error: {
     icon: AlertCircle,
-    wrapper: 'border-danger-500/30 bg-surface',
+    wrapper: 'border-danger-500/30 bg-surface [:root:not(:has([data-admin]))_&]:border-line [:root:not(:has([data-admin]))_&]:border-l-[3px] [:root:not(:has([data-admin]))_&]:border-l-danger-500',
     iconClass: 'text-danger-fg',
   },
   info: {
     icon: Info,
-    wrapper: 'border-primary-500/30 bg-surface',
+    wrapper: 'border-primary-500/30 bg-surface [:root:not(:has([data-admin]))_&]:border-line [:root:not(:has([data-admin]))_&]:border-l-[3px] [:root:not(:has([data-admin]))_&]:border-l-primary-500',
     iconClass: 'text-primary-700',
   },
 };

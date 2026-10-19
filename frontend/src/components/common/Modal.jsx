@@ -12,6 +12,15 @@ import { t } from '../../i18n/index.js';
  * @param {{ position?: 'center'|'bottom'|'right'|'left' }} props
  */
 
+/**
+ * DESIGN.md §6: the shop's panel has a 1px line; the admin's has none. A portal
+ * sits outside [data-storefront], so this is the rule palette uses for the
+ * admin (`:root:has([data-admin])`) turned inside out. A browser without `:has`
+ * drops the rule, i.e. the admin look.
+ */
+const SHOP_FRAME =
+  '[:root:not(:has([data-admin]))_&]:border [:root:not(:has([data-admin]))_&]:border-line';
+
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea, input:not([disabled]), select, [tabindex]:not([tabindex="-1"])';
 
@@ -31,7 +40,7 @@ const POSITIONS = {
  */
 const PANELS = {
   center: 'w-full max-h-full rounded-card animate-slide-up',
-  bottom: 'w-full max-h-[88vh] rounded-t-2xl animate-sheet-up',
+  bottom: 'w-full max-h-[88vh] rounded-t-card animate-sheet-up',
   right: 'h-full w-[86vw] max-w-sm animate-slide-in-right',
   left: 'h-full w-[86vw] max-w-sm animate-slide-in-left',
 };
@@ -139,6 +148,7 @@ export default function Modal({
         tabIndex={-1}
         className={[
           'relative flex flex-col overflow-hidden bg-surface shadow-popover focus:outline-none',
+          SHOP_FRAME,
           PANELS[position] || PANELS.center,
           position === 'center' ? CENTER_WIDTHS[size] || CENTER_WIDTHS.lg : '',
           panelClassName,

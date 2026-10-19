@@ -30,7 +30,7 @@ const Input = forwardRef(function Input(
   return (
     <div className={`w-full ${containerClassName}`}>
       {label && (
-        <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-ink-800">
+        <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-ink-800 storefront:text-[13px] storefront:tracking-[0.02em]">
           {label}
           {required && <span className="ml-0.5 text-danger-fg" aria-hidden="true">*</span>}
         </label>
@@ -56,8 +56,8 @@ const Input = forwardRef(function Input(
             rightSlot ? 'pr-11' : '',
             error
               ? 'border-danger-500 focus:border-danger-500 focus:ring-danger-500/30'
-              : 'border-ink-300 focus:border-primary-500 focus:ring-primary-500/30',
-            'disabled:bg-ink-100 disabled:text-ink-500',
+              : 'border-ink-300 focus:border-primary-500 focus:ring-primary-500/30 storefront:enabled:hover:border-primary-500',
+            'disabled:bg-ink-100 disabled:text-ink-500 storefront:disabled:border-ink-200',
             className,
           ]
             .filter(Boolean)
@@ -69,7 +69,7 @@ const Input = forwardRef(function Input(
 
       {error ? (
         <p id={errorId} className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-danger-fg">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 storefront:h-4 storefront:w-4" aria-hidden="true" />
           {error}
         </p>
       ) : (
