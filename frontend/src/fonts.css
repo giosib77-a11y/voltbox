@@ -13,7 +13,17 @@
  * Inter აღარაა: ის შრიფტების სიაში მეორეა, Noto Sans Georgian კი ლათინურსაც
  * ფარავს — ანუ ბრაუზერი მას პრაქტიკულად არასდროს ტვირთავდა.
  *
- * ფაილების განახლება: scripts/fetch-fonts (იხ. docs).
+ * სტორფრონტის სათაურის შრიფტები (Cormorant Garamond, Noto Serif Georgian)
+ * ჩამოტვირთულია 2026-10-19, ერთხელ, ხელით — Google Fonts css2 API-დან
+ * (ბრძანება `css2?family=Cormorant+Garamond:wght@400;500;600&family=Noto+Serif+
+ * Georgian:wght@300;400;500&display=swap`, თანამედროვე ბრაუზერის User-Agent-ით;
+ * პასუხში მითითებული woff2 ფაილები ჩაიწერა public/fonts-ში,
+ * `unicode-range` პასუხიდანაა.)
+ * Google თითო ოჯახ×subset-ზე ერთ ცვლადი (wght ღერძიანი) ფაილს აბრუნებს ყველა
+ * წონაზე, ამიტომ ფაილი ერთია და `font-weight` დიაპაზონია, ფაილის სახელში კი
+ * წონის ნაცვლად `wght`. ლიცენზია: SIL Open Font License 1.1 (ორივე ოჯახი).
+ * Noto Sans Georgian-ის ზემოთა რვა ფაილი ამ ცვლილებას არ შეხებია.
+ * განახლება: იგივე URL, ფაილების ხელით ჩანაცვლება (სკრიპტი არ არსებობს).
  */
 
 @font-face {
@@ -85,5 +95,41 @@
   font-weight: 700;
   font-display: swap;
   src: url('/fonts/noto-sans-georgian-latin-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/*
+ * Storefront display and heading faces (DESIGN.md §3). Variable fonts: one file
+ * per family and subset, the weight range is the axis the scale uses.
+ * Cormorant Garamond has no Georgian glyphs, so only its latin subset is
+ * loaded and Georgian text in `font-display` falls through to Noto Serif.
+ * U+20BE (₾) is in neither loaded subset (latin-ext is not downloaded): it is
+ * drawn by the system fallback, as it always was.
+ */
+
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/cormorant-garamond-latin-wght.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Noto Serif Georgian';
+  font-style: normal;
+  font-weight: 300 500;
+  font-display: swap;
+  src: url('/fonts/noto-serif-georgian-georgian-wght.woff2') format('woff2');
+  unicode-range: U+0589, U+10A0-10FF, U+1C90-1CBA, U+1CBD-1CBF, U+205A, U+2D00-2D2F, U+2E31;
+}
+
+@font-face {
+  font-family: 'Noto Serif Georgian';
+  font-style: normal;
+  font-weight: 300 500;
+  font-display: swap;
+  src: url('/fonts/noto-serif-georgian-latin-wght.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }

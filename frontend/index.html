@@ -9,7 +9,9 @@
       render.yaml is script-src 'self' without 'unsafe-inline'.
     -->
     <script src="/theme-init.js"></script>
-    <meta name="theme-color" content="#2440e0" />
+    <!-- The canvas colour of each storefront theme (DESIGN.md §2.2). -->
+    <meta name="theme-color" content="#F7F4EE" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0E0E0F" media="(prefers-color-scheme: dark)" />
     <meta
       name="description"
       content="VoltBox — კაბელები, დამტენები, Power Bank-ები, ყურსასმენები და აქსესუარები ერთ სივრცეში."
@@ -23,10 +25,19 @@
 
       Preloaded because the text is Georgian and the font is what renders it -
       without this the browser only discovers the file after parsing the CSS.
+      Two preloads at most: the body face and the Georgian heading face (the
+      hero h1 is the largest text on the home page).
     -->
     <link
       rel="preload"
       href="/fonts/noto-sans-georgian-georgian-400.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/noto-serif-georgian-georgian-wght.woff2"
       as="font"
       type="font/woff2"
       crossorigin

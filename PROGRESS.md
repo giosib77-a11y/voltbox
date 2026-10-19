@@ -128,7 +128,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   "Admin panel (frozen)" section holds every admin hex of today's §2 and today's §9 word for word
   (only headings differ); `git diff --stat` shows only DESIGN.md.
 
-- [ ] **T27 · Theme foundation: palettes, theme tokens, fonts, base styles**
+- [x] **T27 · Theme foundation: palettes, theme tokens, fonts, base styles**
   owner: frontend-dev
   files: frontend/tailwind.config.js, frontend/src/utils/palette.test.js, frontend/src/index.css (shared), frontend/src/fonts.css, frontend/public/fonts/*.woff2 (new files only — the eight existing stay), frontend/index.html
   depends: T26
@@ -624,7 +624,9 @@ Unverified (check before acting):
   exit 0; a renamed woff2 fails it — `vite preview` answers a missing file with 200 text/html, so the script
   also fails an asset served as HTML).
 - T26: DESIGN.md rewritten (contrast table recomputed by script — 0 failures; logo, favicon and placeholder SVGs rendered at 16–96px on light and dark). Revised once: the mockup `line2` kept as a new `outline` role on labelled controls (Decision Log).
-- Next: T27.
+- T27: palettes, theme tokens (radius, shadow, icon stroke, focus radius, button weight), 3 variable woff2, base styles on `[data-storefront]`; admin pinned by test (a changed admin value fails it — tried). Gates: eslint, vitest 662, both builds; ruff, mypy 148, pytest 1097.
+- screens.mjs: `SCREENS_ORIGIN` / `SCREENS_DIR` so two tasks can shoot side by side (own preview port, own folder).
+- Next: T29 and T32 side by side.
 
 ## Stage 2 — Done
 Last session of Stage 2:

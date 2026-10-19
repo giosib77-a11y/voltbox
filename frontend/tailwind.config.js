@@ -9,9 +9,12 @@ import plugin from 'tailwindcss/plugin';
  *
  *   admin  the admin panel, frozen. It is what the whole site looked like
  *          before the storefront had themes, and the panel must not move.
- *   light  the storefront's light theme: `admin` with the five steps that
- *          missed WCAG AA on it corrected (see the overrides below).
- *   dark   the storefront's dark theme.
+ *   light  the storefront's light theme: warm paper, DESIGN.md §2.2.
+ *   dark   the storefront's dark theme: near-black and gold, DESIGN.md §2.2.
+ *
+ * Radius, shadow, icon stroke and button weight are theme tokens too, by the
+ * same mechanism (`themeTokens` below -> `--radius-*`, `--shadow-*`, ...): the
+ * admin's values are what the whole site used before the redesign.
  *
  * `:root` carries `admin`, so anything outside the storefront is unchanged.
  * The storefront's theme is a class on <html>, `theme-light` or `theme-dark`,
@@ -28,9 +31,17 @@ import plugin from 'tailwindcss/plugin';
  *   ink-500 muted text            ink-600…900 text, strongest at 900
  *   primary-50…200 tints   400/500 borders, focus   600 solid fill
  *   primary-700…900 text on a surface or a tint
+ *   on-primary text and icons on a primary-600 fill (admin: white)
+ *   footer  the footer's background (admin: white, as the card it was)
+ *   glow    the centre of the hero ornament's radial glow
+ *   outline the 1px contour of a button that carries its own label or icon
+ *           (admin: ink-300, the old outline button's border)
+ *   scrim   modal backdrop       media / media-shade  the product photo tile
  * `primary-hover`/`-press`, `danger-fg` and `accent-fg` exist because one
  * step used to do two jobs: fill behind white text, and text on the page.
  * No colour passes 4.5:1 against white and against a dark page at once.
+ * `on-primary` exists because a dark theme's primary fill is gold, which
+ * takes dark text.
  *
  * src/utils/palette.test.js holds every text/background pair to WCAG AA in
  * both storefront themes; change a value here and it re-measures.
@@ -42,6 +53,14 @@ const admin = {
   'media-shade': '#dde1e9',
   // modal backdrop
   scrim: '#12151d',
+  // text and icons on a primary-600 fill
+  'on-primary': '#ffffff',
+  // the footer's background; the admin has none, a card is white
+  footer: '#ffffff',
+  // centre of the hero ornament's glow; the admin does not draw it
+  glow: '#eef3ff',
+  // contour of a button that carries its own label or icon
+  outline: '#c2c9d6',
   ink: {
     50: '#f7f8fa',
     100: '#eef0f4',
@@ -106,21 +125,53 @@ const admin = {
   },
 };
 
+// Warm paper. success / danger / warning are the admin's, bar the two steps
+// the new canvas pushed under AA (accent-fg, danger-fg).
 const light = {
   ...admin,
+  surface: '#FFFFFF',
+  media: '#F5F1E9',
+  'media-shade': '#EDE7DB',
+  scrim: '#1C1B19',
+  'on-primary': '#F7F4EE',
+  footer: '#EFEAE0',
+  glow: '#FBF6EC',
+  outline: '#D6CDBC',
   ink: {
-    ...admin.ink,
-    // control borders: 1.46–1.66:1 before, 3:1 is the floor
-    300: '#7b8599',
-    // icons and separators: 2.28–2.60:1 before
-    400: '#6f798e',
-    // muted text: 4.37:1 on ink-100 before
-    500: '#5f6a80',
+    50: '#F7F4EE',
+    100: '#EFEAE0',
+    200: '#E6E0D4',
+    // control borders and icons: 3:1 is the floor
+    300: '#8C8474',
+    400: '#8C8474',
+    500: '#6D6860',
+    600: '#58534C',
+    700: '#46423C',
+    800: '#302D29',
+    900: '#1C1B19',
+    950: '#0E0E0F',
+  },
+  primary: {
+    50: '#F6F0E4',
+    100: '#F1E9D8',
+    200: '#DCCBA6',
+    300: '#C9C2B3',
+    400: '#BDA06C',
+    500: '#A18046',
+    600: '#1C1B19',
+    700: '#826330',
+    800: '#6B5226',
+    900: '#4F3B17',
+    950: '#2E2310',
+    hover: '#3A3733',
+    press: '#0E0E0F',
   },
   accent: {
     ...admin.accent,
     // rating stars: 2.09:1 on white before
     400: '#d26a08',
+    // discount text: 4.49:1 on the new canvas before
+    fg: '#C24307',
   },
   danger: {
     ...admin.danger,
@@ -130,37 +181,41 @@ const light = {
 };
 
 const dark = {
-  surface: '#1f242e',
-  media: '#eef0f4',
-  'media-shade': '#dde1e9',
-  scrim: '#05070a',
+  surface: '#131315',
+  media: '#F5F1E9',
+  'media-shade': '#EDE7DB',
+  scrim: '#000000',
+  'on-primary': '#0E0E0F',
+  footer: '#0A0A0B',
+  glow: '#2B2720',
+  outline: '#3A3A40',
   ink: {
-    50: '#171b23',
-    100: '#283040',
-    200: '#353d4d',
-    300: '#747d93',
-    400: '#7f889d',
-    500: '#a3abbd',
-    600: '#b8bfcd',
-    700: '#cad0da',
-    800: '#dde1e8',
-    900: '#f0f2f6',
-    950: '#f8f9fb',
+    50: '#0E0E0F',
+    100: '#1D1D20',
+    200: '#26262A',
+    300: '#6A6A70',
+    400: '#6A6A70',
+    500: '#A19B91',
+    600: '#B8B2A8',
+    700: '#CDC8BF',
+    800: '#DFDAD2',
+    900: '#EDE9E3',
+    950: '#F7F4EE',
   },
   primary: {
-    50: '#1f2749',
-    100: '#252f62',
-    200: '#2e3a80',
-    300: '#3a4899',
-    400: '#6583ff',
-    500: '#7f98ff',
-    600: '#4466f7',
-    700: '#a7bbff',
-    800: '#c4d2ff',
-    900: '#e0e8ff',
-    950: '#eef3ff',
-    hover: '#3558ea',
-    press: '#2d4ed8',
+    50: '#1A1917',
+    100: '#2B2720',
+    200: '#3A3326',
+    300: '#5C5240',
+    400: '#D8BD84',
+    500: '#C9A96E',
+    600: '#C9A96E',
+    700: '#C9A96E',
+    800: '#D8BD84',
+    900: '#E8D6B0',
+    950: '#F3EBD8',
+    hover: '#D8BD84',
+    press: '#B49456',
   },
   accent: {
     50: '#33220f',
@@ -199,6 +254,67 @@ const dark = {
 };
 
 export const palette = { admin, light, dark };
+
+/* ------------------------------------------------------------------------
+ * Theme tokens that are not colours (DESIGN.md §5). Same three themes, same
+ * variables mechanism; the admin column is what the whole site used before
+ * the redesign and src/utils/palette.test.js pins it to those literals.
+ *
+ * "No shadow" is `0 0 #0000`, not `none`: Tailwind lists the ring shadows and
+ * this one in a single `box-shadow`, and `none` inside a list makes the whole
+ * declaration invalid — a focus ring on a card would vanish.
+ * ---------------------------------------------------------------------- */
+const NO_SHADOW = '0 0 #0000';
+
+const adminTokens = {
+  'radius-control': '0.625rem',
+  'radius-card': '0.875rem',
+  'shadow-card': '0 1px 2px 0 rgb(18 21 29 / 0.04), 0 1px 3px 0 rgb(18 21 29 / 0.06)',
+  'shadow-card-hover': '0 10px 24px -6px rgb(18 21 29 / 0.14), 0 2px 6px -2px rgb(18 21 29 / 0.08)',
+  'shadow-popover': '0 12px 32px -8px rgb(18 21 29 / 0.22), 0 4px 10px -4px rgb(18 21 29 / 0.10)',
+  'shadow-header': '0 1px 0 0 rgb(18 21 29 / 0.06)',
+  // a dark page has no room for a drop shadow; a hovered card glows instead
+  'shadow-glow': '0 0 0 1px rgb(var(--c-primary-400) / 0.25), 0 14px 36px -14px rgb(var(--c-primary-600) / 0.6)',
+  'shadow-btn': '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+  // corner of the global :focus-visible ring on an element with no radius of its own
+  'focus-radius': '0.125rem',
+  'icon-stroke': '2',
+  'icon-stroke-fine': '2',
+  'btn-weight': '600',
+  'btn-tracking': '0',
+};
+
+const hoverGlow = (ring, drop) => `0 0 0 1px rgb(var(--c-primary-500) / ${ring}), ${drop}`;
+
+const lightTokens = {
+  'radius-control': '2px',
+  'radius-card': '0px',
+  'shadow-card': NO_SHADOW,
+  'shadow-card-hover': hoverGlow('0.45', '0 14px 32px -18px rgb(60 48 30 / 0.25)'),
+  'shadow-popover': '0 18px 40px -14px rgb(60 48 30 / 0.28), 0 2px 8px -2px rgb(60 48 30 / 0.12)',
+  'shadow-header': NO_SHADOW,
+  'shadow-glow': hoverGlow('0.45', '0 14px 32px -18px rgb(60 48 30 / 0.25)'),
+  'shadow-btn': NO_SHADOW,
+  'focus-radius': '0px',
+  'icon-stroke': '1.4',
+  'icon-stroke-fine': '1.1',
+  'btn-weight': '500',
+  'btn-tracking': '0.04em',
+};
+
+const darkTokens = {
+  ...lightTokens,
+  'shadow-card-hover': hoverGlow('0.4', '0 18px 40px -18px rgb(0 0 0 / 0.8)'),
+  'shadow-popover': '0 20px 48px -12px rgb(0 0 0 / 0.75), 0 0 0 1px rgb(var(--c-ink-200))',
+  'shadow-glow': hoverGlow('0.4', '0 18px 40px -18px rgb(0 0 0 / 0.8)'),
+};
+
+export const themeTokens = { admin: adminTokens, light: lightTokens, dark: darkTokens };
+
+/** { 'radius-card': '0px' } → { '--radius-card': '0px' } */
+function tokenVariables(tokens) {
+  return Object.fromEntries(Object.entries(tokens).map(([name, value]) => [`--${name}`, value]));
+}
 
 /** `#rrggbb` → `r g b`, the form `rgb(var(--x) / <alpha-value>)` needs. */
 function channels(hex) {
@@ -276,25 +392,31 @@ export default {
           'Arial',
           'sans-serif',
         ],
+        // headings, card names, benefit and footer titles (Georgian and Latin)
+        serif: ['"Noto Serif Georgian"', 'Georgia', '"Times New Roman"', 'serif'],
+        // wordmark, hero display, prices and brand label. Cormorant has no
+        // Georgian glyphs: Georgian text in it falls through to Noto Serif.
+        display: ['"Cormorant Garamond"', '"Noto Serif Georgian"', 'Georgia', '"Times New Roman"', 'serif'],
       },
       fontSize: {
         '2xs': ['0.6875rem', { lineHeight: '1rem' }],
       },
       borderRadius: {
-        card: '0.875rem',
-        control: '0.625rem',
+        card: 'var(--radius-card)',
+        control: 'var(--radius-control)',
         pill: '9999px',
       },
       boxShadow: {
-        card: '0 1px 2px 0 rgb(18 21 29 / 0.04), 0 1px 3px 0 rgb(18 21 29 / 0.06)',
-        'card-hover': '0 10px 24px -6px rgb(18 21 29 / 0.14), 0 2px 6px -2px rgb(18 21 29 / 0.08)',
-        popover: '0 12px 32px -8px rgb(18 21 29 / 0.22), 0 4px 10px -4px rgb(18 21 29 / 0.10)',
-        header: '0 1px 0 0 rgb(18 21 29 / 0.06)',
-        // a dark page has no room for a drop shadow; a hovered card glows instead
-        glow: '0 0 0 1px rgb(var(--c-primary-400) / 0.25), 0 14px 36px -14px rgb(var(--c-primary-600) / 0.6)',
+        card: 'var(--shadow-card)',
+        'card-hover': 'var(--shadow-card-hover)',
+        popover: 'var(--shadow-popover)',
+        header: 'var(--shadow-header)',
+        glow: 'var(--shadow-glow)',
+        btn: 'var(--shadow-btn)',
       },
       maxWidth: {
-        container: '1400px',
+        // 1320px of content + 2 x 24px gutters (border-box), DESIGN.md §4
+        container: '1368px',
       },
       zIndex: {
         header: '40',
@@ -348,12 +470,13 @@ export default {
     plugin(({ addBase, addVariant }) => {
       // Separate rules, in this order: the later ones win at equal
       // specificity, and a browser without `:has` drops only its own rule.
-      addBase({ ':root': cssVariables(palette.admin) });
-      addBase({ ':root.theme-light': cssVariables(palette.light) });
-      addBase({ ':root.theme-dark': { ...cssVariables(palette.dark), 'color-scheme': 'dark' } });
-      addBase({ '[data-admin]': { ...cssVariables(palette.admin), 'color-scheme': 'light' } });
+      const variables = (name) => ({ ...cssVariables(palette[name]), ...tokenVariables(themeTokens[name]) });
+      addBase({ ':root': variables('admin') });
+      addBase({ ':root.theme-light': variables('light') });
+      addBase({ ':root.theme-dark': { ...variables('dark'), 'color-scheme': 'dark' } });
+      addBase({ '[data-admin]': { ...variables('admin'), 'color-scheme': 'light' } });
       addBase({
-        ':root:has([data-admin])': { ...cssVariables(palette.admin), 'color-scheme': 'light' },
+        ':root:has([data-admin])': { ...variables('admin'), 'color-scheme': 'light' },
       });
       // `storefront:` = inside the shop's Layout, in either theme. For what a
       // token cannot say: the product photo's blend into its tile.

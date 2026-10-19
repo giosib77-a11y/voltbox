@@ -351,6 +351,18 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-10-19 — Theme foundation details (T27)
+- Decision: the mockup fonts are three variable woff2 files (Cormorant Garamond latin 400–600, Noto Serif
+  Georgian georgian and latin 300–500) — Google serves nothing else for these weights. `₾` (U+20BE) is in
+  none of the loaded subsets (only latin-ext), so a system serif draws it, as before. Cormorant's default
+  digits are old-style, so every price set in `font-display` also sets `lining-nums`. "No shadow" in a theme
+  is `0 0 #0000`, not `none` (Tailwind puts ring and shadow in one `box-shadow` list, and `none` would void
+  the focus ring). The focus-ring corner is a token (`--focus-radius`: admin 0.125rem, shop 0). Storefront
+  base type, link hover, `::selection` and the theme fade sit on `[data-storefront]`, never on `body`.
+- Reason: the admin shares `body`, the global focus rule and every token; scoping keeps its look identical,
+  and `palette.test.js` pins each admin value. What still holds: no third-party request, CSP unchanged.
+- How to change: a fourth font file (latin-ext) would draw `₾` in the mockup fonts — one `@font-face` each.
+
 ### 2026-10-19 — The mockup's `line2` keeps its value on labelled controls; text fields get an AA border (T26)
 - Decision: a new colour role `outline` carries the mockup's `line2` unchanged (light #D6CDBC, dark #3A3A40,
   admin = today's outline-button border) for borders of controls that carry their own label or icon: outline
