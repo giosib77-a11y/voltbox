@@ -25,6 +25,7 @@
  *   node scripts/e2e/screens.mjs        # everything
  *   node scripts/e2e/screens.mjs home cart mockup   # only these routes
  * Route names are the ones in ROUTES below, plus `mockup`.
+ * Another preview or output folder: SCREENS_ORIGIN and SCREENS_DIR (below).
  *
  * The theme is the shopper's pick, written to localStorage['theme:v1'] as JSON
  * ('"dark"') before the page loads - what src/utils/theme.js and
@@ -55,8 +56,12 @@ import { chromium } from 'playwright';
 import { categories } from '../../src/data/categories.js';
 import { products } from '../../src/data/products.js';
 
-const ORIGIN = 'http://localhost:4173';
-const OUT = fileURLToPath(new URL('../../test-results/screens/', import.meta.url));
+// Two runs side by side (two tasks at once) each need their own preview and
+// folder: SCREENS_ORIGIN=http://localhost:4174 SCREENS_DIR=screens-b.
+const ORIGIN = process.env.SCREENS_ORIGIN || 'http://localhost:4173';
+const OUT = fileURLToPath(
+  new URL(`../../test-results/${process.env.SCREENS_DIR || 'screens'}/`, import.meta.url),
+);
 const MOCKUP_DIR = fileURLToPath(new URL('../../../design-reference/', import.meta.url));
 const THEME_KEY = 'theme:v1';
 const THEMES = ['light', 'dark'];
