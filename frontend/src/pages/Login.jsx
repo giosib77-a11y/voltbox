@@ -141,9 +141,12 @@ export default function Login() {
           </p>
         </div>
 
-        <p className="mt-4 rounded-control bg-ink-100 px-4 py-3 text-center text-xs leading-relaxed text-ink-600">
-          <Rich k="auth.demoNote" values={{ label: <strong>{t('auth.demoLabel')}</strong>, site: SITE_NAME }} />
-        </p>
+        {/* Substituted at build time, so an http build ships neither the branch nor the text. */}
+        {import.meta.env?.VITE_API_MODE !== 'http' && (
+          <p className="mt-4 rounded-control bg-ink-100 px-4 py-3 text-center text-xs leading-relaxed text-ink-600">
+            <Rich k="auth.demoNote" values={{ label: <strong>{t('auth.demoLabel')}</strong>, site: SITE_NAME }} />
+          </p>
+        )}
       </div>
     </div>
   );

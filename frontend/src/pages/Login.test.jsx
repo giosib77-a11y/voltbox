@@ -7,7 +7,7 @@
  * Hidden too while the answer is still on its way, and when it never arrives.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 
@@ -96,5 +96,29 @@ describe('the forgot-password link', () => {
     const link = await screen.findByRole('link', LINK);
 
     expect(link).toHaveAttribute('href', '/forgot-password');
+  });
+});
+
+describe('the demo note', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('is shown in a mock build', async () => {
+    vi.stubEnv('VITE_API_MODE', 'mock');
+    global.fetch = vi.fn(async () => reply(rules(false)));
+    renderLogin();
+    await rulesSettled();
+
+    expect(screen.getByText(/ავტორიზაცია mock-ია/)).toBeInTheDocument();
+  });
+
+  it('is absent in an http build, where sign-in is real', async () => {
+    vi.stubEnv('VITE_API_MODE', 'http');
+    global.fetch = vi.fn(async () => reply(rules(false)));
+    renderLogin();
+    await rulesSettled();
+
+    expect(screen.queryByText(/mock-ია/)).not.toBeInTheDocument();
   });
 });
