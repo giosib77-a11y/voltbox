@@ -1,7 +1,8 @@
 import { Link } from 'react-router';
-import { ArrowRight, BadgePercent, Headphones, ShieldCheck, Truck, Zap } from 'lucide-react';
+import { ArrowRight, BadgePercent, Headphones, ShieldCheck, Truck } from 'lucide-react';
 import Button from '../components/common/Button.jsx';
 import CategoryIcon from '../components/common/CategoryIcon.jsx';
+import { LogoMark } from '../components/layout/Logo.jsx';
 import CategoryNav from '../components/layout/CategoryNav.jsx';
 import ProductCarousel from '../components/product/ProductCarousel.jsx';
 import ErrorState from '../components/common/ErrorState.jsx';
@@ -39,7 +40,7 @@ export default function Home() {
   const sections = data || {};
 
   return (
-    <div className="container-page pb-12">
+    <div className="container-page pb-14 pt-5 lg:pb-[88px] lg:pt-8">
       {/* desktop: კატეგორიების სია hero-ს მარცხნივ, ქვეკატეგორიები მარჯვნივ hero-ს
           თავზე იშლება (z-10 — hero და მის შემდეგ მოსული სექციები ქვემოთ რჩება).
           mobile-ზე სია არ არის — იქ drawer-ია.
@@ -48,7 +49,7 @@ export default function Home() {
           და საკუთარ scroll-ს არ იღებს: hover-ით სამართავ მენიუში scroll-ის მიღმა
           კატეგორიები დამალული დარჩებოდა, და ამოსული flyout ხაზს ჩამოშორდებოდა.
           hero ამ დროს stretch-ით სვეტამდე იზრდება, ასე რომ ხვრელი არ რჩება */}
-      <div className="mt-4 md:grid md:grid-cols-[14rem_minmax(0,1fr)] md:gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
+      <div className="md:grid md:grid-cols-[14rem_minmax(0,1fr)] md:gap-7 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="relative z-10 hidden md:block md:self-start">
           <CategoryNav
             categories={categories || []}
@@ -104,94 +105,103 @@ export default function Home() {
 function Hero({ categories }) {
   const [first, second] = rootCategories(categories);
   return (
-    <section className="relative overflow-hidden rounded-card border border-line bg-surface px-6 py-12 sm:px-10 sm:py-16 lg:px-14 lg:py-20">
-      <div aria-hidden="true" className="bg-tech-grid absolute inset-0" />
-      <div
-        aria-hidden="true"
-        className="absolute -right-24 -top-32 h-96 w-96 rounded-full bg-primary-200/70 blur-3xl"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute -bottom-40 left-1/4 h-72 w-72 rounded-full bg-primary-400/10 blur-3xl"
-      />
-      <HeroMark />
+    <section className="border border-line bg-surface px-5 py-7 md:p-10 lg:p-14 xl:p-16 rounded-card">
+      <div className="flex items-center justify-between gap-10">
+        <div className="max-w-[520px]">
+          <p className="flex items-center gap-3.5 text-xs font-medium tracking-[0.14em] text-primary-700">
+            <span aria-hidden="true" className="h-px w-9 shrink-0 bg-primary-500" />
+            {t('home.heroBadge')}
+          </p>
 
-      <div className="relative max-w-2xl">
-        <p className="inline-flex items-center gap-2 rounded-pill bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-800 ring-1 ring-inset ring-primary-200">
-          <BadgePercent className="h-3.5 w-3.5" aria-hidden="true" />
-          {t('home.heroBadge')}
-        </p>
+          <h1 className="mt-5 font-display text-[34px] font-light leading-[1.12] text-fg sm:text-5xl lg:text-[52px]">
+            <Rich
+              k="home.heroTitle"
+              values={{
+                highlight: <span className="text-primary-700">{t('home.heroHighlight')}</span>,
+              }}
+            />
+          </h1>
+          <p className="mt-5 text-sm leading-[1.8] text-ink-700 sm:mt-6 sm:text-base">
+            {t('site.description')} {t('home.heroText')}
+          </p>
 
-        <h1 className="mt-5 text-3xl font-bold leading-tight tracking-tight text-fg sm:text-4xl lg:text-5xl">
-          <Rich
-            k="home.heroTitle"
-            values={{
-              highlight: (
-                <span className="bg-gradient-to-r from-primary-700 to-primary-500 bg-clip-text text-transparent">
-                  {t('home.heroHighlight')}
-                </span>
-              ),
-            }}
-          />
-        </h1>
-        <p className="mt-4 max-w-lg text-sm leading-relaxed text-ink-600 sm:text-base">
-          {t('site.description')} {t('home.heroText')}
-        </p>
-
-        <div className="mt-7 flex min-h-12 flex-wrap gap-3">
-          {first && (
-            <Button to={`/category/${first.slug}`} variant="primary" size="lg" className="shadow-glow">
-              {first.name}
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          )}
-          {second && (
-            <Button to={`/category/${second.slug}`} size="lg" variant="outline">
-              {second.name}
-            </Button>
-          )}
+          <div className="mt-6 flex min-h-[54px] flex-col gap-3 sm:mt-7 sm:flex-row sm:flex-wrap">
+            {first && (
+              <Button
+                to={`/category/${first.slug}`}
+                variant="primary"
+                size="xl"
+                className="max-sm:!h-[50px] max-sm:w-full"
+              >
+                {first.name}
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            )}
+            {second && (
+              <Button
+                to={`/category/${second.slug}`}
+                size="xl"
+                variant="outline"
+                className="max-sm:!h-[50px] max-sm:w-full"
+              >
+                {second.name}
+              </Button>
+            )}
+          </div>
         </div>
+        <HeroOrnament />
       </div>
     </section>
   );
 }
 
 /**
- * The bolt in rings on the right of the hero. Decoration, from xl only: below
- * that the category column leaves the hero too narrow, and it covers the text.
+ * The glow disc, the double rhombus and the brand mark (DESIGN.md §7).
+ * Decoration, from xl only: below that the category column leaves the hero
+ * too narrow, and it would cover the text.
  */
-function HeroMark() {
+function HeroOrnament() {
   return (
     <div
       aria-hidden="true"
-      className="absolute right-8 top-1/2 hidden -translate-y-1/2 xl:block 2xl:right-20"
+      className="relative hidden h-[340px] w-[340px] shrink-0 items-center justify-center rounded-full bg-[radial-gradient(circle_at_50%_45%,rgb(var(--c-glow))_0%,rgb(var(--c-primary-50))_45%,rgb(var(--c-primary-50)/0)_70%)] text-primary-500 xl:flex"
     >
-      <div className="relative flex h-72 w-72 items-center justify-center rounded-full border border-primary-500/15">
-        <div className="absolute inset-8 rounded-full border border-primary-500/25" />
-        <div className="absolute inset-16 rounded-full bg-primary-600/20 blur-2xl" />
-        <span className="relative flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-primary-400 to-primary-600 text-white shadow-[0_0_64px_-8px] shadow-primary-500/70 ring-1 ring-inset ring-white/20">
-          <Zap className="h-12 w-12" fill="currentColor" />
-        </span>
-      </div>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 70 70"
+        width="300"
+        height="300"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth=".25"
+        className="absolute"
+      >
+        <path d="M35 3 67 35 35 67 3 35z" strokeOpacity=".7" />
+        <path d="M35 10 60 35 35 60 10 35z" strokeOpacity=".35" />
+      </svg>
+      <LogoMark size={96} />
     </div>
   );
 }
 
 function Benefits() {
   const { rules } = useDeliveryRules();
+  // Mobile: a 2-column grid whose lines are the cells' own borders; lg: one
+  // row, lines above and below and between the columns
   return (
-    <section aria-label={t('home.benefits.label')} className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <section
+      aria-label={t('home.benefits.label')}
+      className="mt-5 grid grid-cols-2 border-l border-t border-line sm:mt-7 lg:grid-cols-4 lg:border-b lg:border-l-0"
+    >
       {BENEFITS.map((benefit) => (
         <div
           key={benefit.title}
-          className="flex flex-col items-start gap-2.5 rounded-card border border-line bg-surface p-3.5 sm:flex-row sm:gap-3"
+          className="flex flex-col items-start gap-2.5 border-b border-r border-line px-3.5 py-4 sm:flex-row sm:items-center sm:gap-4 lg:border-b-0 lg:border-r-0 lg:border-l lg:px-5 lg:py-6 lg:first:border-l-0"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-200">
-            <benefit.icon className="h-5 w-5" aria-hidden="true" />
-          </span>
+          <benefit.icon className="icon-fine h-7 w-7 shrink-0 text-primary-500" aria-hidden="true" />
           <span className="min-w-0">
-            <span className="block text-sm font-semibold text-fg">{t(benefit.title)}</span>
-            <span className="block text-xs text-fg-muted">
+            <span className="block font-serif text-[15px] font-medium text-fg">{t(benefit.title)}</span>
+            <span className="mt-0.5 block text-xs text-fg-muted">
               {typeof benefit.text === 'function' ? benefit.text(rules) : t(benefit.text)}
             </span>
           </span>
@@ -205,28 +215,35 @@ function PopularCategories({ categories, loading }) {
   // Samsung belongs under Phones, not beside it - and its products are already
   // in the Phones count
   const roots = rootCategories(categories);
+  // The grid's lines are the cells' own borders (DESIGN.md §4), so an
+  // incomplete last row leaves no empty line-coloured cells
+  const CELL = 'border-b border-r border-line bg-surface';
 
   return (
-    <section className="pt-10 sm:pt-12">
-      <h2 className="mb-4 text-xl font-bold tracking-tight text-fg sm:mb-5 sm:text-2xl">
+    <section className="pt-9 sm:pt-12">
+      <h2 className="mb-4 font-serif text-[26px] font-light leading-[1.3] text-fg sm:mb-6 sm:text-[34px]">
         {t('home.popularCategories')}
       </h2>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 border-l border-t border-line sm:grid-cols-3 lg:grid-cols-6">
         {loading
           ? Array.from({ length: 6 }, (_, i) => (
-              <Skeleton key={i} className="h-28" rounded="rounded-card" />
+              <div key={i} className={`${CELL} p-3 sm:p-[18px]`}>
+                <Skeleton className="h-[170px]" rounded="rounded-card" />
+              </div>
             ))
           : roots.map((category) => (
               <Link
                 key={category.id}
                 to={`/category/${category.slug}`}
-                className="group flex flex-col items-center gap-2.5 rounded-card border border-line bg-surface p-4 text-center transition-all hover:-translate-y-0.5 hover:border-primary-400 hover:shadow-glow"
+                className={`group flex flex-col items-center gap-3.5 px-3 py-6 text-center transition-colors hover:bg-primary-50 sm:px-[18px] sm:py-9 ${CELL}`}
               >
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-200 transition-colors group-hover:bg-primary-600 group-hover:text-white group-hover:ring-transparent">
-                  <CategoryIcon name={category.icon} className="h-6 w-6" />
-                </span>
-                <span className="text-sm font-semibold leading-tight text-fg">{category.name}</span>
+                <CategoryIcon
+                  name={category.icon}
+                  framed
+                  frameClassName="max-sm:-m-[7px] max-sm:scale-[0.8]"
+                />
+                <span className="font-serif text-[17px] leading-tight text-fg">{category.name}</span>
                 <span className="text-xs text-fg-muted">{formatItemsCount(category.productsCount)}</span>
               </Link>
             ))}

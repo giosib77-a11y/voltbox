@@ -265,7 +265,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   out-of-stock and an in-cart card shot in both themes, at 1440 (columns per DESIGN.md) and 390
   (carousel scrolls); add-to-cart still adds (existing tests and a click in the browser); C1–C8.
 
-- [ ] **T34 · Home page**
+- [x] **T34 · Home page**
   owner: frontend-dev
   files: frontend/src/pages/Home.jsx, frontend/src/pages/Home.test.jsx, frontend/src/pages/HomeHero.test.jsx, frontend/src/index.css (shared — only removes `.bg-tech-grid`, which only Home uses)
   depends: T30, T31, T33
@@ -643,7 +643,8 @@ Unverified (check before acting):
 - T39: login, register, forgot and reset per §9.1 (448px card, LogoMark, serif h1, existing field errors and toast; reset's alert as a danger tint, forgot's status as a success tint). Forgot-password's form is not reachable in mock (email off).
 - T33: product card (flat light tile, display-caps brand, serif name, display price with `lining-nums`, full-width CTA), carousel head with round outline arrows, grid 2/3/4, ProductCardSkeleton to match; the generic `Skeleton` (admin) unchanged. The "new" label is a surface chip — gold text on the light tile fails AA in dark. Add-to-cart clicked in a browser, all four theme × width.
 - T41: info pages (720px column, serif headings, gold diamond bullets, table scrolls inside itself at 390) and 404 (LogoMark replaces the big digits; "404" kept as sr-only).
-- Next: T40 (running), T34, T35, T36, T37, then T38.
+- T34: home per the mockup (260px column, hero with the §7 ornament, ruled benefits, diamond-framed popular categories, four product sections at §4 rhythm); `.bg-tech-grid` removed. Compared with the mockup shots at 1440 by the orchestrator too: differences are copy/data (real categories and counts, the hero sentence) and DESIGN.md's decisions (ornament, no "— 01").
+- Next: T35, T37, T40 (running), T36, then T38.
 
 ## Stage 2 — Done
 Last session of Stage 2:

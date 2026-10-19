@@ -108,16 +108,6 @@
     display: none;
   }
 
-  /* The home hero's backdrop: a faint grid fading out from one corner. */
-  .bg-tech-grid {
-    background-image:
-      linear-gradient(rgb(var(--c-ink-200) / 0.55) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(var(--c-ink-200) / 0.55) 1px, transparent 1px);
-    background-size: 44px 44px;
-    -webkit-mask-image: radial-gradient(ellipse 80% 70% at 75% 30%, #000 10%, transparent 70%);
-    mask-image: radial-gradient(ellipse 80% 70% at 75% 30%, #000 10%, transparent 70%);
-  }
-
   .line-clamp-2-fallback {
     display: -webkit-box;
     -webkit-line-clamp: 2;
