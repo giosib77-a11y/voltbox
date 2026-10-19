@@ -4,6 +4,9 @@ import ProductImage from '../common/ProductImage.jsx';
 import { Skeleton } from '../common/Skeleton.jsx';
 import { t } from '../../i18n/index.js';
 
+const ARROW_CLASS =
+  'absolute top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-pill border border-outline bg-surface text-ink-800 transition-colors hover:border-primary-500 hover:bg-primary-50 hover:text-primary-700 lg:opacity-0 lg:focus-visible:opacity-100 lg:group-hover:opacity-100';
+
 /**
  * პროდუქტის გალერეა: დიდი ფოტო zoom-ით, thumbnails, ისრები და swipe.
  * კლავიატურით ნავიგაცია: ← →
@@ -81,7 +84,7 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
         onMouseLeave={() => setZoom(null)}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        className="group relative aspect-square overflow-hidden rounded-card border border-ink-200 bg-media"
+        className="group relative aspect-square overflow-hidden rounded-card border border-line bg-media"
       >
         <img
           src={images[index]}
@@ -93,7 +96,7 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
               : undefined
           }
           onError={(event) => {
-            event.currentTarget.src = '/images/placeholder.svg';
+            event.currentTarget.src = '/images/placeholder-shop.svg';
           }}
         />
 
@@ -103,7 +106,7 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
               type="button"
               onClick={() => go(-1)}
               aria-label={t('gallery.previous')}
-              className="absolute left-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-surface/90 text-ink-700 shadow-card transition-opacity hover:bg-surface lg:opacity-0 lg:group-hover:opacity-100"
+              className={`${ARROW_CLASS} left-2`}
             >
               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -111,7 +114,7 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
               type="button"
               onClick={() => go(1)}
               aria-label={t('gallery.next')}
-              className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-surface/90 text-ink-700 shadow-card transition-opacity hover:bg-surface lg:opacity-0 lg:group-hover:opacity-100"
+              className={`${ARROW_CLASS} right-2`}
             >
               <ChevronRight className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -121,7 +124,7 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
                 <span
                   key={image}
                   className={`h-1.5 rounded-pill transition-all ${
-                    i === index ? 'w-5 bg-primary-600' : 'w-1.5 bg-ink-300'
+                    i === index ? 'w-5 bg-primary-500' : 'w-1.5 bg-ink-300'
                   }`}
                 />
               ))}
@@ -139,11 +142,14 @@ export default function ProductGallery({ images = [], alt = '', loading = false 
               onClick={() => setIndex(i)}
               aria-label={t('gallery.thumb', { index: i + 1 })}
               aria-current={i === index}
-              className={`shrink-0 overflow-hidden rounded-control border-2 transition-colors ${
-                i === index ? 'border-primary-600' : 'border-ink-200 hover:border-ink-300'
+              // 1px line tile, 2px primary-500 when selected (same outer size).
+              className={`shrink-0 overflow-hidden transition-colors ${
+                i === index
+                  ? 'border-2 border-primary-500'
+                  : 'border border-line p-px hover:border-primary-500'
               }`}
             >
-              <ProductImage src={image} alt="" className="h-16 w-16 sm:h-20 sm:w-20" />
+              <ProductImage src={image} alt="" shopPlaceholder className="h-16 w-16" />
             </button>
           ))}
         </div>

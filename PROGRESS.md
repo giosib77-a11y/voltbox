@@ -290,7 +290,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   sheet opens and closes; category, search with results and search without, both themes, both
   widths; C1–C8.
 
-- [ ] **T36 · Product page**
+- [x] **T36 · Product page**
   owner: frontend-dev
   files: frontend/src/pages/ProductDetails.jsx, frontend/src/components/product/ProductGallery.jsx
   depends: T33
@@ -645,7 +645,8 @@ Unverified (check before acting):
 - T41: info pages (720px column, serif headings, gold diamond bullets, table scrolls inside itself at 390) and 404 (LogoMark replaces the big digits; "404" kept as sr-only).
 - T34: home per the mockup (260px column, hero with the §7 ornament, ruled benefits, diamond-framed popular categories, four product sections at §4 rhythm); `.bg-tech-grid` removed. Compared with the mockup shots at 1440 by the orchestrator too: differences are copy/data (real categories and counts, the hero sentence) and DESIGN.md's decisions (ornament, no "— 01").
 - T35: category and search (serif h1, serif filter titles, themed checkbox with a peer focus ring, slider, sort with its missing chevron, `outline` pagination); pre-existing defect fixed: the price slider's thumbs never rendered (no `border-solid` on the thumb pseudo-element). Filter, sort, price and page 2 change the URL (clicked in mock); the mobile sheet opens and closes.
-- Next: T36, T37, T40 (running), then T38.
+- T36: product page (light square photo tile, 64px thumbnails with a primary-500 selected border, display brand eyebrow, serif h1, display price with lining-nums, tabs with a primary underline); gallery uses `shopPlaceholder`; a keyboard-focused gallery arrow is now visible at lg. Thumbnail switching and the 10-per-line limit behave as before (browser, both themes).
+- Next: T37, T40 (running), then T38.
 
 ## Stage 2 — Done
 Last session of Stage 2:

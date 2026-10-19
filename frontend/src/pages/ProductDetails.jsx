@@ -118,10 +118,10 @@ export default function ProductDetails() {
         <ProductGallery images={product.images} alt={product.name} />
 
         <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-primary-700">
+          <p className="font-display text-[13px] font-semibold uppercase leading-[1.3] tracking-[0.3em] text-primary-700">
             {product.brand}
           </p>
-          <h1 className="mt-1.5 text-2xl font-bold leading-tight tracking-tight text-ink-900 sm:text-3xl">
+          <h1 className="mt-2 font-serif text-[26px] font-light leading-tight text-ink-900 lg:text-4xl">
             {product.name}
           </h1>
 
@@ -136,9 +136,9 @@ export default function ProductDetails() {
             <StockBadge stock={product.stock} isLowStock={product.isLowStock} />
           </div>
 
-          <p className="mt-4 text-sm leading-relaxed text-ink-600">{product.shortDescription}</p>
+          <p className="mt-4 text-sm leading-[1.8] text-ink-700 lg:text-[15px]">{product.shortDescription}</p>
 
-          <div className="mt-5 rounded-card border border-ink-200 bg-surface p-4">
+          <div className="mt-5 rounded-card border border-line bg-surface p-4 sm:p-6">
             <PriceTag
               price={product.price}
               oldPrice={product.oldPrice}
@@ -147,7 +147,7 @@ export default function ProductDetails() {
               showBadge
             />
             {savings > 0 && (
-              <p className="mt-1.5 text-sm font-medium text-accent-fg">
+              <p className="mt-1.5 text-xs font-medium text-accent-fg">
                 {t('product.youSave', { price: formatPrice(savings) })}
               </p>
             )}
@@ -179,21 +179,21 @@ export default function ProductDetails() {
             )}
           </div>
 
-          <ul className="mt-5 grid gap-2.5 text-sm text-ink-600 sm:grid-cols-2">
+          <ul className="mt-5 grid gap-2.5 text-sm text-ink-700 sm:grid-cols-2">
             <li className="flex items-start gap-2.5">
-              <Truck className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" aria-hidden="true" />
+              <Truck className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
               {t('product.delivery', { eta: t('shipping.etaDays') })}
             </li>
             <li className="flex items-start gap-2.5">
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" aria-hidden="true" />
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
               {t('product.warranty', { period: formatSpecValue(product.specs?.warranty || t('product.defaultWarranty')) })}
             </li>
             <li className="flex items-start gap-2.5">
-              <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" aria-hidden="true" />
+              <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
               {t('product.returns')}
             </li>
             <li className="flex items-start gap-2.5">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" aria-hidden="true" />
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
               {t('product.original')}
             </li>
           </ul>
@@ -232,8 +232,8 @@ function ProductTabs({ product, tab, onTabChange }) {
   const specEntries = Object.entries(product.specs || {});
 
   return (
-    <section className="mt-10 rounded-card border border-ink-200 bg-surface">
-      <div role="tablist" aria-label={t('product.detailsLabel')} className="flex overflow-x-auto border-b border-ink-200">
+    <section className="mt-10 rounded-card border border-line bg-surface">
+      <div role="tablist" aria-label={t('product.detailsLabel')} className="flex overflow-x-auto border-b border-line">
         {TABS.map((id) => (
           <button
             key={id}
@@ -243,10 +243,10 @@ function ProductTabs({ product, tab, onTabChange }) {
             aria-selected={tab === id}
             aria-controls={`panel-${id}`}
             onClick={() => onTabChange(id)}
-            className={`shrink-0 border-b-2 px-5 py-3.5 text-sm font-semibold transition-colors ${
+            className={`shrink-0 border-b-2 px-5 py-3.5 text-sm font-medium transition-colors ${
               tab === id
-                ? 'border-primary-600 text-primary-700'
-                : 'border-transparent text-ink-600 hover:text-ink-900'
+                ? 'border-primary-600 text-ink-900'
+                : 'border-transparent text-ink-600 hover:text-primary-700'
             }`}
           >
             {t(`product.tabs.${id}`)}
@@ -254,10 +254,10 @@ function ProductTabs({ product, tab, onTabChange }) {
         ))}
       </div>
 
-      <div className="p-5 sm:p-6">
+      <div className="p-4 sm:p-6">
         {tab === 'description' && (
           <div role="tabpanel" id="panel-description" aria-labelledby="tab-description">
-            <p className="max-w-3xl text-sm leading-relaxed text-ink-700">{product.description}</p>
+            <p className="max-w-3xl text-sm leading-[1.8] text-ink-700 lg:text-[15px]">{product.description}</p>
             {product.tags?.length > 0 && (
               <ul className="mt-5 flex flex-wrap gap-2">
                 {product.tags.map((tag) => (
@@ -277,23 +277,23 @@ function ProductTabs({ product, tab, onTabChange }) {
           <div role="tabpanel" id="panel-specs" aria-labelledby="tab-specs">
             <table className="w-full max-w-2xl text-sm">
               <caption className="sr-only">{t('product.specsCaption', { name: product.name })}</caption>
-              <tbody>
+              <tbody className="divide-y divide-line">
                 {specEntries.map(([key, value]) => (
-                  <tr key={key} className="border-b border-ink-100 last:border-b-0">
+                  <tr key={key}>
                     <th scope="row" className="w-1/2 py-2.5 pr-4 text-left font-medium text-ink-500">
                       {specLabel(key)}
                     </th>
                     <td className="py-2.5 font-semibold text-ink-900">{formatSpecValue(value)}</td>
                   </tr>
                 ))}
-                <tr className="border-t border-ink-100">
+                <tr>
                   <th scope="row" className="py-2.5 pr-4 text-left font-medium text-ink-500">
                     {t('search.filterBrand')}
                   </th>
                   <td className="py-2.5 font-semibold text-ink-900">{product.brand}</td>
                 </tr>
                 {product.brandCountry && (
-                  <tr className="border-t border-ink-100">
+                  <tr>
                     <th scope="row" className="py-2.5 pr-4 text-left font-medium text-ink-500">
                       {t('specs.origin')}
                     </th>
@@ -312,7 +312,7 @@ function ProductTabs({ product, tab, onTabChange }) {
                 {/* h2, not h3: the page has one h1 (the product name) and nothing
                     between, and a reader navigating by heading level should not
                     find a gap. The size comes from the class either way. */}
-                <h2 className="text-sm font-bold text-ink-900">{info.title}</h2>
+                <h2 className="font-serif text-[15px] font-medium text-ink-900">{info.title}</h2>
                 <p className="mt-1.5 text-sm leading-relaxed text-ink-600">{info.text}</p>
               </div>
             ))}
