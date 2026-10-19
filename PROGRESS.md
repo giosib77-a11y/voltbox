@@ -160,7 +160,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   woff2 loads in a preview with no 404; `grep -rn "googleapis\|gstatic" frontend/index.html
   frontend/src` finds nothing; `frontend/render.yaml` unchanged; C1, C4, C8.
 
-- [ ] **T28 · Screenshot script: every storefront page, both themes, two widths**
+- [x] **T28 · Screenshot script: every storefront page, both themes, two widths**
   owner: frontend-dev
   files: frontend/scripts/e2e/screens.mjs (new)
   depends: —
@@ -377,6 +377,10 @@ before T27 on a local stack as in Stage 2 — it must be unchanged.
   running task is editing them.
 
 ## Backlog (needs user decision)
+
+- T28 (2026-10-19): `vite preview` answers a missing static file (e.g. a font) with 200 `text/html`
+  (SPA fallback). If the Render static site rewrites `/*` → `/index.html` the same way, a missing asset in
+  production is a decode error, not a 404 — worth one check of a missing `/fonts/x.woff2` on live (low).
 
 - Admin trash list (2026-10-18 re-check): at 390px the row buttons sit in the table's own horizontal scroll, like
   the live list's right-hand columns; after a permanent delete answers 404/409 the dialog closes and the row goes
@@ -615,6 +619,14 @@ Unverified (check before acting):
 - Failed attempts: —
 
 ## Last Session
+- Date: 2026-10-19
+- Stage 3 in progress. Commits: 7449985 plan; T28 (screens.mjs: 98 shots on the pre-redesign mock build,
+  exit 0; a renamed woff2 fails it — `vite preview` answers a missing file with 200 text/html, so the script
+  also fails an asset served as HTML).
+- Next: T26 (designer) → T27.
+
+## Stage 2 — Done
+Last session of Stage 2:
 - Date: 2026-10-18
 - Done: Stage 2 (admin order trash) T18–T25, all `[x]`. Commits: aa3aa9f plan, 600c12d design (DESIGN.md),
   a2d3ac1 T18, 9206339 T23, 7ce60a1 T19, 062a5bc T20, c82fa5c T21, fb971f6 T22, e066975 finish-check,
@@ -630,7 +642,6 @@ Unverified (check before acting):
 - Known issues / blockers: none. The two proposed Accepted Risks (PROJECT.md) wait for the owner.
 - Next: the owner reviews, merges to main, runs the Stage 2 Deploy plan (migration → backend → frontend).
 
-## Stage 2 — Done
 Stage 2 — Order trash (admin) (T18–T25 done 2026-10-18; finish-check done, fix rounds 1/2)
 
 Source: the owner's request (2026-10-18): delete an order in the admin into a trash (with a
