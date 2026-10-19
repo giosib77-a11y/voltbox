@@ -279,7 +279,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   colour, type and spacing, differing only where copy, data or AA differ (listed in the report);
   C1–C8.
 
-- [ ] **T35 · Category and search pages**
+- [x] **T35 · Category and search pages**
   owner: frontend-dev
   files: frontend/src/pages/Category.jsx, frontend/src/pages/SearchResults.jsx, frontend/src/components/catalog/ActiveFilters.jsx, frontend/src/components/catalog/FilterGroup.jsx, frontend/src/components/catalog/FilterSidebar.jsx, frontend/src/components/catalog/Pagination.jsx, frontend/src/components/catalog/PriceRangeSlider.jsx, frontend/src/components/catalog/SortSelect.jsx
   depends: T33
@@ -644,7 +644,8 @@ Unverified (check before acting):
 - T33: product card (flat light tile, display-caps brand, serif name, display price with `lining-nums`, full-width CTA), carousel head with round outline arrows, grid 2/3/4, ProductCardSkeleton to match; the generic `Skeleton` (admin) unchanged. The "new" label is a surface chip — gold text on the light tile fails AA in dark. Add-to-cart clicked in a browser, all four theme × width.
 - T41: info pages (720px column, serif headings, gold diamond bullets, table scrolls inside itself at 390) and 404 (LogoMark replaces the big digits; "404" kept as sr-only).
 - T34: home per the mockup (260px column, hero with the §7 ornament, ruled benefits, diamond-framed popular categories, four product sections at §4 rhythm); `.bg-tech-grid` removed. Compared with the mockup shots at 1440 by the orchestrator too: differences are copy/data (real categories and counts, the hero sentence) and DESIGN.md's decisions (ornament, no "— 01").
-- Next: T35, T37, T40 (running), T36, then T38.
+- T35: category and search (serif h1, serif filter titles, themed checkbox with a peer focus ring, slider, sort with its missing chevron, `outline` pagination); pre-existing defect fixed: the price slider's thumbs never rendered (no `border-solid` on the thumb pseudo-element). Filter, sort, price and page 2 change the URL (clicked in mock); the mobile sheet opens and closes.
+- Next: T36, T37, T40 (running), then T38.
 
 ## Stage 2 — Done
 Last session of Stage 2:

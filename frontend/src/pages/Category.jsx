@@ -86,17 +86,17 @@ export default function Category() {
       <Breadcrumbs items={[{ label: category?.name || '…' }]} className="mb-4" />
 
       <header className="mb-5">
-        <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
+        <h1 className="font-serif text-[28px] font-light leading-tight text-ink-900 lg:text-4xl">
           {category?.name || '…'}
         </h1>
         {category?.description && (
-          <p className="mt-1.5 max-w-2xl text-sm text-ink-600">{category.description}</p>
+          <p className="mt-2 max-w-2xl text-sm text-ink-600">{category.description}</p>
         )}
       </header>
 
       <div className="lg:flex lg:gap-7">
         <aside className="hidden w-64 shrink-0 lg:block">
-          <div className="sticky top-[8.5rem] max-h-[calc(100vh-10rem)] overflow-y-auto rounded-card border border-ink-200 bg-surface p-4 pr-3">
+          <div className="sticky top-[8.75rem] max-h-[calc(100vh-10rem)] overflow-y-auto rounded-card border border-line bg-surface p-4">
             {sidebar}
           </div>
         </aside>
@@ -124,7 +124,7 @@ export default function Category() {
                 <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
                 {t('common.filters')}
                 {activeCount > 0 && (
-                  <span className="ml-0.5 rounded-pill bg-primary-600 px-1.5 text-2xs font-bold text-white">
+                  <span className="ml-0.5 rounded-pill bg-primary-600 px-1.5 text-2xs font-semibold text-on-primary">
                     {activeCount}
                   </span>
                 )}

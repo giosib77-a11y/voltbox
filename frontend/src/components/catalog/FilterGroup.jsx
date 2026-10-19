@@ -28,7 +28,7 @@ export default function FilterGroup({ config, counts = {}, value, onToggle }) {
   const panelId = `filter-panel-${config.key.replace(/\W/g, '-')}`;
 
   return (
-    <div className="border-b border-ink-200 py-4 last:border-b-0">
+    <div className="border-b border-line py-4 last:border-b-0">
       <h3>
         <button
           type="button"
@@ -37,10 +37,10 @@ export default function FilterGroup({ config, counts = {}, value, onToggle }) {
           aria-controls={panelId}
           className="flex w-full items-center justify-between gap-2 text-left"
         >
-          <span className="text-sm font-semibold text-ink-900">
+          <span className="font-serif text-[15px] font-medium leading-snug text-ink-900">
             {config.label}
             {selectedCount > 0 && (
-              <span className="ml-1.5 rounded-pill bg-primary-100 px-1.5 py-0.5 text-2xs font-bold text-primary-700">
+              <span className="ml-1.5 rounded-pill bg-primary-100 px-1.5 py-0.5 font-sans text-2xs font-semibold text-primary-800">
                 {selectedCount}
               </span>
             )}
@@ -100,23 +100,23 @@ function CheckboxControl({ options, selected, config, onToggle, labelFor }) {
           <li key={optionValue}>
             <label
               className={`flex cursor-pointer items-center gap-2.5 rounded-control px-2 py-1.5 transition-colors ${
-                isDisabled ? 'cursor-not-allowed opacity-45' : 'hover:bg-ink-50'
+                isDisabled ? 'cursor-not-allowed opacity-45' : 'hover:bg-primary-50'
               }`}
             >
-              <span
-                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
-                  isChecked ? 'border-primary-600 bg-primary-600' : 'border-ink-300 bg-surface'
-                }`}
-              >
-                {isChecked && <Check className="h-3 w-3 text-white" aria-hidden="true" />}
-              </span>
               <input
                 type="checkbox"
-                className="sr-only"
+                className="peer sr-only"
                 checked={isChecked}
                 disabled={isDisabled}
                 onChange={() => onToggle(config, optionValue)}
               />
+              <span
+                className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-control border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-surface ${
+                  isChecked ? 'border-primary-600 bg-primary-600' : 'border-ink-300 bg-surface'
+                }`}
+              >
+                {isChecked && <Check className="h-3 w-3 text-on-primary" aria-hidden="true" />}
+              </span>
               <span className="min-w-0 flex-1 truncate text-sm text-ink-700">{labelFor(optionValue)}</span>
               <span className="shrink-0 text-xs tabular-nums text-ink-500">{formatNumber(count)}</span>
             </label>
@@ -146,7 +146,7 @@ function SwatchControl({ options, selected, config, onToggle, labelFor }) {
               className={`flex h-9 items-center gap-2 rounded-pill border px-2.5 text-xs transition-all ${
                 isChecked
                   ? 'border-primary-600 bg-primary-50 font-semibold text-primary-800'
-                  : 'border-ink-200 bg-surface text-ink-700 hover:border-ink-300'
+                  : 'border-line bg-surface text-ink-700 hover:border-primary-500'
               } ${isDisabled ? 'cursor-not-allowed opacity-40' : ''}`}
             >
               <span
@@ -168,25 +168,25 @@ function ToggleControl({ config, counts, value, onToggle }) {
   const isOn = value === true;
 
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-control px-2 py-1.5 hover:bg-ink-50">
+    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-control px-2 py-1.5 hover:bg-primary-50">
       <span className="text-sm text-ink-700">
         {t('filters.only', { label: config.label })}
         <span className="ml-1.5 text-xs text-ink-500">({formatNumber(count)})</span>
       </span>
       <input
         type="checkbox"
-        className="sr-only"
+        className="peer sr-only"
         checked={isOn}
         onChange={() => onToggle(config, true)}
       />
       <span
         aria-hidden="true"
-        className={`relative h-6 w-11 shrink-0 rounded-pill transition-colors ${
+        className={`relative h-6 w-11 shrink-0 rounded-pill transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-surface ${
           isOn ? 'bg-primary-600' : 'bg-ink-300'
         }`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-surface shadow-sm transition-all ${
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-surface transition-all ${
             isOn ? 'left-[1.375rem]' : 'left-0.5'
           }`}
         />

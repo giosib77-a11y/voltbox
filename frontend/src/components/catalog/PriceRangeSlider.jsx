@@ -2,6 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { CURRENCY_SYMBOL } from '../../constants/index.js';
 import { t } from '../../i18n/index.js';
 
+// The two range inputs lie over one track and ignore the pointer except on their
+// thumbs (18px circle, 2px primary-600 border). The global focus ring would wrap
+// the whole 24px-high input, so it is moved onto the thumb.
+const THUMB_CLASS = [
+  'pointer-events-none absolute -top-2.5 h-6 w-full appearance-none bg-transparent focus-visible:![box-shadow:none]',
+  '[&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-[18px] [&::-moz-range-thumb]:w-[18px] [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-solid [&::-moz-range-thumb]:border-primary-600 [&::-moz-range-thumb]:bg-surface',
+  '[&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-[18px] [&::-webkit-slider-thumb]:w-[18px] [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-solid [&::-webkit-slider-thumb]:border-primary-600 [&::-webkit-slider-thumb]:bg-surface',
+  '[&:focus-visible::-webkit-slider-thumb]:shadow-[0_0_0_2px_rgb(var(--c-surface)),0_0_0_4px_rgb(var(--c-primary-500))]',
+  '[&:focus-visible::-moz-range-thumb]:shadow-[0_0_0_2px_rgb(var(--c-surface)),0_0_0_4px_rgb(var(--c-primary-500))]',
+].join(' ');
+
 /**
  * ფასის დიაპაზონი — ორი გადამფარავი range input + რიცხვითი ველები.
  * ცვლილება იგზავნება მხოლოდ commit-ზე (mouseup / blur), რომ URL არ „აჟრიალდეს“.
@@ -37,13 +48,13 @@ export default function PriceRangeSlider({ min = 0, max = 100, value = null, onC
   }
 
   return (
-    <div className="border-b border-ink-200 py-4">
-      <h3 className="text-sm font-semibold text-ink-900">{t('filters.price')}</h3>
+    <div className="border-b border-line py-4">
+      <h3 className="font-serif text-[15px] font-medium leading-snug text-ink-900">{t('filters.price')}</h3>
 
-      <div className="relative mt-5 h-1.5">
+      <div className="relative mt-5 h-1">
         <div className="absolute inset-0 rounded-pill bg-ink-200" />
         <div
-          className="absolute h-1.5 rounded-pill bg-primary-600"
+          className="absolute h-1 rounded-pill bg-primary-600"
           style={{ left: `${leftPercent}%`, right: `${100 - rightPercent}%` }}
         />
         <input
@@ -56,7 +67,7 @@ export default function PriceRangeSlider({ min = 0, max = 100, value = null, onC
           onMouseUp={commit}
           onTouchEnd={commit}
           onKeyUp={commit}
-          className="pointer-events-none absolute -top-2 h-6 w-full appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-primary-600 [&::-moz-range-thumb]:bg-surface [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary-600 [&::-webkit-slider-thumb]:bg-surface [&::-webkit-slider-thumb]:shadow"
+          className={THUMB_CLASS}
         />
         <input
           type="range"
@@ -68,7 +79,7 @@ export default function PriceRangeSlider({ min = 0, max = 100, value = null, onC
           onMouseUp={commit}
           onTouchEnd={commit}
           onKeyUp={commit}
-          className="pointer-events-none absolute -top-2 h-6 w-full appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-primary-600 [&::-moz-range-thumb]:bg-surface [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary-600 [&::-webkit-slider-thumb]:bg-surface [&::-webkit-slider-thumb]:shadow"
+          className={THUMB_CLASS}
         />
       </div>
 
@@ -82,7 +93,7 @@ export default function PriceRangeSlider({ min = 0, max = 100, value = null, onC
             max={high}
             onChange={(e) => updateLow(e.target.value)}
             onBlur={commit}
-            className="field-text h-9 w-full rounded-control border border-ink-300 px-2.5 tabular-nums focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+            className="field-text h-9 w-full rounded-control border border-ink-300 bg-surface px-2.5 tabular-nums text-ink-900 transition-colors hover:border-primary-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
           />
         </label>
         <span className="text-ink-400" aria-hidden="true">
@@ -97,7 +108,7 @@ export default function PriceRangeSlider({ min = 0, max = 100, value = null, onC
             max={bounds.max}
             onChange={(e) => updateHigh(e.target.value)}
             onBlur={commit}
-            className="field-text h-9 w-full rounded-control border border-ink-300 px-2.5 tabular-nums focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+            className="field-text h-9 w-full rounded-control border border-ink-300 bg-surface px-2.5 tabular-nums text-ink-900 transition-colors hover:border-primary-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
           />
         </label>
         <span className="text-sm text-ink-500">{CURRENCY_SYMBOL}</span>

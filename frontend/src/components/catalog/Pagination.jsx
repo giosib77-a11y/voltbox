@@ -26,7 +26,10 @@ export default function Pagination({ page = 1, totalPages = 1, onChange, classNa
   const pages = buildPages(page, totalPages);
 
   const buttonBase =
-    'flex h-10 min-w-[2.5rem] items-center justify-center rounded-control border px-2 text-sm font-semibold transition-colors';
+    'flex h-10 min-w-[2.5rem] items-center justify-center rounded-control border px-2 text-sm font-medium tabular-nums transition-colors';
+  const idle =
+    'border-outline bg-surface text-ink-800 hover:border-primary-500 hover:bg-primary-50 hover:text-primary-700 active:bg-primary-100';
+  const arrow = `${idle} disabled:cursor-not-allowed disabled:border-ink-200 disabled:bg-surface disabled:text-ink-400 disabled:hover:border-ink-200 disabled:hover:bg-surface disabled:hover:text-ink-400`;
 
   return (
     <nav aria-label={t('pagination.label')} className={`flex items-center justify-center gap-1.5 ${className}`}>
@@ -35,7 +38,7 @@ export default function Pagination({ page = 1, totalPages = 1, onChange, classNa
         onClick={() => onChange(page - 1)}
         disabled={page <= 1}
         aria-label={t('pagination.previous')}
-        className={`${buttonBase} border-ink-300 bg-surface text-ink-700 hover:border-primary-400 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink-300 disabled:hover:text-ink-700`}
+        className={`${buttonBase} ${arrow}`}
       >
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
       </button>
@@ -53,8 +56,8 @@ export default function Pagination({ page = 1, totalPages = 1, onChange, classNa
             aria-current={item === page ? 'page' : undefined}
             className={`${buttonBase} ${
               item === page
-                ? 'border-primary-600 bg-primary-600 text-white'
-                : 'border-ink-300 bg-surface text-ink-700 hover:border-primary-400 hover:text-primary-700'
+                ? 'border-primary-600 bg-primary-600 text-on-primary'
+                : idle
             }`}
           >
             {item}
@@ -67,7 +70,7 @@ export default function Pagination({ page = 1, totalPages = 1, onChange, classNa
         onClick={() => onChange(page + 1)}
         disabled={page >= totalPages}
         aria-label={t('pagination.next')}
-        className={`${buttonBase} border-ink-300 bg-surface text-ink-700 hover:border-primary-400 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink-300 disabled:hover:text-ink-700`}
+        className={`${buttonBase} ${arrow}`}
       >
         <ChevronRight className="h-4 w-4" aria-hidden="true" />
       </button>

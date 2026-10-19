@@ -45,8 +45,8 @@ export default function FilterSidebar({
   return (
     <div className={className}>
       <div className="mb-1 flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-ink-900">
-          <SlidersHorizontal className="h-4 w-4 text-ink-500" aria-hidden="true" />
+        <h2 className="flex items-center gap-2 font-serif text-xl font-normal leading-snug text-ink-900 lg:text-[22px]">
+          <SlidersHorizontal className="h-4 w-4 text-primary-500" aria-hidden="true" />
           {t('common.filters')}
         </h2>
         {activeCount > 0 && (
