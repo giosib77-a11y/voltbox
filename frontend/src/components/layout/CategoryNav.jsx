@@ -87,7 +87,7 @@ export default function CategoryNav({ categories, className = '' }) {
         lastX.current = event.clientX;
       }}
     >
-      <ul className="py-1.5">
+      <ul>
         {categoryTree(categories).map((category) => (
           <CategoryNavItem
             key={category.id}
@@ -105,19 +105,18 @@ export default function CategoryNav({ categories, className = '' }) {
 }
 
 function rowClass({ isActive }, open) {
-  return `flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-sm font-medium transition-colors ${
-    isActive
-      ? 'bg-primary-50 text-primary-800'
-      : open
-        ? 'bg-ink-100 text-fg'
-        : 'text-ink-700 hover:bg-ink-100 hover:text-fg'
+  return `flex min-w-0 flex-1 items-center gap-4 px-[22px] py-3.5 text-sm transition-colors ${
+    isActive || open ? 'bg-primary-50 text-fg' : 'text-fg hover:bg-primary-50'
   }`;
 }
+
+/* A row of the list is separated from the one above by a 1px line (DESIGN.md §4) */
+const ROW = 'border-t border-line first:border-t-0';
 
 function RowLabel({ category }) {
   return (
     <>
-      <CategoryIcon name={category.icon} className="h-5 w-5 shrink-0 text-primary-700" />
+      <CategoryIcon name={category.icon} className="h-5 w-5 shrink-0 text-primary-500" />
       <span className="truncate">{category.name}</span>
     </>
   );
@@ -134,7 +133,7 @@ function CategoryNavItem({ category, canHover, open, setActiveId, close, aim }) 
   if (category.children.length === 0) {
     // ფოთოლს პანელი არ აქვს — მასზე გადასვლა სხვის პანელს ხურავს
     return (
-      <li onPointerEnter={(event) => aim.enter(event, null)}>
+      <li className={ROW} onPointerEnter={(event) => aim.enter(event, null)}>
         <NavLink to={`/category/${category.slug}`} className={(state) => rowClass(state, false)}>
           <RowLabel category={category} />
         </NavLink>
@@ -147,7 +146,7 @@ function CategoryNavItem({ category, canHover, open, setActiveId, close, aim }) 
 
   return (
     <li
-      className="flex items-center"
+      className={`flex items-center ${ROW}`}
       onPointerEnter={(event) => aim.enter(event, id)}
       onPointerLeave={(event) => aim.leave(event)}
       onBlur={(event) => {
@@ -185,8 +184,8 @@ function CategoryNavItem({ category, canHover, open, setActiveId, close, aim }) 
           onClick={() => setOpen(!open)}
           {...disclosure}
           aria-label={t('nav.subcategories', { name: category.name })}
-          className={`flex w-9 items-center justify-center self-stretch transition-colors hover:bg-ink-100 hover:text-fg ${
-            open ? 'bg-ink-100 text-fg' : 'text-fg-muted'
+          className={`flex w-9 items-center justify-center self-stretch transition-colors hover:bg-primary-50 hover:text-fg ${
+            open ? 'bg-primary-50 text-fg' : 'text-fg-muted'
           }`}
         >
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -206,17 +205,17 @@ function CategoryNavItem({ category, canHover, open, setActiveId, close, aim }) 
         hidden={!open}
         className={`absolute left-full top-0 z-drawer min-h-full pl-2 ${open ? 'flex' : ''}`}
       >
-        <div className="w-64 rounded-card border border-line bg-surface py-2 shadow-popover">
-          <p className="px-4 pb-1.5 pt-1 text-sm font-semibold text-fg">{category.name}</p>
+        <div className="w-64 rounded-card border border-line bg-surface shadow-popover">
+          <p className="px-[22px] py-3.5 font-serif text-sm font-medium text-fg">{category.name}</p>
           <ul>
             {category.children.map((child) => (
-              <li key={child.id}>
+              <li key={child.id} className="border-t border-line">
                 <NavLink
                   to={`/category/${child.slug}`}
                   onClick={() => setOpen(false)}
                   className={({ isActive }) =>
-                    `block px-4 py-2 text-sm transition-colors ${
-                      isActive ? 'bg-primary-50 text-primary-800' : 'text-ink-700 hover:bg-ink-100 hover:text-fg'
+                    `block px-[22px] py-3.5 text-sm transition-colors ${
+                      isActive ? 'bg-primary-50 text-fg' : 'text-ink-700 hover:bg-primary-50 hover:text-fg'
                     }`
                   }
                 >
@@ -277,16 +276,14 @@ export function CategoryMenuButton({ categories }) {
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-controls={panelId}
-        className={`flex h-10 items-center gap-2 rounded-control border px-3 text-sm font-semibold transition-colors ${
-          open
-            ? 'border-primary-600 bg-primary-600 text-white'
-            : 'border-line bg-surface text-ink-800 hover:bg-ink-100'
+        className={`flex h-[46px] items-center gap-2.5 rounded-control border px-4 text-sm text-fg transition-colors hover:border-primary-500 hover:bg-primary-50 active:bg-primary-100 ${
+          open ? 'border-primary-500 bg-primary-50' : 'border-outline bg-transparent'
         }`}
       >
-        <LayoutGrid className="h-4 w-4" aria-hidden="true" />
+        <LayoutGrid className="h-4 w-4 text-primary-500" aria-hidden="true" />
         {t('nav.categories')}
         <ChevronDown
-          className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
           aria-hidden="true"
         />
       </button>

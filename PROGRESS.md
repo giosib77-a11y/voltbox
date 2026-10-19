@@ -218,7 +218,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   the toggle switches every header element between the two themes and the pick survives a reload;
   search suggestions open and work by keyboard as before, in both themes; C1–C8.
 
-- [ ] **T31 · Category menu, mobile menu, footer, layout shell**
+- [x] **T31 · Category menu, mobile menu, footer, layout shell**
   owner: frontend-dev
   files: frontend/src/components/layout/CategoryNav.jsx, frontend/src/components/layout/MobileMenu.jsx, frontend/src/components/layout/Footer.jsx, frontend/src/components/layout/Layout.jsx, frontend/src/components/layout/PageFallback.jsx, frontend/src/components/layout/CategoryNav.test.jsx, frontend/src/components/layout/Footer.test.jsx, frontend/src/pages/Info/footerLinks.test.jsx
   depends: T29
@@ -377,6 +377,12 @@ before T27 on a local stack as in Stage 2 — it must be unchanged.
   running task is editing them.
 
 ## Backlog (needs user decision)
+
+- Stage 3 nits (2026-10-19): the header's categories button keeps lucide `LayoutGrid` where DESIGN.md §6
+  draws a rhombus; the mobile drawer is `w-[86vw] max-w-sm` (shared Modal) where §6 says min(85vw, 340px);
+  search suggestions do not set the matched part in 500 weight as the mockup does (new text-splitting
+  behaviour, outside a look-only stage); an outline Button inside a portal keeps the admin's hover border
+  (primary-400, not primary-500) because `storefront:` cannot reach portals (low).
 
 - T28 (2026-10-19): `vite preview` answers a missing static file (e.g. a font) with 200 `text/html`
   (SPA fallback). If the Render static site rewrites `/*` → `/index.html` the same way, a missing asset in
@@ -628,7 +634,8 @@ Unverified (check before acting):
 - screens.mjs: `SCREENS_ORIGIN` / `SCREENS_DIR` so two tasks can shoot side by side (own preview port, own folder).
 - T29: Logo (mark + VOLTBOX wordmark, header sizes) and `LogoMark` (size, className — colour in the default className) — the only copy of the path; favicon = filled gold rhombus + dark bolt, legible at 16px on light and dark tabs. Footer composes `LogoMark` itself (T31).
 - T32: shared components through tokens whose admin value is today's (`text-on-primary`, `shadow-btn`, `--btn-weight`, `border-outline`), `storefront:` gates, and for portals (Modal, Toast) `[:root:not(:has([data-admin]))_&]:`; opt-in Button `xl`, ProductImage `shopPlaceholder`, CategoryIcon `framed`. Admin comparison in a browser left for the finish-check (no local stack in the task).
-- Next: T30, T31 (running), T33, then T39–T41.
+- T31: CategoryNav (bordered rows, gold icons, flyout, header button with `outline`), MobileMenu, Footer (`bg-footer`, LogoMark + wordmark at §7 sizes, serif headings). Layout and PageFallback already matched — unchanged. Flyout placement classes kept (test green, unedited).
+- Next: T30 (fixing the keyboard-active suggestion row), T33 (running), then T39–T41.
 
 ## Stage 2 — Done
 Last session of Stage 2:

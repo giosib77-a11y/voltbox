@@ -23,7 +23,7 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
   return (
     <Modal open={open} onClose={onClose} position="left" title={t('nav.menu')}>
       <nav aria-label={t('nav.main')} className="p-3">
-        <p className="px-3 pb-2 pt-1 text-2xs font-bold uppercase tracking-wide text-ink-500">
+        <p className="px-3 pb-2 pt-1 text-2xs font-semibold tracking-wide text-primary-700">
           {t('nav.categories')}
         </p>
         <ul className="space-y-0.5">
@@ -34,7 +34,7 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
 
         <div className="my-3 border-t border-ink-200" />
 
-        <p className="px-3 pb-2 text-2xs font-bold uppercase tracking-wide text-ink-500">{t('nav.account')}</p>
+        <p className="px-3 pb-2 text-2xs font-semibold tracking-wide text-primary-700">{t('nav.account')}</p>
         <ul className="space-y-0.5">
           {isAuthenticated ? (
             <>
@@ -46,7 +46,7 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
                   <a
                     href="/admin"
                     onClick={onClose}
-                    className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent-50"
+                    className="flex min-h-[52px] items-center gap-3 rounded-control px-3 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent-50"
                   >
                     <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
                     {t('nav.admin')}
@@ -57,9 +57,9 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
                 <Link
                   to="/account/orders"
                   onClick={onClose}
-                  className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-ink-800 transition-colors hover:bg-ink-100"
+                  className="flex min-h-[52px] items-center gap-3 rounded-control px-3 text-sm text-fg transition-colors hover:bg-primary-50"
                 >
-                  <Package className="h-5 w-5 text-ink-500" aria-hidden="true" />
+                  <Package className="h-5 w-5 text-primary-500"aria-hidden="true" />
                   {t('nav.orders')}
                 </Link>
               </li>
@@ -67,9 +67,9 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
                 <Link
                   to="/account/profile"
                   onClick={onClose}
-                  className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-ink-800 transition-colors hover:bg-ink-100"
+                  className="flex min-h-[52px] items-center gap-3 rounded-control px-3 text-sm text-fg transition-colors hover:bg-primary-50"
                 >
-                  <User className="h-5 w-5 text-ink-500" aria-hidden="true" />
+                  <User className="h-5 w-5 text-primary-500"aria-hidden="true" />
                   {t('nav.profileOf', { name: user?.firstName })}
                 </Link>
               </li>
@@ -77,9 +77,9 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
                 <Link
                   to="/account/addresses"
                   onClick={onClose}
-                  className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-ink-800 transition-colors hover:bg-ink-100"
+                  className="flex min-h-[52px] items-center gap-3 rounded-control px-3 text-sm text-fg transition-colors hover:bg-primary-50"
                 >
-                  <MapPin className="h-5 w-5 text-ink-500" aria-hidden="true" />
+                  <MapPin className="h-5 w-5 text-primary-500"aria-hidden="true" />
                   {t('nav.addresses')}
                 </Link>
               </li>
@@ -87,7 +87,7 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-danger-fg transition-colors hover:bg-danger-50"
+                  className="flex min-h-[52px] w-full items-center gap-3 rounded-control px-3 text-sm text-danger-fg transition-colors hover:bg-danger-50"
                 >
                   <LogOut className="h-5 w-5" aria-hidden="true" />
                   {t('nav.logout')}
@@ -99,9 +99,9 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
               <Link
                 to="/login"
                 onClick={onClose}
-                className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-ink-800 transition-colors hover:bg-ink-100"
+                className="flex min-h-[52px] items-center gap-3 rounded-control px-3 text-sm text-fg transition-colors hover:bg-primary-50"
               >
-                <LogIn className="h-5 w-5 text-ink-500" aria-hidden="true" />
+                <LogIn className="h-5 w-5 text-primary-500"aria-hidden="true" />
                 {t('nav.loginOrRegister')}
               </Link>
             </li>
@@ -112,9 +112,9 @@ export default function MobileMenu({ open, onClose, categories = [] }) {
 
         <a
           href={CONTACT.phoneHref}
-          className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-ink-700 transition-colors hover:bg-ink-100"
+          className="flex min-h-[52px] items-center gap-3 rounded-control px-3 text-sm text-fg transition-colors hover:bg-primary-50"
         >
-          <Phone className="h-5 w-5 text-ink-500" aria-hidden="true" />
+          <Phone className="h-5 w-5 text-primary-500"aria-hidden="true" />
           {CONTACT.phone}
         </a>
 
@@ -143,9 +143,9 @@ function MobileCategoryItem({ category, onNavigate }) {
         <Link
           to={`/category/${category.slug}`}
           onClick={onNavigate}
-          className="flex flex-1 items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-ink-800 transition-colors hover:bg-primary-50 hover:text-primary-700"
+          className="flex min-h-[52px] flex-1 items-center gap-3 rounded-control px-3 text-sm text-fg transition-colors hover:bg-primary-50"
         >
-          <CategoryIcon name={category.icon} className="h-5 w-5 text-ink-500" />
+          <CategoryIcon name={category.icon} className="h-5 w-5 text-primary-500" />
           <span className="flex-1">{category.name}</span>
           {typeof category.productsCount === 'number' && (
             <span className="text-xs text-ink-500">{category.productsCount}</span>
@@ -158,7 +158,7 @@ function MobileCategoryItem({ category, onNavigate }) {
             aria-expanded={expanded}
             aria-controls={listId}
             aria-label={t('nav.subcategories', { name: category.name })}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-ink-100"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-ink-500 transition-colors hover:bg-primary-50"
           >
             <ChevronDown
               className={`h-5 w-5 transition-transform ${expanded ? 'rotate-180' : ''}`}
@@ -174,7 +174,7 @@ function MobileCategoryItem({ category, onNavigate }) {
               <Link
                 to={`/category/${child.slug}`}
                 onClick={onNavigate}
-                className="flex items-center rounded-control px-3 py-2 text-sm text-ink-700 transition-colors hover:bg-primary-50 hover:text-primary-700"
+                className="flex min-h-[44px] items-center rounded-control px-3 text-sm text-ink-700 transition-colors hover:bg-primary-50 hover:text-fg"
               >
                 {child.name}
               </Link>
