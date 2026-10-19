@@ -5,7 +5,7 @@ import ErrorState from '../common/ErrorState.jsx';
 
 /**
  * პროდუქტების ბადე სამივე მდგომარეობით: loading → success → error/empty.
- * სვეტები: mobile 2 / tablet 3 / desktop 4.
+ * სვეტები (DESIGN.md §4, ფილტრის სვეტით): 2 / 3 (≥640) / 4 (≥1280).
  *
  * `eagerCount` — the first cards load their image eagerly. Every image on the
  * site was lazy, including the one at the top of the home page, and a lazy
@@ -28,7 +28,7 @@ export default function ProductGrid({
   if (!products.length) return <EmptyState {...emptyProps} />;
 
   return (
-    <div className={`grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 ${className}`}>
+    <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4 xl:gap-6 ${className}`}>
       {products.map((product, index) => (
         <ProductCard key={product.id} product={product} priority={index < eagerCount} />
       ))}

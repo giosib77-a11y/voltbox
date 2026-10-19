@@ -19,7 +19,7 @@ import { t } from '../../i18n/index.js';
 
 const SIZES = {
   sm: { star: 'h-3.5 w-3.5', text: 'text-xs' },
-  md: { star: 'h-4 w-4', text: 'text-sm' },
+  md: { star: 'h-[18px] w-[18px]', text: 'text-sm' },
   lg: { star: 'h-5 w-5', text: 'text-base' },
 };
 

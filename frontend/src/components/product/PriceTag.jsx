@@ -6,9 +6,9 @@ import Badge from '../common/Badge.jsx';
  */
 
 const SIZES = {
-  sm: { price: 'text-base', old: 'text-xs' },
-  md: { price: 'text-lg', old: 'text-sm' },
-  lg: { price: 'text-3xl', old: 'text-base' },
+  sm: { price: 'text-lg font-medium sm:text-xl', old: 'text-xs' },
+  md: { price: 'text-[22px] font-medium sm:text-[26px]', old: 'text-[13px] sm:text-[15px]' },
+  lg: { price: 'text-[30px] font-semibold sm:text-[40px]', old: 'text-[13px] sm:text-[15px]' },
 };
 
 export default function PriceTag({
@@ -24,12 +24,12 @@ export default function PriceTag({
 
   return (
     <div className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 ${className}`}>
-      <span className={`font-bold tracking-tight text-ink-900 ${dims.price}`}>
+      <span className={`font-display leading-[1.1] lining-nums text-ink-900 ${dims.price}`}>
         {formatPrice(price)}
       </span>
 
       {hasDiscount && (
-        <span className={`text-ink-500 line-through ${dims.old}`}>{formatPrice(oldPrice)}</span>
+        <span className={`tabular-nums text-ink-500 line-through ${dims.old}`}>{formatPrice(oldPrice)}</span>
       )}
 
       {hasDiscount && showBadge && discountPercent > 0 && (

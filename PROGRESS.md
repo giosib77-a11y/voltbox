@@ -252,7 +252,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   browser check — identical; if that stack cannot be run, listed as Unverified for the finish-check;
   storefront modals and toasts (portals) take the new look in both themes; C1–C8.
 
-- [ ] **T33 · Product components**
+- [x] **T33 · Product components**
   owner: frontend-dev
   files: frontend/src/components/product/ProductCard.jsx, frontend/src/components/product/PriceTag.jsx, frontend/src/components/product/ProductGrid.jsx, frontend/src/components/product/ProductCarousel.jsx, frontend/src/components/product/StockBadge.jsx, frontend/src/components/product/RatingStars.jsx, frontend/src/components/product/ProductGrid.test.jsx, frontend/src/components/product/RatingStars.test.jsx, frontend/src/components/common/Skeleton.jsx
   depends: T32
@@ -339,7 +339,7 @@ Checks for every frontend task of this stage (each task's done when ends with "C
   done when: Orders / Profile / ChangePassword tests green with behaviour untouched; the four pages
   signed in (mock), both themes, both widths, with the account navigation usable at 390; C1–C8.
 
-- [ ] **T41 · Info pages and 404**
+- [x] **T41 · Info pages and 404**
   owner: frontend-dev
   files: frontend/src/pages/Info/InfoPage.jsx, frontend/src/pages/Info/DeliveryTerms.jsx, frontend/src/pages/Info/DeliveryTable.jsx, frontend/src/pages/Info/ReturnsWarranty.jsx, frontend/src/pages/Info/Privacy.jsx, frontend/src/pages/Info/Faq.jsx, frontend/src/pages/Info/Contact.jsx, frontend/src/pages/Info/InfoPages.test.jsx, frontend/src/pages/NotFound.jsx
   depends: T32
@@ -383,6 +383,10 @@ before T27 on a local stack as in Stage 2 — it must be unchanged.
   search suggestions do not set the matched part in 500 weight as the mockup does (new text-splitting
   behaviour, outside a look-only stage); an outline Button inside a portal keeps the admin's hover border
   (primary-400, not primary-500) because `storefront:` cannot reach portals (low).
+- Stage 3 nits, product and info (2026-10-19): `ProductCarousel`'s prev/next buttons show only at lg, where
+  the row is a grid and `scrollBy` does nothing (pre-existing, not introduced by the redesign); the FAQ stays
+  as h2 sections, where DESIGN.md §9.1 draws `details` rows with a chevron (a behaviour change, outside a
+  look-only stage) (low).
 
 - T28 (2026-10-19): `vite preview` answers a missing static file (e.g. a font) with 200 `text/html`
   (SPA fallback). If the Render static site rewrites `/*` → `/index.html` the same way, a missing asset in
@@ -637,7 +641,9 @@ Unverified (check before acting):
 - T31: CategoryNav (bordered rows, gold icons, flyout, header button with `outline`), MobileMenu, Footer (`bg-footer`, LogoMark + wordmark at §7 sizes, serif headings). Layout and PageFallback already matched — unchanged. Flyout placement classes kept (test green, unedited).
 - T30: top bar and header per the mockup (round outlined theme toggle, round primary cart, underlined search with a focus-within ring); toggle persists over reload, suggestions work by keyboard (checked in a browser). Review fix: the keyboard-active suggestion row was primary-50 on surface (≈1.1:1 in dark) — now primary-100 + an inset primary-500 ring.
 - T39: login, register, forgot and reset per §9.1 (448px card, LogoMark, serif h1, existing field errors and toast; reset's alert as a danger tint, forgot's status as a success tint). Forgot-password's form is not reachable in mock (email off).
-- Next: T33, T41 (running), T40.
+- T33: product card (flat light tile, display-caps brand, serif name, display price with `lining-nums`, full-width CTA), carousel head with round outline arrows, grid 2/3/4, ProductCardSkeleton to match; the generic `Skeleton` (admin) unchanged. The "new" label is a surface chip — gold text on the light tile fails AA in dark. Add-to-cart clicked in a browser, all four theme × width.
+- T41: info pages (720px column, serif headings, gold diamond bullets, table scrolls inside itself at 390) and 404 (LogoMark replaces the big digits; "404" kept as sr-only).
+- Next: T40 (running), T34, T35, T36, T37, then T38.
 
 ## Stage 2 — Done
 Last session of Stage 2:

@@ -13,28 +13,29 @@ export function Skeleton({ className = '', rounded = 'rounded-md' }) {
   );
 }
 
-/** პროდუქტის ბარათის skeleton — ProductCard-ის იდენტური გეომეტრიით. */
+/** პროდუქტის ბარათის skeleton — ProductCard-ის იდენტური გეომეტრიით (DESIGN.md §6). */
 export function ProductCardSkeleton() {
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-card border border-ink-200 bg-surface">
-      <Skeleton className="aspect-square w-full" rounded="rounded-none" />
-      <div className="flex flex-1 flex-col gap-2 p-4">
-        <Skeleton className="h-3 w-16" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-3 w-1/2" />
-        <div className="mt-auto flex flex-col gap-3 pt-3">
-          <Skeleton className="h-6 w-24" />
-          <Skeleton className="h-11 w-full" rounded="rounded-control" />
+    <div className="flex h-full flex-col overflow-hidden rounded-card border border-line bg-surface">
+      <Skeleton className="aspect-square w-full border-b border-line" rounded="rounded-none" />
+      <div className="flex flex-1 flex-col gap-2 p-3.5 sm:p-[22px]">
+        <Skeleton className="h-3.5 w-16" rounded="rounded-control" />
+        <Skeleton className="h-4 w-full" rounded="rounded-control" />
+        <Skeleton className="h-4 w-3/4" rounded="rounded-control" />
+        <Skeleton className="h-3 w-1/2" rounded="rounded-control" />
+        <div className="mt-auto flex flex-col gap-3 pt-2">
+          <Skeleton className="h-7 w-24" rounded="rounded-control" />
+          <Skeleton className="h-11 w-full sm:h-[50px]" rounded="rounded-control" />
         </div>
       </div>
     </div>
   );
 }
 
+/** Same columns as ProductGrid. */
 export function ProductGridSkeleton({ count = 8 }) {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4 xl:gap-6">
       {Array.from({ length: count }, (_, i) => (
         <ProductCardSkeleton key={i} />
       ))}
