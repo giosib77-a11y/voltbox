@@ -111,7 +111,9 @@ function ProductCard({ product, className = '', priority = false }) {
           disabled={isOutOfStock}
           aria-label={t('product.addNamed', { name: product.name })}
           className={[
-            'inline-flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-control px-2 text-[13px] transition-colors sm:h-[50px] sm:gap-2.5 sm:text-sm',
+            // Below sm the card is ~143px wide at 390 and ~128px at 360: the icon goes and
+            // the label may wrap to two centred lines, so it is never clipped.
+            'inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control px-2 py-1.5 text-center text-[13px] leading-tight transition-colors sm:h-[50px] sm:gap-2.5 sm:whitespace-nowrap sm:py-0 sm:text-sm',
             '[font-weight:var(--btn-weight)] [letter-spacing:var(--btn-tracking)]',
             isOutOfStock
               ? 'cursor-not-allowed bg-ink-100 text-ink-500'
@@ -124,12 +126,12 @@ function ProductCard({ product, className = '', priority = false }) {
             t('common.outOfStock')
           ) : inCartQty > 0 ? (
             <>
-              <Check className="h-4 w-4" aria-hidden="true" />
+              <Check className="hidden h-4 w-4 shrink-0 sm:block" aria-hidden="true" />
               {t('product.inCart', { count: inCartQty })}
             </>
           ) : (
             <>
-              <ShoppingCart className="h-[18px] w-[18px]" aria-hidden="true" />
+              <ShoppingCart className="hidden h-[18px] w-[18px] shrink-0 sm:block" aria-hidden="true" />
               {t('common.addToCart')}
             </>
           )}
