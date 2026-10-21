@@ -362,7 +362,7 @@ storefront). Recipe for that admin stack (scratch DB `voltbox_browser`, every co
 `VOLTBOX_NO_DOTENV=1`, a local `DATABASE_URL`, empty external keys, a throwaway `JWT_SECRET` and
 `CORS_ORIGINS` for the preview ports; `manage_admin.py` rejects a `.test` email domain).
 
-- [ ] **T42 · should-fix · The skip link is white on gold in the dark theme (2.24:1)**
+- [x] **T42 · should-fix · The skip link is white on gold in the dark theme (2.24:1)**
   owner: frontend-dev
   files: frontend/src/index.css (shared — T27, T34 done), frontend/src/storefrontFills.test.js (new)
   depends: —
@@ -704,7 +704,8 @@ Unverified (check before acting):
 - All Stage 3 tasks done at this commit: frontend gate (eslint, vitest 668, both builds) green.
 - Finish-check (2026-10-21): 2 should-fix → T42 (skip link white on gold in dark), T43 (screens.mjs origin guard, elevated); nits → Backlog. Admin pixel-identical to 55d11d0 on a scratch stack.
 - T43: screens.mjs refuses a non-local `SCREENS_ORIGIN` before a browser starts (checked by the orchestrator: example.com and voltbox.ge → exit 1 with the message); a malformed `%` path on the mockup server answers 404.
-- Next: T42 (running).
+- T42: `.skip-link` → `focus:text-on-primary` (dark 8.62:1 on gold); new `storefrontFills.test.js` (a primary fill with `text-white` in one class string or `@apply`) fails on the old index.css:98 and passes after — re-run by the orchestrator both ways.
+- Next: targeted re-check (full gates; code-reviewer on T42, security-auditor on T43).
 
 ## Stage 2 — Done
 Last session of Stage 2:
