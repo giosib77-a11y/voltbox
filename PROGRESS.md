@@ -395,6 +395,24 @@ storefront). Recipe for that admin stack (scratch DB `voltbox_browser`, every co
   scratchpad snippet, or reasoning on the code if the server is not reachable from outside the script);
   `npx eslint scripts/e2e/screens.mjs` clean; C1.
 
+Final browser pass (2026-10-21, cbcbd84) found one more should-fix → fix round 2 (one round was left, so the
+final-check rule "new findings go to Blockers because the rounds are spent" did not apply):
+
+- [ ] **T44 · should-fix · A product card's link has almost no visible keyboard focus**
+  owner: frontend-dev
+  files: frontend/src/components/product/ProductCard.jsx, frontend/src/components/product/ProductCard.test.jsx (new)
+  depends: —
+  What: the card's main `<Link>` (photo + text, `flex-1`, `focus-visible:outline-none`) sits inside
+  `<article class="… overflow-hidden …">`; the global focus ring is an outer box-shadow, so the article clips
+  it and only a thin gold line above the button row survives (`test-results/browser-check/final/flow/
+  dark-card-link-focus.png`). Pre-existing (same classes at db9a242), but it fails WCAG 2.4.7 on the shop's
+  most-used control. Draw the ring inside: on the Link, `focus-visible:ring-2 focus-visible:ring-inset
+  focus-visible:ring-primary-500` with no offset (or the simplest equivalent that is not clipped). Test first:
+  a vitest rendering ProductCard that asserts the link carries an inset focus ring; it fails before the fix.
+  done when: the new test fails before and passes after; in a browser (mock preview) Tab onto a card link in
+  dark and light at 1440 shows a full ring around the photo-and-text area (screenshots looked at); the
+  add-to-cart button's own ring unchanged; ProductGrid tests green; C1, C3, C8.
+
 ### Deploy notes — Stage 3 (nothing here is run from the agent side)
 - Frontend only: no migration, no backend change, no environment variable, `render.yaml` unchanged.
   After the owner merges to `main`, the storefront (`voltbox-storefront`) rebuilds.
@@ -689,7 +707,7 @@ Unverified (check before acting):
 ## Run State
 - Stage: Stage 3 — Storefront redesign
 - Finish-check this stage: done (2026-10-21; code-reviewer, security-auditor, browser-tester) → T42, T43
-- Fix rounds this stage: 1/2
+- Fix rounds this stage: 2/2
 - Failed attempts: —
 
 ## Last Session
@@ -718,7 +736,8 @@ Unverified (check before acting):
 - T43: screens.mjs refuses a non-local `SCREENS_ORIGIN` before a browser starts (checked by the orchestrator: example.com and voltbox.ge → exit 1 with the message); a malformed `%` path on the mockup server answers 404.
 - T42: `.skip-link` → `focus:text-on-primary` (dark 8.62:1 on gold); new `storefrontFills.test.js` (a primary fill with `text-white` in one class string or `@apply`) fails on the old index.css:98 and passes after — re-run by the orchestrator both ways.
 - Fix round 1 re-check (2026-10-21): code-reviewer — T42 fixed; security-auditor — T43 fixed (8 non-local origins refused before a browser starts, incl. userinfo, suffix, trailing-dot and IPv4-mapped forms). Gates at 160f227: eslint, vitest 671, both builds; ruff, mypy 148, pytest 1097. 0 critical / 0 should-fix open; their nits → Backlog.
-- Next: final check (tester, browser-tester).
+- Final check (2026-10-21, cbcbd84): tester — every gate green (ruff, format 167, mypy 148, pytest 1097, alembic 0001→0016 + check clean; eslint, vitest 671, both builds); the frontend gate also green in node:22 (CI parity). browser-tester — 98 shots exit 0, every main flow in both themes, T42 confirmed; one should-fix (card link focus clipped, pre-existing) → T44, fix round 2.
+- Next: T44.
 
 ## Stage 2 — Done
 Last session of Stage 2:
@@ -965,7 +984,7 @@ Rules for every task of this stage (CLAUDE.md, repeated because subagents run th
 
 Stage 2's last Run State, kept as the record:
 - Finish-check this stage: done (2026-10-18; code-reviewer, security-auditor, browser-tester) → T24, T25
-- Fix rounds this stage: 1/2
+- Fix rounds this stage: 2/2
 - Failed attempts: —
 
 ## Stage 1 — Done
@@ -1142,7 +1161,7 @@ re-checked in the code before it was written here. Order = suggested order.
 
 Stage 1's last Run State and Last Session, kept as the record:
 - Finish-check this stage: done (2026-10-10); second run 2026-10-14 over `cff0b34..HEAD` (T13–T16, deps) → T17
-- Fix rounds this stage: 1/2
+- Fix rounds this stage: 2/2
 - Failed attempts: —
 - 2026-10-14 finish-check over `cff0b34..HEAD`: ruff, format, mypy, pytest 1009; frontend lint, vitest 580, both
   builds (http `dist` has no `footer.demo` call, mock has it) - all green. T17 (should-fix) found and fixed the same day: pytest 1017, ruff, format, mypy green. No stage is open; the finish-check can be re-run.
