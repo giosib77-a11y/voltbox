@@ -26,6 +26,7 @@
  *   node scripts/e2e/screens.mjs home cart mockup   # only these routes
  * Route names are the ones in ROUTES below, plus `mockup`.
  * Another preview or output folder: SCREENS_ORIGIN and SCREENS_DIR (below).
+ * SCREENS_ORIGIN must be a local host (localhost, 127.0.0.1, [::1]): the walk registers and places orders.
  *
  * The theme is the shopper's pick, written to localStorage['theme:v1'] as JSON
  * ('"dark"') before the page loads - what src/utils/theme.js and
@@ -59,6 +60,15 @@ import { products } from '../../src/data/products.js';
 // Two runs side by side (two tasks at once) each need their own preview and
 // folder: SCREENS_ORIGIN=http://localhost:4174 SCREENS_DIR=screens-b.
 const ORIGIN = process.env.SCREENS_ORIGIN || 'http://localhost:4173';
+// The walk registers a shopper and places orders, so only this machine is allowed.
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+const ORIGIN_HOST = (() => {
+  try {
+    return new URL(ORIGIN).hostname;
+  } catch {
+    return String(ORIGIN);
+  }
+})();
 const OUT = fileURLToPath(
   new URL(`../../test-results/${process.env.SCREENS_DIR || 'screens'}/`, import.meta.url),
 );
@@ -251,7 +261,7 @@ function watch(page, label) {
   });
   page.on('request', (request) => {
     const url = new URL(request.url());
-    if (['http:', 'https:'].includes(url.protocol) && url.hostname !== 'localhost') {
+    if (['http:', 'https:'].includes(url.protocol) && url.hostname !== 'localhost' && url.hostname !== ORIGIN_HOST) {
       report(`request to another host: ${request.url()}`);
     }
   });
@@ -333,9 +343,11 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 /** design-reference/ over HTTP (its scripts do not load from file://). */
 function serveMockup() {
   const server = createServer((req, res) => {
-    const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^([/\\])+/, '');
-    const file = join(MOCKUP_DIR, path);
+    let file;
     try {
+      // inside the try: a malformed %-sequence makes decodeURIComponent throw
+      const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^([/\\])+/, '');
+      file = join(MOCKUP_DIR, path);
       if (!file.startsWith(MOCKUP_DIR) || !statSync(file).isFile()) throw new Error('not a file');
     } catch {
       res.writeHead(404).end();
@@ -374,6 +386,13 @@ async function main() {
   const unknown = asked.filter((name) => !names.includes(name));
   if (unknown.length) throw new Error(`unknown route: ${unknown.join(', ')} (one of ${names.join(', ')})`);
   const wanted = new Set(asked.length ? asked : names);
+
+  if (!LOCAL_HOSTS.has(ORIGIN_HOST)) {
+    process.stderr.write(
+      `refusing to run: SCREENS_ORIGIN host "${ORIGIN_HOST}" is not local (localhost, 127.0.0.1, [::1]); the walk registers a user and places orders\n`,
+    );
+    process.exit(1);
+  }
 
   mkdirSync(OUT, { recursive: true });
   const browser = await chromium.launch();

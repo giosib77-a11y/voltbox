@@ -377,7 +377,7 @@ storefront). Recipe for that admin stack (scratch DB `voltbox_browser`, every co
   once on `/` in the dark theme shows the skip link with dark text on gold (screenshot looked at), and in
   light as before; `palette.test.js` green; C1, C8.
 
-- [ ] **T43 · should-fix · screens.mjs would place orders against any origin it is given**
+- [x] **T43 · should-fix · screens.mjs would place orders against any origin it is given**
   owner: frontend-dev
   files: frontend/scripts/e2e/screens.mjs
   depends: —
@@ -703,7 +703,8 @@ Unverified (check before acting):
 - T38: checkout (serif headings, payment radio cards with a drawn circle and a peer focus ring, selected card primary-500 + inset ring so it does not shift) and confirmation (diamond-framed status icon, display order number and amounts with `lining-nums`). Mock orders placed at 1440 and 390 in both themes land on the confirmation; empty submit shows the field errors as before.
 - All Stage 3 tasks done at this commit: frontend gate (eslint, vitest 668, both builds) green.
 - Finish-check (2026-10-21): 2 should-fix → T42 (skip link white on gold in dark), T43 (screens.mjs origin guard, elevated); nits → Backlog. Admin pixel-identical to 55d11d0 on a scratch stack.
-- Next: fix round 1 — T42, T43.
+- T43: screens.mjs refuses a non-local `SCREENS_ORIGIN` before a browser starts (checked by the orchestrator: example.com and voltbox.ge → exit 1 with the message); a malformed `%` path on the mockup server answers 404.
+- Next: T42 (running).
 
 ## Stage 2 — Done
 Last session of Stage 2:
