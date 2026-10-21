@@ -707,7 +707,15 @@ Unverified (check before acting):
   not reproducible locally. Deploy checklist item 6 (photo over 5 MB on live) answers it.
 
 ## Blockers
-- None.
+- **should-fix, open (Stage 3 fix rounds spent, 2/2) — the product card's "add to cart" label is clipped on
+  phones.** Measured 2026-10-21 at 0c2a969 on `/category/phones` (mock build): at 390px all 12 card buttons
+  overflow (`scrollWidth` 151 > `clientWidth` 143), at 360px by 15px; at 1440 none. Introduced by T33
+  (`ProductCard.jsx`: the CTA got `whitespace-nowrap` at 13px so the label would not wrap; at the 2-column
+  phone width it no longer fits, and the button clips both ends and the cart icon —
+  `frontend/test-results/browser-check/final/flow/t44-light-390-cat-btn.png`). Suggested fix (one file,
+  owner frontend-dev): below `sm` drop the icon and the side padding to `px-2`, or let the label wrap to two
+  centred lines (`whitespace-normal leading-tight` + a min-height); done when every card button at 360 and
+  390 has `scrollWidth <= clientWidth` (the measurement above) and the label is readable in both themes.
 
 ## Run State
 - Stage: Stage 3 — Storefront redesign
@@ -743,7 +751,9 @@ Unverified (check before acting):
 - Fix round 1 re-check (2026-10-21): code-reviewer — T42 fixed; security-auditor — T43 fixed (8 non-local origins refused before a browser starts, incl. userinfo, suffix, trailing-dot and IPv4-mapped forms). Gates at 160f227: eslint, vitest 671, both builds; ruff, mypy 148, pytest 1097. 0 critical / 0 should-fix open; their nits → Backlog.
 - Final check (2026-10-21, cbcbd84): tester — every gate green (ruff, format 167, mypy 148, pytest 1097, alembic 0001→0016 + check clean; eslint, vitest 671, both builds); the frontend gate also green in node:22 (CI parity). browser-tester — 98 shots exit 0, every main flow in both themes, T42 confirmed; one should-fix (card link focus clipped, pre-existing) → T44, fix round 2.
 - T44: the card link draws an inset 2px primary-500 ring with no offset (the article's overflow-hidden clipped the global outer ring); new ProductCard.test fails on the old classes and passes now — re-run by the orchestrator both ways; ring seen in a browser in both themes.
-- Next: targeted re-check of T44 (gates, browser-tester), then the report.
+- T44 re-check: browser-tester — fixed (8 link cases, both themes, 1440 and 390); gates at 0c2a969: eslint, vitest 672, both builds; ruff, format 167, mypy 148, pytest 1097. The same re-check showed the 390 card CTA label clipped (measured by the orchestrator: all 12 buttons at 390 and 360) — fix rounds spent, so it is in Blockers.
+- Status: Not done — one open should-fix in Blockers (card CTA at 390). Everything else of the stage is done and checked.
+- Next: the owner reviews; `/auto continue` or a single fix for the Blockers item, then merge `agent-system` → main (Stage 2 and 3 together; see both deploy notes).
 
 ## Stage 2 — Done
 Last session of Stage 2:
