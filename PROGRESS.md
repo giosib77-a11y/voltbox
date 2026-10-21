@@ -439,6 +439,18 @@ storefront). Recipe for that admin stack (scratch DB `voltbox_browser`, every co
   as lists by Safari + VoiceOver (unverified; `role="list"` would fix); browser: the mobile filter sheet
   shows "ფილტრი" twice (sheet title + panel heading), checkout legends sit on the card border with a canvas
   notch, the 390 header search placeholder is cut without an ellipsis (low).
+- T42 re-check (2026-10-21): `storefrontFills.test.js` guards today's code (a plain grep finds `text-white`
+  only on accent/danger/scrim fills) but has blind spots for future edits: a `'` or `` ` `` inside a comment
+  desynchronises its string matching (a planted pair was missed in ≈13% of `className` lines, upper bound),
+  classes split across variables or array items are not joined, and it checks only
+  `bg-primary-(600|hover|press)` — not `bg-primary`, `-400/500/700` (gold in dark too), `text-white/90` or
+  `!text-white`. Cheapest hardening: strip comments before matching, widen both patterns (low).
+- T43 re-check (2026-10-21, pre-existing, not opened by T43): the origin guard checks the page's origin, not
+  where the build sends API calls — run against an http-mode `dist/` (e.g. CI's
+  `VITE_API_BASE_URL=http://localhost:8000/api/v1`), the walk registers and orders through a local :8000,
+  which writes to live only if that uvicorn was started against the live database (already forbidden by
+  CLAUDE.md). Fix if wanted: `context.route` in `walkSite` aborts any `/api/` request — mock mode sends
+  none (low).
 
 - T28 (2026-10-19): `vite preview` answers a missing static file (e.g. a font) with 200 `text/html`
   (SPA fallback). If the Render static site rewrites `/*` → `/index.html` the same way, a missing asset in
@@ -705,7 +717,8 @@ Unverified (check before acting):
 - Finish-check (2026-10-21): 2 should-fix → T42 (skip link white on gold in dark), T43 (screens.mjs origin guard, elevated); nits → Backlog. Admin pixel-identical to 55d11d0 on a scratch stack.
 - T43: screens.mjs refuses a non-local `SCREENS_ORIGIN` before a browser starts (checked by the orchestrator: example.com and voltbox.ge → exit 1 with the message); a malformed `%` path on the mockup server answers 404.
 - T42: `.skip-link` → `focus:text-on-primary` (dark 8.62:1 on gold); new `storefrontFills.test.js` (a primary fill with `text-white` in one class string or `@apply`) fails on the old index.css:98 and passes after — re-run by the orchestrator both ways.
-- Next: targeted re-check (full gates; code-reviewer on T42, security-auditor on T43).
+- Fix round 1 re-check (2026-10-21): code-reviewer — T42 fixed; security-auditor — T43 fixed (8 non-local origins refused before a browser starts, incl. userinfo, suffix, trailing-dot and IPv4-mapped forms). Gates at 160f227: eslint, vitest 671, both builds; ruff, mypy 148, pytest 1097. 0 critical / 0 should-fix open; their nits → Backlog.
+- Next: final check (tester, browser-tester).
 
 ## Stage 2 — Done
 Last session of Stage 2:
