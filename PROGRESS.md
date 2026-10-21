@@ -436,6 +436,13 @@ final-check rule "new findings go to Blockers because the rounds are spent" did 
 
 ## Backlog (needs user decision)
 
+- Font preload warning on live in Chrome, not reproducible locally (2026-10-21, nit): the console says
+  `noto-serif-georgian-georgian-wght.woff2` and `noto-sans-georgian-georgian-400.woff2` were preloaded but not
+  used. Checked and correct: `crossorigin` on both preloads, `href` = the `@font-face` `src` (also in the
+  build), Georgian `unicode-range`. Not reproduced in Chromium (headless shell and full 156) on the mock
+  build (`/`, category, product, `/login`, `/faq`, `/admin`, `/en/*`), the dev server, an http build with an
+  8 s API delay, cache disabled, or a warm-cache reload — each file is fetched once by the preload and used.
+  Next step if it matters: the browser, URL and exact message from live. The owner chose to leave it.
 - Stage 3 nits (2026-10-19): the header's categories button keeps lucide `LayoutGrid` where DESIGN.md §6
   draws a rhombus; the mobile drawer is `w-[86vw] max-w-sm` (shared Modal) where §6 says min(85vw, 340px);
   search suggestions do not set the matched part in 500 weight as the mockup does (new text-splitting
