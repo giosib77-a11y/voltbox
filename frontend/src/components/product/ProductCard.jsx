@@ -44,7 +44,7 @@ function ProductCard({ product, className = '', priority = false }) {
     >
       <Link
         to={`/product/${product.slug}`}
-        className="flex flex-1 flex-col focus-visible:outline-none"
+        className="flex flex-1 flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 focus-visible:ring-offset-0"
         aria-label={product.name}
       >
         {/* The photo tile: full width, no padding, its own contour below

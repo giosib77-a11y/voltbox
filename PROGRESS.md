@@ -398,7 +398,7 @@ storefront). Recipe for that admin stack (scratch DB `voltbox_browser`, every co
 Final browser pass (2026-10-21, cbcbd84) found one more should-fix → fix round 2 (one round was left, so the
 final-check rule "new findings go to Blockers because the rounds are spent" did not apply):
 
-- [ ] **T44 · should-fix · A product card's link has almost no visible keyboard focus**
+- [x] **T44 · should-fix · A product card's link has almost no visible keyboard focus**
   owner: frontend-dev
   files: frontend/src/components/product/ProductCard.jsx, frontend/src/components/product/ProductCard.test.jsx (new)
   depends: —
@@ -469,6 +469,11 @@ final-check rule "new findings go to Blockers because the rounds are spent" did 
   which writes to live only if that uvicorn was started against the live database (already forbidden by
   CLAUDE.md). Fix if wanted: `context.route` in `walkSite` aborts any `/api/` request — mock mode sends
   none (low).
+- Final browser pass nits (2026-10-21): a repeated failed checkout submit stacks identical error toasts
+  (no de-duplication; pre-existing behaviour); in the large cart/checkout total the system-font `₾` looks
+  heavier than Cormorant's digits (the latin-ext subset would draw it — Decision Log, T27); a one-frame
+  empty-cart state may flash between placing an order and the confirmation (seen once in a screenshot
+  taken the instant the URL changed; unconfirmed) (low).
 
 - T28 (2026-10-19): `vite preview` answers a missing static file (e.g. a font) with 200 `text/html`
   (SPA fallback). If the Render static site rewrites `/*` → `/index.html` the same way, a missing asset in
@@ -737,7 +742,8 @@ Unverified (check before acting):
 - T42: `.skip-link` → `focus:text-on-primary` (dark 8.62:1 on gold); new `storefrontFills.test.js` (a primary fill with `text-white` in one class string or `@apply`) fails on the old index.css:98 and passes after — re-run by the orchestrator both ways.
 - Fix round 1 re-check (2026-10-21): code-reviewer — T42 fixed; security-auditor — T43 fixed (8 non-local origins refused before a browser starts, incl. userinfo, suffix, trailing-dot and IPv4-mapped forms). Gates at 160f227: eslint, vitest 671, both builds; ruff, mypy 148, pytest 1097. 0 critical / 0 should-fix open; their nits → Backlog.
 - Final check (2026-10-21, cbcbd84): tester — every gate green (ruff, format 167, mypy 148, pytest 1097, alembic 0001→0016 + check clean; eslint, vitest 671, both builds); the frontend gate also green in node:22 (CI parity). browser-tester — 98 shots exit 0, every main flow in both themes, T42 confirmed; one should-fix (card link focus clipped, pre-existing) → T44, fix round 2.
-- Next: T44.
+- T44: the card link draws an inset 2px primary-500 ring with no offset (the article's overflow-hidden clipped the global outer ring); new ProductCard.test fails on the old classes and passes now — re-run by the orchestrator both ways; ring seen in a browser in both themes.
+- Next: targeted re-check of T44 (gates, browser-tester), then the report.
 
 ## Stage 2 — Done
 Last session of Stage 2:
