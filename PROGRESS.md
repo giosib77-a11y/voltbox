@@ -355,6 +355,46 @@ both widths; the home against the mockup's shots; `/en` spot checks; the admin p
 product list and form, order list and detail with `ConfirmDialog`, a toast) compared with the commit
 before T27 on a local stack as in Stage 2 — it must be unchanged.
 
+Finish-check result (2026-10-21, over `db9a242..84c89c0`): code-reviewer 1 should-fix, security-auditor 0
+(2 nits), browser-tester 0 (the admin at HEAD vs `55d11d0`: 0 differing pixels on login, dashboard, product
+list and form, order list and detail, brand ConfirmDialog and Modal; the admin keeps its palette after a dark
+storefront). Recipe for that admin stack (scratch DB `voltbox_browser`, every command with
+`VOLTBOX_NO_DOTENV=1`, a local `DATABASE_URL`, empty external keys, a throwaway `JWT_SECRET` and
+`CORS_ORIGINS` for the preview ports; `manage_admin.py` rejects a `.test` email domain).
+
+- [ ] **T42 · should-fix · The skip link is white on gold in the dark theme (2.24:1)**
+  owner: frontend-dev
+  files: frontend/src/index.css (shared — T27, T34 done), frontend/src/storefrontFills.test.js (new)
+  depends: —
+  What: `.skip-link` (index.css, used only by the storefront's `Layout.jsx`) still has
+  `focus:bg-primary-600 … focus:text-white`. T27 made dark `primary-600` gold (#C9A96E): white on it is
+  2.24:1 (AA needs 4.5); `on-primary` (#0E0E0F) gives 8.62:1. Change to `focus:text-on-primary` (admin
+  value #ffffff — nothing changes there). Regression test first: a vitest that reads every storefront
+  source (`src/**/*.{jsx,js,css}` except `src/admin/**` and tests) and fails when one class string holds
+  both a `bg-primary-(600|hover|press)` fill and `text-white` — the C3 rule; it must fail on today's
+  index.css and pass after.
+  done when: the new test fails before the fix (shown in the report) and passes after; in a browser, Tab
+  once on `/` in the dark theme shows the skip link with dark text on gold (screenshot looked at), and in
+  light as before; `palette.test.js` green; C1, C8.
+
+- [ ] **T43 · should-fix · screens.mjs would place orders against any origin it is given**
+  owner: frontend-dev
+  files: frontend/scripts/e2e/screens.mjs
+  depends: —
+  What: `SCREENS_ORIGIN` (added for parallel runs) is not limited to the local machine, and the script
+  registers a shopper and places orders through checkout — pointed by mistake at the live site it would
+  create a user and real orders that take stock (4× per run). Elevated from the auditor's nit: CLAUDE.md
+  forbids any path that writes to the live database, and the guard is a few lines. In `main()`, before a
+  browser starts: exit 1 with one clear line unless `new URL(ORIGIN).hostname` is `localhost`,
+  `127.0.0.1` or `[::1]`. Same file, auditor's second nit: the mockup server's `decodeURIComponent`
+  (≈ line 336) throws on a malformed `%` sequence and kills the run — move the path computation inside
+  the `try` and answer 404.
+  done when: `SCREENS_ORIGIN=https://example.com node scripts/e2e/screens.mjs home` exits 1 with the message
+  and no browser launch (report the output); `SCREENS_ORIGIN=http://127.0.0.1:<port>` against a running
+  preview shoots `home` with exit 0; a request for `/%E0%A4%A` to the mockup server answers 404 (a
+  scratchpad snippet, or reasoning on the code if the server is not reachable from outside the script);
+  `npx eslint scripts/e2e/screens.mjs` clean; C1.
+
 ### Deploy notes — Stage 3 (nothing here is run from the agent side)
 - Frontend only: no migration, no backend change, no environment variable, `render.yaml` unchanged.
   After the owner merges to `main`, the storefront (`voltbox-storefront`) rebuilds.
@@ -387,6 +427,18 @@ before T27 on a local stack as in Stage 2 — it must be unchanged.
   the row is a grid and `scrollBy` does nothing (pre-existing, not introduced by the redesign); the FAQ stays
   as h2 sections, where DESIGN.md §9.1 draws `details` rows with a chevron (a behaviour change, outside a
   look-only stage) (low).
+- Stage 3 finish-check nits (2026-10-21): `Badge` tone `new` has no user since T33 (dead code, its comment
+  still points at it); the colour role `glow` shares its name with `boxShadow.glow`, so `shadow-glow` emits
+  both utilities (same result today, fragile — rename the colour role, e.g. `halo`); `MobileMenu.jsx`
+  lines 62/72/82/104/117 miss a space before `aria-hidden`; `CategoryIcon` framed mode compares
+  `className` with its default string (an explicit `'h-5 w-5'` is dropped silently); the rhombus paths are
+  copied in `Home.jsx` (from `Logo.jsx`) and `CheckoutSuccess.jsx` (from `CategoryIcon.jsx`) — one export
+  would do; `theme-color` follows the system scheme, not the shopper's pick (and `/admin`'s bar is no longer
+  blue); the brand label in `font-display` (ProductCard, ProductDetails) has no `lining-nums` — a brand with
+  digits would show old-style figures; the diamond-bullet lists (`list-style: none`) may not be announced
+  as lists by Safari + VoiceOver (unverified; `role="list"` would fix); browser: the mobile filter sheet
+  shows "ფილტრი" twice (sheet title + panel heading), checkout legends sit on the card border with a canvas
+  notch, the 390 header search placeholder is cut without an ellipsis (low).
 
 - T28 (2026-10-19): `vite preview` answers a missing static file (e.g. a font) with 200 `text/html`
   (SPA fallback). If the Render static site rewrites `/*` → `/index.html` the same way, a missing asset in
@@ -624,8 +676,8 @@ Unverified (check before acting):
 
 ## Run State
 - Stage: Stage 3 — Storefront redesign
-- Finish-check this stage: not run
-- Fix rounds this stage: 0/2
+- Finish-check this stage: done (2026-10-21; code-reviewer, security-auditor, browser-tester) → T42, T43
+- Fix rounds this stage: 1/2
 - Failed attempts: —
 
 ## Last Session
@@ -650,7 +702,8 @@ Unverified (check before acting):
 - T37: cart (serif h1, light photo tiles with `shopPlaceholder`, serif names, display prices and total with `lining-nums`, line-coloured dividers); stepper frame stays ink-300 (field boundary). Quantity, the 10-per-line clamp, remove and undo behave as before (browser).
 - T38: checkout (serif headings, payment radio cards with a drawn circle and a peer focus ring, selected card primary-500 + inset ring so it does not shift) and confirmation (diamond-framed status icon, display order number and amounts with `lining-nums`). Mock orders placed at 1440 and 390 in both themes land on the confirmation; empty submit shows the field errors as before.
 - All Stage 3 tasks done at this commit: frontend gate (eslint, vitest 668, both builds) green.
-- Next: finish-check.
+- Finish-check (2026-10-21): 2 should-fix → T42 (skip link white on gold in dark), T43 (screens.mjs origin guard, elevated); nits → Backlog. Admin pixel-identical to 55d11d0 on a scratch stack.
+- Next: fix round 1 — T42, T43.
 
 ## Stage 2 — Done
 Last session of Stage 2:
