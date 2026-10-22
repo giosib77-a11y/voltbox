@@ -25,6 +25,12 @@
   - nit-ებიდან 2 ახალია (A-002, A-003);
   - 17 წინა აუდიტის ღია nit-ია, რომლებიც ახლანდელ კოდში ისევ ძალაშია (A-004–A-020). მათ ახალი ID მიიღეს, ძველი ID ფრჩხილებშია.
 
+**`/fix A-001` 2026-10-22** (ბრენჩი `fix/pillow-certifi`):
+- A-001 — fixed (verified), `fc5b3e3`. ახალი ტესტები ძველ კოდზე ვარდებოდა; მიზნობრივმა re-review-მ (security-auditor) A-001 დახურულად ჩათვალა და ოთხი ახალი nit იპოვა (A-021–A-024). ღია: მხოლოდ nit-ები.
+- საბოლოო შემოწმება (`fc5b3e3`, tester):
+  - backend: ruff ✅ · format 167 ✅ · mypy 148 ✅ · **pytest 1106** (baseline 1097, +9) · alembic 0001→0016 + check ✅ · **pip-audit (CI-ის ფორმა) 0** (baseline 25, exit 1) · `docker build` ✅;
+  - frontend (უცვლელი): lint ✅ · vitest 672 / 57 · build http ✅ · build mock ✅ · npm audit 0.
+
 PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში ჩაწერილი საკითხები აქ აღარ მეორდება.
 შეკვეთების სანაგვესა (Stage 2) და რედიზაინში (Stage 3) critical ან should-fix ვერ ვიპოვეთ. წინა აუდიტის გასწორებებში რეგრესია არ ჩანს. რა შემოწმდა, წერია ბოლოს.
 
@@ -50,7 +56,16 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   1. `certifi` → 2026.10.19 და `pillow` → 13.0.0 ორივე lock-ში (`requirements.txt`, `requirements-dev.txt`; `requirements-build.txt` მათ არ შეიცავს). განახლება Linux container-ში, `--upgrade-package`-ით (`backend/README.md`, „დამოკიდებულებების lock“). Pillow 13 major ვერსიაა: `DECODE_COST`-ის ცხრილი (`storage.py:89`) 12.3-ზეა გაზომილი, ამიტომ თავიდან უნდა გაიზომოს. შემდეგ უნდა გაიაროს `test_admin_images.py`-მ, image build-მა და `pip check`-მა.
   2. ვერსიისგან დამოუკიდებელი გამაგრება: ორივე `Image.open`-ში `formats=list(ALLOWED_FORMATS)`. ამის შემდეგ GIF/TIFF `UNSUPPORTED_IMAGE_FORMAT`-ის ნაცვლად შეიძლება `INVALID_IMAGE` გახდეს — უნდა გადაიხედოს ტესტები, რომლებიც ამ კოდს ამოწმებენ (`grep -rn UNSUPPORTED_IMAGE_FORMAT backend/tests`, 4 ადგილი). ადმინისთვის საჭირო შეტყობინება უნდა დარჩეს.
   3. თუ Pillow 13 მაშინვე ვერ ჯდება: certifi მაინც განახლდეს, Pillow-ის ID-ებს კი დაემატოს `--ignore-vuln` მიზეზითა და ვადით (როგორც `backend.yml:139` ითხოვს), (2)-ის გამაგრებასთან ერთად.
-- **owner:** backend-dev · **status:** open
+- **owner:** backend-dev
+- **status:** fixed (verified) — `fc5b3e3`. რა გაკეთდა:
+  - lock-ები Linux container-ში თავიდან დაგენერირდა `--upgrade-package`-ით. შეიცვალა მხოლოდ certifi (→ 2026.10.19) და pillow (→ 13.0.0); `requirements-build.txt` უცვლელია; `pyproject.toml`-ში `pillow>=13.0`.
+  - ორივე `Image.open` იხსნება `formats=`-ით. სხვა ფორმატი (GIF, TIFF, ...) plugin-ის `accept()`-ით ცნობილდება, parser-ის გამოძახების გარეშე, და ისევ `UNSUPPORTED_IMAGE_FORMAT`-ს იღებს.
+
+  მტკიცებულება:
+  - **pip-audit (CI-ის ფორმა):** 0, exit 0 — orchestrator-მა და tester-მა ცალ-ცალკე გაუშვეს.
+  - **ტესტები:** `test_a_format_we_do_not_accept_is_never_parsed[GIF|TIFF|BMP|PPM|EPS]` და `test_shrink_to_fit_opens_only_the_format_it_was_validated_as` ძველ `storage.py`-ზე ვარდებოდა (6 failed; orchestrator-მაც გაუშვა).
+  - **Linux-ზე, ახალი lock-ით (CI-ის base image):** pytest 1106, `pip check` სუფთაა, `TestDecodeMemoryIsBounded` მწვანეა. Peak-ები 13.0.0-ზე 90.2–91.1 MiB-ია, 12.3-ზე 90.4–91.4. ამიტომ `DECODE_COST` უცვლელია.
+  - **re-review (security-auditor):** დახურულია; იპოვა A-021–A-024.
 
 ---
 
@@ -94,6 +109,35 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 
 ყველას status: open.
 
+### A-001-ის re-review-ის nit-ები (security-auditor, 2026-10-22)
+
+#### A-021 · nit · კომენტარი „მხოლოდ სამი parser ხედავს ბაიტებს“ ზედმეტს ამბობს — JPEG-ის გზა TIFF-ის IFD კოდს მაინც უშვებს
+- **ფაილი:** `backend/app/services/storage.py:225-227`, docstring `:49-64`
+- **სცენარი / შედეგი:** EXIF-იან JPEG-ზე, რომელსაც JFIF dpi არ აქვს (კამერის ჩვეულებრივი ფოტო), Pillow-ის JPEG plugin-ი თავად იძახებს `getexif()`-ს. ის `TiffImagePlugin.ImageFileDirectory_v2`-ს გადის (`JpegImagePlugin.py` `_read_dpi_from_exif`). იგივე ხდება APP2 MPF-ზეც (`_getmp`). libtiff-ის decoder-ი აქამდე არ აღწევს და Pillow 13-ზე ცნობილი CVE არ არის. თუმცა კომენტარის მიხედვით მომავალი TIFF-ის advisory JPEG ატვირთვას არ ეხება, რაც არასწორია.
+- **გამოსწორება:** კომენტარში ჩაიწეროს, რომ JPEG-ის გზაზე TIFF-ის tag-directory-ის კოდი ეშვება, და `ImageFileDirectory`-ის advisory-ები JPEG ატვირთვებზეც გადამოწმდეს.
+- **owner:** backend-dev · **status:** open
+
+#### A-022 · nit · `_announced_format`-ის „დაშვებული ფორმატი → None“ branch-ის მიზეზი არასწორია და ტესტი მას არ ამოწმებს
+- **ფაილი:** `backend/app/services/storage.py:62-64`; `backend/tests/test_admin_images.py:242-259`
+- **სცენარი / შედეგი:**
+  - docstring-ის მაგალითი არასწორია: MPO Pillow 13-ში open-ზე რეგისტრირებული არ არის (`MpoImagePlugin.py:204` დაკომენტარებულია), ამიტომ `Image.OPEN`-ში არ ჩანს.
+  - ტესტი branch-ს ვერ ამოწმებს: დაზიანებული JPEG/PNG-ის prefix-ს სხვა plugin-ის `accept` არ ემთხვევა, WebP-ის ნიმუში (12 ბაიტი, `VP8` chunk-ის გარეშე) კი WebP-ის `_accept`-საც ვერ გადის. ამიტომ სამივე „damaged“ ტესტი ამ branch-ის გარეშეც გაივლიდა.
+  - branch-ი უვნებელია და დაცვის დამატებითი ფენაა.
+- **გამოსწორება:** docstring-ში სწორი მიზეზი; WebP-ის ნიმუშს დაემატოს `b"VP8 "`, რომ branch მართლა შემოწმდეს.
+- **owner:** backend-dev · **status:** open
+
+#### A-023 · nit · CI-ის pip-audit ხელსაწყოს lock-ში ისევ certifi 2026.7.22-ია
+- **ფაილი:** `.github/pip-audit/requirements.txt:17`
+- **სცენარი / შედეგი:** ეს audit ხელსაწყოს გარემოა და CI-ის ნაბიჯი მას არ ამოწმებს. ქსელში მყოფ თავდამსხმელს, რომელსაც კომპრომეტირებული intermediate აქვს, შეუძლია advisory-ების პასუხი გააყალბოს და audit სუფთა გამოიყვანოს. რისკი დაბალია.
+- **გამოსწორება:** certifi → 2026.10.19 ამ lock-ში, `.github/pip-audit/requirements.in`-ში აღწერილი container-ის ბრძანებით (ან Dependabot-ის PR-ით).
+- **owner:** task-executor · **status:** open
+
+#### A-024 · nit · `config.py`-ის კომენტარი ისევ „measured on Pillow 12.3“-ს ამბობს
+- **ფაილი:** `backend/app/core/config.py:208`
+- **სცენარი / შედეგი:** A-001-მა გაზომვის აღწერა `storage.py`-ში განაახლა, ეს კომენტარი კი არა.
+- **გამოსწორება:** დაემატოს „re-checked on 13.0.0 (A-001)“.
+- **owner:** backend-dev · **status:** open
+
 ---
 
 ## შესამოწმებელი (დაუდასტურებელი)
@@ -123,6 +167,12 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 - **tester: `pip-audit` 10 წუთში გაიჭედა.** ხელახლა გაეშვა `--disable-pip`-ით (როგორც CI-ში) და 25 სისუსტე აჩვენა
   (A-001). გაჭედვის სავარაუდო მიზეზი ისაა, რომ `--disable-pip`-ის გარეშე pip-audit dependency-ებს თავიდან resolve-ს
   უკეთებს. ეს არ გადამოწმებულა; კოდის ხარვეზად არ ჩაიწერა.
+- **security-auditor (A-001-ის re-review): TGA, IM, SPIDER და PCD ფაილები ახლა `INVALID_IMAGE`-ს იღებს
+  `UNSUPPORTED_IMAGE_FORMAT`-ის ნაცვლად** (მათ plugin-ებს `accept` არ აქვს), ხოლო ზოგი არა-გამოსახულება, რომლის prefix
+  ფართო `accept`-ს ემთხვევა (XBM, WMF, DIB), „format“-ის შეტყობინებას იღებს. იცვლება მხოლოდ შეტყობინების ტექსტი
+  ადმინისთვის, ფაილი ორივე შემთხვევაში უარყოფილია. reviewer-მაც თქვა, რომ გამოსწორება არ სჭირდება; მიგნებად არ ჩაიწერა.
+- **backend-dev (A-001): MPO-header-იანი JPEG `UNSUPPORTED_IMAGE_FORMAT`-ით უარყოფილია.** ჰიპოთეზაა და არ შემოწმებულა. თუ
+  სწორია, ასე იყო A-001-მდეც და ცვლილება მას არ ეხება. შესამოწმებელია, წერს თუ არა ამას რეალური ტელეფონი.
 - **tester-ის warning-ი** „jsdom created 57 times“ სიჩქარის მინიშნებაა და შეცდომა არ არის.
 
 ## რა შემოწმდა და რიგზეა (მოკლედ)
