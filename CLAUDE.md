@@ -9,7 +9,7 @@
 - hosting: Render Blueprints (`backend/render.yaml`, `frontend/render.yaml`); CI: GitHub Actions
 
 ## უსაფრთხოება — ყოველთვის
-- **ყოველ commit-მდე `git branch --show-current`. თუ `agent-system` არ არის — გაჩერდი და მკითხე.**
+- **ყოველ commit-მდე `git branch --show-current`. commit მხოლოდ `agent-system`-ზე ან `/auto`-ს და `/fix`-ის ბრენჩებზე (`team/...`, `fix/...`); `main`-ზე — არასდროს. სხვა შემთხვევაში გაჩერდი და მკითხე.**
 - `git push`, `main`-ში merge — მხოლოდ მფლობელის თანხმობით.
 - deploy არასდროს (Render-ზე არც trigger, არც env ცვლილება).
 - `backend/.env` არ წაიკითხო და არ შეცვალო. ის ჩვეულებრივ **ლაივ Supabase-ზე** მიუთითებს.
@@ -37,10 +37,13 @@ frontend — `frontend/`-იდან.
 
 - dev (backend): `docker compose up -d --wait db redis` → `DATABASE_URL=postgresql://voltbox:voltbox@localhost:55432/voltbox uvicorn app.main:app --reload`
 - dev (frontend): `npm run dev` (`frontend/.env`-ში `VITE_API_MODE=mock|http`)
-- lint: backend `ruff check . && ruff format --check .` · frontend `npm run lint`
-- typecheck: backend `mypy app scripts tests` (CI-ის ნაკრები; README-ის `mypy app scripts` ნაკლებია)
-- test: backend `pytest -q` (სჭირდება `docker compose up -d --wait db redis` და ერთხელ
-  `docker compose exec db createdb -U voltbox voltbox_test`) · frontend `npm test`
+- lint: `cd backend && .venv/Scripts/ruff.exe check . && .venv/Scripts/ruff.exe format --check .`
+- lint: `cd frontend && npm run lint`
+- typecheck: `cd backend && .venv/Scripts/mypy.exe app scripts tests` (CI-ის ნაკრები; README-ის `mypy app scripts` ნაკლებია)
+- test: `cd frontend && npm test`
+- test: `cd backend && .venv/Scripts/pytest.exe -q`
+  backend-ის ტესტებს სჭირდება `docker compose up -d --wait db redis` და ერთხელ
+  `docker compose exec db createdb -U voltbox voltbox_test`.
 - build: frontend `VITE_API_MODE=http VITE_API_BASE_URL=http://localhost:8000/api/v1 npm run build`
   და იგივე `VITE_API_MODE=mock`-ით (CI ორივეს აშენებს) · backend image `docker build -t voltbox-api:check .`
 - migrations (მხოლოდ ლოკალური ბაზა): `DATABASE_URL=postgresql://voltbox:voltbox@localhost:55432/voltbox alembic upgrade head`,
