@@ -35,7 +35,7 @@ from app.services.storage import (
     shrink_to_fit,
     validate_image,
 )
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from pydantic import SecretStr
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -179,6 +179,84 @@ async def test_a_gif_is_rejected_even_though_it_decodes(
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "UNSUPPORTED_IMAGE_FORMAT"
+
+
+#: Formats Pillow can open that are not ours, one per plugin that has had
+#: vulnerabilities in its parser. Each needs a Pillow writer, so the bytes are
+#: real files and not hand-made headers.
+FOREIGN_FORMATS = ["GIF", "TIFF", "BMP", "PPM", "EPS"]
+
+
+def _forbid_parser(monkeypatch: pytest.MonkeyPatch, fmt: str) -> None:
+    """Make the format's parser blow up with something `validate_image` does not catch.
+
+    `_open` is the plugin's parser: `Image.open` calls it only once the file's
+    signature matched the plugin. A RuntimeError is neither a decode failure nor
+    an `OSError`, so reaching the parser turns into a 500 instead of a refusal.
+    """
+    Image.init()
+    factory = Image.OPEN[fmt][0]
+
+    def reached(self: object) -> None:
+        raise RuntimeError(f"the {fmt} parser was handed an upload")
+
+    monkeypatch.setattr(factory, "_open", reached)
+
+
+@pytest.mark.parametrize("fmt", FOREIGN_FORMATS)
+async def test_a_format_we_do_not_accept_is_never_parsed(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    product_id: str,
+    storage: InMemoryStorage,
+    monkeypatch: pytest.MonkeyPatch,
+    fmt: str,
+) -> None:
+    """Pillow's other parsers are attack surface for a file we refuse anyway.
+
+    The refusal still names the format, which is what lets the panel tell the
+    admin what to export instead of calling the file broken.
+    """
+    data = image_bytes(fmt)
+    _forbid_parser(monkeypatch, fmt)
+
+    response = await _upload(client, headers, product_id, data=data)
+
+    assert response.status_code == 400
+    error = response.json()["error"]
+    assert error["code"] == "UNSUPPORTED_IMAGE_FORMAT"
+    assert error["details"]["detected"] == fmt
+    assert storage.objects == {}
+
+
+def test_shrink_to_fit_opens_only_the_format_it_was_validated_as(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The second `Image.open` is restricted too, not just the validating one."""
+    gif = image_bytes("GIF")
+    _forbid_parser(monkeypatch, "GIF")
+
+    with pytest.raises(UnidentifiedImageError):
+        shrink_to_fit(gif, "PNG")
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"\xff\xd8\xff\xe0" + b"\x00" * 12,
+        b"\x89PNG\r\n\x1a\n" + b"\x00" * 8,
+        b"RIFF\x00\x00\x00\x00WEBP",
+    ],
+    ids=["jpeg", "png", "webp"],
+)
+async def test_a_damaged_file_of_an_allowed_format_is_not_called_another_format(
+    client: httpx.AsyncClient, headers: dict[str, str], product_id: str, data: bytes
+) -> None:
+    """MPO shares JPEG's signature: a signature match is not the same as 'foreign'."""
+    response = await _upload(client, headers, product_id, data=data)
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_IMAGE"
 
 
 #: The first box of an iPhone photo, and of an HEIC whose major brand is the

@@ -46,6 +46,41 @@ def _is_heic(data: bytes) -> bool:
     return any(brand in _HEIC_BRANDS for brand in brands)
 
 
+def _announced_format(data: bytes) -> str | None:
+    """The Pillow format, other than an allowed one, that the first bytes announce.
+
+    A signature check only: it asks each plugin's own `accept` function about the
+    16-byte prefix and never calls the plugin's parser. That is the point. A
+    plain `Image.open` hands an upload to every parser Pillow has until one
+    takes it, so the GIF, TIFF, EPS, PPM, MSP... parsers - where most of
+    Pillow's published vulnerabilities live - ran on bytes from the network
+    only to find out the file was not JPEG, PNG or WebP. `validate_image` now
+    opens with `formats=` the allowed three, and this is how a file that
+    Pillow could have opened as something else is still told apart from one
+    that is not an image: the panel tells the admin which format to export.
+
+    What still holds: a file whose prefix also matches an allowed format is not
+    "another format" - it is an allowed one that failed to parse (MPO shares
+    JPEG's signature), so the answer is None and it stays INVALID_IMAGE.
+    """
+    Image.init()  # registers every plugin (imports only; no file is parsed)
+    prefix = data[:16]
+    announced: list[str] = []
+    for name, (_factory, accept) in Image.OPEN.items():
+        if accept is None:
+            continue
+        try:
+            matched = accept(prefix) is True
+        except Exception:  # noqa: S112 - a probe must never turn a refusal into a 500
+            continue
+        if not matched:
+            continue
+        if name in ALLOWED_FORMATS:
+            return None
+        announced.append(name)
+    return announced[0] if announced else None
+
+
 def _unsupported_format(detected: str, declared_type: str | None) -> ValidationError:
     return ValidationError(
         "Only JPEG, PNG and WebP images are accepted",
@@ -59,7 +94,11 @@ _MIB = 1024 * 1024
 #: What one upload costs to verify, decode and shrink, as `(fixed, per pixel)`.
 #:
 #: Measured, not derived: `validate_image` + `shrink_to_fit` on one image per
-#: case in a fresh process, Pillow 12.3, peak RSS in the production image. The
+#: case in a fresh process, peak RSS in the production image. Sized on Pillow
+#: 12.3; re-checked on 13.0.0 (python:3.14.7-slim-trixie, the locked wheels, the
+#: four cases of TestDecodeMemoryIsBounded, three runs each): the worst-case
+#: peaks came out at 90.2-91.1 MiB against 90.4-91.4 on 12.3, within the 0.5 MiB
+#: the runs differ by among themselves, so nothing below was changed. The
 #: audit that asked for this limit assumed one number for every format - 50M
 #: pixels x 4 bytes, around 200 MB - where a WebP at that resolution actually
 #: peaks at 812 MB. That spread is why the limit cannot be a single pixel count:
@@ -183,7 +222,10 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
         )
 
     try:
-        with Image.open(io.BytesIO(data)) as probe:
+        # `formats=` is a security boundary, not an optimisation: only the three
+        # parsers we accept ever see the bytes. Anything else is answered below
+        # from its signature (`_announced_format`).
+        with Image.open(io.BytesIO(data), formats=list(ALLOWED_FORMATS)) as probe:
             image_format = (probe.format or "").upper()
             width, height = probe.size
             # While the header is still open: verify() releases it, and the
@@ -206,6 +248,8 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
     except (UnidentifiedImageError, OSError, ValueError) as exc:
         if _is_heic(data):
             raise _unsupported_format("HEIC", declared_type) from exc
+        if (announced := _announced_format(data)) is not None:
+            raise _unsupported_format(announced, declared_type) from exc
         raise ValidationError("This file is not a readable image", code="INVALID_IMAGE") from exc
 
     if not allowed:
@@ -277,7 +321,9 @@ def shrink_to_fit(data: bytes, image_format: str) -> bytes:
     on a transparent background turns into one on a black background otherwise,
     which is a worse picture than a large one.
     """
-    with Image.open(io.BytesIO(data)) as image:
+    # The one parser `validate_image` already accepted the file for, so a caller
+    # that skips validation cannot reach another one through this call.
+    with Image.open(io.BytesIO(data), formats=[image_format]) as image:
         if max(image.size) <= MAX_STORED_EDGE:
             return data
 

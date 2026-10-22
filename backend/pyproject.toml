@@ -29,7 +29,10 @@ dependencies = [
     "orjson>=3.10",
     # Uploaded images are verified by actually decoding them - the extension
     # and the client-declared MIME type are both attacker-controlled.
-    "pillow>=11.0",
+    # 13.0 is the first release past 24 published parser CVEs (GIF, TIFF, EPS,
+    # PPM... and part of PNG); storage.py also hands Image.open only the three
+    # formats it accepts, so the others' parsers never see an upload.
+    "pillow>=13.0",
     # FastAPI needs this for multipart/form-data; without it an UploadFile
     # parameter raises at import time, not at request time.
     "python-multipart>=0.0.20",
