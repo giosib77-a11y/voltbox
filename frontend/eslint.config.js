@@ -20,7 +20,6 @@ export default [
 
   {
     files: ['**/*.{js,jsx}'],
-    ...js.configs.recommended,
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -33,7 +32,10 @@ export default [
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
     },
+    // Spreading js.configs.recommended into this object did nothing: the
+    // `rules` key below replaced its rules, so no-undef and the rest never ran.
     rules: {
+      ...js.configs.recommended.rules,
       ...react.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
       // ახალი JSX transform — React-ის იმპორტი აღარ სჭირდება

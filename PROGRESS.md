@@ -436,6 +436,13 @@ final-check rule "new findings go to Blockers because the rounds are spent" did 
 
 ## Backlog (needs user decision)
 
+- `PHONES_IN_ENGLISH` in `frontend/src/storefrontCopy.test.js` holds raw 0x08 (backspace) bytes where `\b`
+  was meant, since it was written in 5d63ee7 (pre-existing; surfaced when the eslint config began applying
+  `js.configs.recommended`, `no-control-regex`, 2026-10-27, should-fix). Effect: en.json lines with the word
+  "phones" are not caught, only "smartphone". What still holds: the Georgian check and "smartphone". Today
+  `\bphones\b` finds nothing in en.json, so writing `\b` would keep the suite green; left as an
+  `eslint-disable-next-line` because it changes what the test checks.
+
 - Font preload warning on live in Chrome, not reproducible locally (2026-10-21, nit): the console says
   `noto-serif-georgian-georgian-wght.woff2` and `noto-sans-georgian-georgian-400.woff2` were preloaded but not
   used. Checked and correct: `crossorigin` on both preloads, `href` = the `@font-face` `src` (also in the

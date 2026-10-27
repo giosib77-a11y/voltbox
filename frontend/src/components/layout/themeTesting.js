@@ -5,6 +5,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import process from 'node:process';
 
 // `process.cwd()`: vitest runs from the frontend root (see fieldSize.test.js).
 const INIT_SOURCE = readFileSync(join(process.cwd(), 'public', 'theme-init.js'), 'utf8');
