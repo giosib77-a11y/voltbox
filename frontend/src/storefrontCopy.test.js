@@ -35,10 +35,7 @@ const SKIP = ['admin', 'data'];
 
 const PHONES_AS_PRODUCT_LINE = /ტელეფონებ|სმარტფონ/;
 // English only where English copy is: in source, "Smartphone" is an icon's name.
-// The two 0x08 bytes around "phones" were meant as \b, so only "smartphone" is
-// caught today; making them \b tightens the check (PROGRESS.md Backlog).
-// eslint-disable-next-line no-control-regex
-const PHONES_IN_ENGLISH = /phones|smartphone/i;
+const PHONES_IN_ENGLISH = /\bphones\b|smartphone/i;
 
 function sourceFiles(dir) {
   return readdirSync(dir).flatMap((entry) => {
