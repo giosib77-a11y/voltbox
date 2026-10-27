@@ -130,7 +130,15 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 - **ფაილი:** `.github/pip-audit/requirements.txt:17`
 - **სცენარი / შედეგი:** ეს audit ხელსაწყოს გარემოა და CI-ის ნაბიჯი მას არ ამოწმებს. ქსელში მყოფ თავდამსხმელს, რომელსაც კომპრომეტირებული intermediate აქვს, შეუძლია advisory-ების პასუხი გააყალბოს და audit სუფთა გამოიყვანოს. რისკი დაბალია.
 - **გამოსწორება:** certifi → 2026.10.19 ამ lock-ში, `.github/pip-audit/requirements.in`-ში აღწერილი container-ის ბრძანებით (ან Dependabot-ის PR-ით).
-- **owner:** task-executor · **status:** open
+- **owner:** task-executor
+- **status:** fixed — 2026-10-27, `agent-system`. რა გაკეთდა:
+  - lock-ში certifi 2026.7.22 → 2026.10.19 (PYSEC-2026-4320) და filelock 4.0.0 → 4.2.1 (CVE-2026-112940, -112913, -112907; Dependabot: high + 2 low). სხვა pin-ი არ შეცვლილა.
+  - Docker გამორთული იყო, ამიტომ ორი ჩანაწერი ხელით შეიცვალა: ვერსია და PyPI-ის ორივე ფაილის (wheel, sdist) sha256, pip-compile-ის ფორმატით. არცერთ პაკეტს დამოკიდებულება არ აქვს, ამიტომ resolve-ი სხვა pin-ს ვერ შეცვლიდა.
+
+  მტკიცებულება (Windows, Python 3.14):
+  - ახალ venv-ში `pip install --require-hashes --only-binary=:all: -r .github/pip-audit/requirements.txt` გავიდა, pip-audit 2.10.1 დადგა.
+  - ამ pip-audit-ით CI-ის ბრძანება (`--strict --disable-pip`, backend-ის სამი lock) — 0, exit 0; იგივე ამ lock-ზე — 0, exit 0.
+  - Linux container-ში (`requirements.in`-ის ბრძანება) ხელახლა არ დაგენერირებულა.
 
 #### A-024 · nit · `config.py`-ის კომენტარი ისევ „measured on Pillow 12.3“-ს ამბობს
 - **ფაილი:** `backend/app/core/config.py:208`
