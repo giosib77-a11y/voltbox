@@ -234,7 +234,10 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   (ორკესტრატორმაც გაუშვა). re-review: security-auditor — დახურულია.
 - re-review-მ 3 ახალი nit იპოვა: A-052–A-054 (სექციის ბოლოს).
 - gate-ები (`6ed1119`): ruff ✅ · format 167 ✅ · mypy 148 ✅ · **pytest 1108 passed** (baseline 1106 + 2) ·
-  eslint ✅ · **vitest 677 / 57** (baseline 672 + 5). საბოლოო შემოწმება — ქვემოთ, tester.
+  eslint ✅ · **vitest 677 / 57** (baseline 672 + 5).
+- საბოლოო შემოწმება (`92a8647`, tester): ruff ✅ · format 167 ✅ · mypy 148 ✅ · pytest 1108 passed ·
+  alembic 0001→0016 + check ✅ (scratch ბაზაზე) · `docker build` ✅ · eslint ✅ · vitest 677 / 57 · build `http` ✅ ·
+  build `mock` ✅. არ გაშვებულა: e2e, ნამდვილი ბრაუზერი, frontend Node 22-ზე.
 
 ### Should-fix
 

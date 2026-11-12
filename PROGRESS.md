@@ -754,6 +754,11 @@ Unverified (check before acting):
 - Blockers fix (owner's request, 2026-10-21): the card CTA no longer clips below sm — icon hidden, label may wrap to two centred lines, `min-h-11` instead of `h-11`; sm and up unchanged. Measured on /category/phones in both themes: 72 buttons (12 cards × default and in-cart × 360, 390, 1440), 0 with scrollWidth > clientWidth or scrollHeight > clientHeight; screenshots looked at (light 390, dark 360, dark 1440). Gates: eslint, vitest 672, both builds; ruff, format 167, mypy 148, pytest 1097.
 - Status: Done — every Stage 3 task [x], 0 open critical / should-fix, gates green.
 - Next: the owner reviews, then merge `agent-system` → main (Stage 2 and 3 together; see both deploy notes).
+- 2026-11-12 (outside Stage 3, branch `fix/external-2026-11-12`): AUDIT.md A-035 (dnspython 2.9.0 in both
+  locks; CI pip-audit 0), A-030 (refresh ends the session only on 401), A-031 (refresh 30/min) — fixed
+  (verified), re-reviewed closed; nits A-052–A-054 in AUDIT.md. Gates at 92a8647: ruff, format 167, mypy 148,
+  pytest 1108, alembic check, docker build; eslint, vitest 677, both builds. Merge into `agent-system`
+  is the owner's.
 
 ## Stage 2 — Done
 Last session of Stage 2:
