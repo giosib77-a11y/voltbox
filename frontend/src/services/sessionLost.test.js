@@ -105,4 +105,43 @@ describe('a session that cannot be recovered', () => {
     expect(lost).not.toHaveBeenCalled();
     expect(readSession()).not.toBeNull();
   });
+
+  it.each([429, 500, 502, 503])(
+    'keeps the session and does not redirect when the refresh answers %i',
+    async (status) => {
+      writeSession({ user: { id: 'u1' }, token: 'expired' });
+      const ended = vi.fn();
+      subscribeSessionEnded(ended);
+      global.fetch = vi.fn(async (url) =>
+        url.endsWith('/auth/refresh') ? reply({ error: { code: 'X' } }, status) : unauthorized(),
+      );
+
+      const error = await httpApi.getOrders().catch((e) => e);
+
+      expect(error).toBeTruthy();
+      expect(error.name).not.toBe('SessionExpiredError');
+      expect(readSession()).toMatchObject({ token: 'expired' });
+      expect(lost).not.toHaveBeenCalled();
+      expect(ended).not.toHaveBeenCalled();
+    },
+  );
+
+  it('recovers on the next request once the refresh endpoint answers again', async () => {
+    writeSession({ user: { id: 'u1' }, token: 'expired' });
+    let outage = true;
+    global.fetch = vi.fn(async (url, init) => {
+      if (url.endsWith('/auth/refresh')) {
+        return outage ? reply({}, 503) : reply({ user: { id: 'u1' }, token: 'fresh' });
+      }
+      return init?.headers?.Authorization === 'Bearer fresh' ? reply([]) : unauthorized();
+    });
+
+    await expect(httpApi.getOrders()).rejects.toBeTruthy();
+    expect(readSession()).not.toBeNull();
+
+    outage = false;
+    await expect(httpApi.getOrders()).resolves.toEqual([]);
+    expect(readSession()).toMatchObject({ token: 'fresh' });
+    expect(lost).not.toHaveBeenCalled();
+  });
 });

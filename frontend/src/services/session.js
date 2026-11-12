@@ -167,10 +167,13 @@ let foregroundWaiting = false;
 /**
  * Exchanges the refresh token for a new session, at most once concurrently.
  *
- * Returns the new access token, or null when the session is gone. Every caller
- * that arrives while a refresh is running gets the same promise.
+ * Returns the new access token, or null when no token was obtained. Null does
+ * not always mean the session is gone: it is kept (and `readSession()` still
+ * returns it) when the refresh could not be asked or answered - a network error,
+ * 429 or 5xx. Every caller that arrives while a refresh is running gets the
+ * same promise.
  *
- * When the refresh fails the stored session is cleared and listeners are told,
+ * When the server rejects the refresh (401) the stored session is cleared and listeners are told,
  * but the user is sent to the login page only if a non-`background` caller was
  * waiting - a background request (the cart sync on page load) must not turn
  * browsing a public page into a login redirect. Pages that need a session send
@@ -221,10 +224,15 @@ export function refreshSession({ background = false } = {}) {
       return null;
     }
 
-    if (!response.ok) {
+    // Only a 401 says the refresh token is dead (the server raises nothing else
+    // for it). A 429 or a 5xx - a shared-NAT rate limit, a deploy, a database
+    // blip - says nothing about the token, so it is treated like a network
+    // error: keep the session and let the next request try again.
+    if (response.status === 401) {
       endSession();
       return null;
     }
+    if (!response.ok) return null;
 
     const session = await response.json().catch(() => null);
     if (!session?.token) {

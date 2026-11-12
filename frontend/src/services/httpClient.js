@@ -214,13 +214,19 @@ export async function request(path, options = {}) {
     const hadSession = Boolean(readSession());
     const token = await refreshSession({ background });
     if (token) return request(path, { ...options, retried: true });
-    // The session is gone and cleared. `refreshSession` redirected to the login
-    // page only if a request the shopper made was waiting; a background one
-    // (`background: true`) just ends the session and the app follows it. One
-    // recognisable type for every request caught in the same moment, so the UI
-    // shows one message rather than one per pending call. A guest falls
-    // through instead: their 401 is about permission, not an expired session.
-    if (hadSession) throw new SessionExpiredError();
+    if (hadSession) {
+      // The refresh gave no token but did not end the session (network error,
+      // 429, 5xx): the session is still stored and may well be valid, so this is
+      // a temporary failure, not an expired session - no redirect, no logout.
+      if (readSession()) throw new ApiError(t('apiErrors.fallback'), 0);
+      // The session is gone and cleared. `refreshSession` redirected to the login
+      // page only if a request the shopper made was waiting; a background one
+      // (`background: true`) just ends the session and the app follows it. One
+      // recognisable type for every request caught in the same moment, so the UI
+      // shows one message rather than one per pending call.
+      throw new SessionExpiredError();
+    }
+    // A guest falls through: their 401 is about permission, not an expired session.
   }
 
   if (response.status === 204) return null;
