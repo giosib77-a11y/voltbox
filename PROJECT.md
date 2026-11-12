@@ -301,7 +301,7 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 - Secrets only in `backend/.env` (never read or committed) and Render env;
   `SUPABASE_SERVICE_ROLE_KEY` backend-only.
 - Rate limits per client IP (`app/core/rate_limit.py`): auth 5/min (incl. password
-  change and profile update), `POST /orders` 5/min and 30/day, guest order lookup
+  change and profile update; `POST /auth/refresh` alone 30/min — Decision Log 2026-11-12), `POST /orders` 5/min and 30/day, guest order lookup
   10/min, client error reports 20/min, guest cart quote (`POST /cart/quote`) 30/min,
   everything else 60/min; password reset also 3/hour per email address. Redis-backed in production; client IP
   only through `FORWARDED_ALLOW_IPS` (never `*`).
@@ -350,6 +350,31 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
+
+### 2026-11-12 — `/auth/refresh` has its own limit, 30/min (A-031)
+- Decision: `REFRESH_RATE_LIMIT = "30/minute"` (`app/core/rate_limit.py`) on `POST /auth/refresh` instead
+  of `AUTH_RATE_LIMIT` (5/min). Value approved by the owner.
+- Reason: 5/min stops password guessing, and refresh has no password — it is spent with an
+  `HttpOnly; SameSite=strict; Path=/api/v1/auth` cookie holding a 384-bit (`secrets.token_urlsafe(48)`) rotated token. At 5/min shoppers
+  behind one NAT/CGNAT address whose access tokens expire together got 429 (measured: the 6th refresh), which
+  the storefront treated as a logout (A-030). 30/min carries them and still caps a script.
+- What still holds: login, register, forgot/reset password, change-password and profile update stay at
+  5/min per address; reset emails also 3/hour per address.
+- How to change: the constant; `test_refresh_allows_far_more_than_login_before_it_is_limited` derives its
+  count from it.
+
+### 2026-11-12 — A failed refresh ends the session only on 401 (A-030)
+- Decision: `refreshSession` (`frontend/src/services/session.js`) clears the session only when
+  `/auth/refresh` answers 401 (or 2xx without a token). 429, 5xx, any other status and a network error keep
+  it and return null; `httpClient.request()` then throws a temporary `ApiError` (`apiErrors.fallback`,
+  status 0) instead of `SessionExpiredError`, because the stored session is still there.
+- Reason: the refresh route raises only `UnauthorizedError` (401: `INVALID_REFRESH_TOKEN`,
+  `ACCOUNT_DISABLED`), so only a 401 says the token is dead; a rate limit, a deploy or a database blip says
+  nothing about it. 403 is not treated as "ended" — the route never returns it.
+- What still holds: a dead refresh token still clears the session, notifies listeners and redirects a
+  foreground request to login; a background cart sync still never redirects; a guest's 401 still falls
+  through. A 429 refresh shows the generic message, not `RATE_LIMITED` — that would need `refreshSession`
+  to return the status; judged not worth it.
 
 ### 2026-10-19 — Theme foundation details (T27)
 - Decision: the mockup fonts are three variable woff2 files (Cormorant Garamond latin 400–600, Noto Serif

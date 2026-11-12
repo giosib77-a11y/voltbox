@@ -225,6 +225,17 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 - ყველა მიგნება გაშვებით ან კოდის წაკითხვით დადასტურდა; რომელი როგორ — თითოეულის „სცენარში“ წერია.
 - ამ სექციის მიგნებები A-001–A-029-ს არ იმეორებს. A-007, A-010 და A-011 ისევ ღიაა და ზემოთ ცხრილშია.
 
+**`/fix A-035 A-030 A-031` 2026-11-12** (ბრენჩი `fix/external-2026-11-12`):
+- A-035 — fixed (verified), `5d62944`. pip-audit (CI-ის ფორმა, Dockerfile-ის base image-ში): ძველ lock-ზე exit 1,
+  ახალზე exit 0. re-review: code-reviewer — დახურულია.
+- A-030 — fixed (verified), `1880bcc`. 5 ახალი ტესტი ძველ `session.js`/`httpClient.js`-ზე ვარდება, ახალზე გადის
+  (ორკესტრატორმაც გაუშვა ორივე მიმართულებით). re-review: code-reviewer — დახურულია.
+- A-031 — fixed (verified), `6ed1119`. refresh-ის ტესტი ძველ decorator-ზე ვარდება (მე-6 → 429), ახალზე გადის
+  (ორკესტრატორმაც გაუშვა). re-review: security-auditor — დახურულია.
+- re-review-მ 3 ახალი nit იპოვა: A-052–A-054 (სექციის ბოლოს).
+- gate-ები (`6ed1119`): ruff ✅ · format 167 ✅ · mypy 148 ✅ · **pytest 1108 passed** (baseline 1106 + 2) ·
+  eslint ✅ · **vitest 677 / 57** (baseline 672 + 5). საბოლოო შემოწმება — ქვემოთ, tester.
+
 ### Should-fix
 
 #### A-030 · should-fix · refresh-ის 429 ან 5xx პასუხი მომხმარებელს სისტემიდან აგდებს
@@ -239,7 +250,7 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   `return null` სესიის წაშლისა და გადამისამართების გარეშე, როგორც ქსელის შეცდომისას. ტესტები: 401 → სესია იშლება;
   429/500/502/503 → სესია რჩება, `sessionLost` არ იძახება (სტილი: `src/services/sessionLost.test.js`).
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `1880bcc` (re-review: code-reviewer)
 
 #### A-031 · should-fix · `/auth/refresh` იზიარებს login-ის 5/წთ ლიმიტს
 - **ფაილი:** `backend/app/core/rate_limit.py:47` (`AUTH_RATE_LIMIT = "5/minute"`), `backend/app/api/v1/routes/auth.py`
@@ -252,7 +263,7 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 - **გამოსწორება:** ცალკე `REFRESH_RATE_LIMIT = "30/minute"` refresh-ის route-ზე; მიზეზი კომენტარში და Decision Log-ში
   (რა რჩება ძალაში: login/register/reset 5/წთ). ტესტი: 30 refresh გადის, 31-ე → 429.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `6ed1119` (re-review: security-auditor)
 
 #### A-032 · should-fix · PNG-ის ატვირთვა event loop-ს 6.5–8.2 წამით ბლოკავს
 - **ფაილი:** `backend/app/services/storage.py:335` (`image.save(buffer, format="PNG", optimize=True)`);
@@ -324,7 +335,7 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   (34 განახლება) არ ვეხებით. შემოწმება: `pip install --require-hashes` + `pip check`, pip-audit-ის CI-ის ფორმა = 0,
   `docker build`, pytest.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `5d62944` (re-review: code-reviewer)
 
 #### A-036 · should-fix · rate limit-ის IP წყარო (`FORWARDED_ALLOW_IPS`) production-ში გადაუმოწმებელია და ლოგით ვერ მოწმდება
 - **ფაილი:** `backend/app/core/logging.py:71-113` (access log), `backend/gunicorn.conf.py`; `PROGRESS.md`-ის Backlog
@@ -504,3 +515,31 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   დაგეგმვაში.
 - **owner:** backend-dev
 - **status:** needs decision
+
+### Nit — A-030/A-031-ის re-review (2026-11-12)
+
+#### A-052 · nit · `REFRESH_RATE_LIMIT`-ის კომენტარი refresh token-ს „256-bit"-ს უწოდებს
+- **ფაილი:** `backend/app/core/rate_limit.py:51`
+- **სცენარი (კოდით):** `backend/app/core/security.py:132` — `secrets.token_urlsafe(48)` = 384 ბიტი. რიცხვი რეალურზე
+  ნაკლებია, ასე რომ დასკვნა („არანაირი სიჩქარით არ გამოიცნობა") ძალაში რჩება. `PROJECT.md`-ის Decision Log უკვე
+  გასწორებულია. იქვე `:77` (სტუმრის lookup token) „256-bit"-ს ამბობს — არ შემოწმებულა.
+- **გამოსწორება:** „384-bit (`token_urlsafe(48)`)".
+- **owner:** backend-dev
+- **status:** open
+
+#### A-053 · nit · A-030-ის ტესტი შეცდომის status-ს არ აფიქსირებს
+- **ფაილი:** `frontend/src/services/sessionLost.test.js:122`
+- **სცენარი (კოდით):** ტესტი მხოლოდ `error.name !== 'SessionExpiredError'`-ს ამოწმებს. `AdminSessionContext.jsx:50`
+  „unreachable" ეკრანს მხოლოდ არა-401 შეცდომაზე აჩვენებს; თუ `ApiError(..., 0)` ოდესმე 401-იანი შეცდომით
+  შეიცვლება, ტესტი გაივლის, ადმინი კი refresh-ის 503-ზე login-ზე გადავა.
+- **გამოსწორება:** `expect(error).toMatchObject({ name: 'ApiError', status: 0 })`.
+- **owner:** frontend-dev
+- **status:** open
+
+#### A-054 · nit · `session.js`-ის ორი კომენტარი ახალ ქცევას აღარ ემთხვევა
+- **ფაილი:** `frontend/src/services/session.js:89` („Called on logout and when a refresh fails" — ახლა მხოლოდ 401-ზე
+  ან token-ის გარეშე 2xx-ზე); `:222-223` („let the caller surface the original error" — caller ახლა
+  `apiErrors.fallback`-ს აჩვენებს; ქსელის შეცდომაზე `apiErrors.network` უფრო ზუსტი იქნებოდა).
+- **გამოსწორება:** კომენტარების ტექსტი; სურვილისამებრ ქსელის შემთხვევაში `apiErrors.network`.
+- **owner:** frontend-dev
+- **status:** open
