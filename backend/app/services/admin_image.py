@@ -11,6 +11,7 @@ see set_primary.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import Sequence
 
@@ -42,6 +43,46 @@ async def _images(db: AsyncSession, product_id: uuid.UUID) -> list[ProductImage]
     return list((await db.scalars(stmt)).all())
 
 
+#: One image is decoded at a time per worker process.
+#:
+#: Decoding and re-encoding is CPU work of seconds (a PNG used to take 6-8 s), so
+#: it runs in a thread and the event loop keeps serving other requests. What
+#: bounds the memory is this semaphore: the process never holds more than
+#: MAX_IMAGE_DECODE_BYTES for an upload, and the deployment never more than
+#: WEB_CONCURRENCY times that. A bare `to_thread` would let uploads decode in
+#: parallel, up to the pool size - 40 by default in anyio - which is gigabytes
+#: the free plan does not have. A second decode would not finish sooner anyway
+#: on the fraction of a CPU Render gives.
+#:
+#: The GIL is no obstacle: Pillow's C codecs release it for much of the decode,
+#: the resize and the encode, and where they do not, the interpreter switches
+#: threads every few milliseconds, so the loop still gets its turns. Same
+#: pattern as `_HASHING` in app/core/security.py.
+_PROCESSING = asyncio.Semaphore(1)
+
+
+def _prepare(data: bytes, declared_type: str | None) -> tuple[bytes, str]:
+    image_format, extension = validate_image(data, declared_type)
+    return shrink_to_fit(data, image_format), extension
+
+
+async def prepare_upload(data: bytes, declared_type: str | None) -> tuple[bytes, str]:
+    """Validate an upload and bring it to a sane size; returns `(bytes, extension)`.
+
+    Stored at a sane size rather than at whatever the camera produced: a product
+    photo straight off a phone is several megabytes and is rendered into a card a
+    few hundred pixels wide, and the shopper paid for the difference on every
+    page.
+
+    Both steps share one semaphore hold and one thread hop, because
+    `validate_image` parses the file too (`verify()`) and its pixel budget is what
+    makes the decode in `shrink_to_fit` safe. A `ValidationError` raised in the
+    thread propagates to the caller unchanged.
+    """
+    async with _PROCESSING:
+        return await asyncio.to_thread(_prepare, data, declared_type)
+
+
 async def add_image(
     db: AsyncSession,
     storage: StorageBackend,
@@ -60,20 +101,7 @@ async def add_image(
             code="TOO_MANY_IMAGES",
         )
 
-    image_format, extension = validate_image(data, declared_type)
-    # Stored at a sane size rather than at whatever the camera produced. A
-    # product photo straight off a phone is several megabytes and is rendered
-    # into a card a few hundred pixels wide; the shopper paid for the difference
-    # on every page.
-    #
-    # Both calls are synchronous, on the event loop, and that is what bounds the
-    # memory: a worker decodes one image at a time however many uploads arrive,
-    # so the process never holds more than MAX_IMAGE_DECODE_BYTES for this, and
-    # the deployment never more than WEB_CONCURRENCY times that. Moving the
-    # decode into a threadpool (`run_in_threadpool`, or a `def` route) would
-    # multiply the ceiling by the pool size - 40 by default in anyio - and is
-    # the point at which limiting concurrent uploads would start to be worth it.
-    data = shrink_to_fit(data, image_format)
+    data, extension = await prepare_upload(data, declared_type)
     key = object_key(product_id, extension)
     url = await storage.upload(key, data, CONTENT_TYPES[extension])
 

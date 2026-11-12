@@ -351,6 +351,18 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-11-12 — Upload decoding runs in a thread, one at a time per worker (A-032)
+- Decision: `admin_image.prepare_upload` runs `validate_image` + `shrink_to_fit` in one `asyncio.to_thread`
+  hop behind a module-level `asyncio.Semaphore(1)` (`_PROCESSING`), the same pattern as `_HASHING` in
+  `app/core/security.py`. The PNG re-encode no longer passes `optimize=True`.
+- Reason: on the event loop a PNG upload stalled every other request for 6.5–8.2 s (audit measurement) and
+  killed a gunicorn worker at `timeout=5`. `optimize=True` was most of that: locally 5.2 s → 1.7 s for a
+  photo-like 2800×2100 RGBA PNG, for a file about 10% larger.
+- What still holds: one decode per worker process, so the memory ceiling stays `MAX_IMAGE_DECODE_BYTES` per
+  process and `WEB_CONCURRENCY` times that per deployment; `DECODE_COST` and `TestDecodeMemoryIsBounded`
+  unchanged. JPEG keeps `optimize=True` (0.2 s), WebP keeps `method=6` (not measured; Backlog).
+- How to change: raising the semaphore multiplies the memory ceiling by its value.
+
 ### 2026-11-12 — `/auth/refresh` has its own limit, 30/min (A-031)
 - Decision: `REFRESH_RATE_LIMIT = "30/minute"` (`app/core/rate_limit.py`) on `POST /auth/refresh` instead
   of `AUTH_RATE_LIMIT` (5/min). Value approved by the owner.

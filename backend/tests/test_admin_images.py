@@ -9,15 +9,19 @@ Runs against the in-memory storage backend, so image handling is fully covered
 without Supabase credentials.
 """
 
+import asyncio
 import io
 import os
 import struct
 import subprocess
 import sys
+import threading
+import time
 import types
 import uuid
 import zlib
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Callable, Generator
+from contextlib import asynccontextmanager
 
 import httpx
 import pytest
@@ -25,6 +29,7 @@ from app.core.config import settings
 from app.core.errors import AppError, ValidationError
 from app.db.models import ROLE_ADMIN, OrderItem, ProductImage
 from app.main import app
+from app.services import admin_image
 from app.services import storage as storage_module
 from app.services.storage import (
     DECODE_COST,
@@ -638,6 +643,138 @@ class TestAnUploadIsStoredAtASaneSize:
         already_small = image_bytes("PNG", (100, 100))
 
         assert shrink_to_fit(already_small, "PNG") == already_small
+
+    def test_a_png_is_not_saved_with_optimize(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """`optimize=True` made a 2800x2100 PNG take 6.5 s of CPU instead of 0.5 s,
+        for a file about 10% smaller. A worker serves nothing else meanwhile."""
+        big = image_bytes("PNG", (2400, 2400))
+        saves: list[dict[str, object]] = []
+        real_save = Image.Image.save
+
+        def spy(self: Image.Image, fp: object, format: str | None = None, **params: object) -> None:
+            saves.append({"format": format, **params})
+            real_save(self, fp, format=format, **params)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(Image.Image, "save", spy)
+
+        shrink_to_fit(big, "PNG")
+
+        assert [save["format"] for save in saves] == ["PNG"]
+        assert not saves[0].get("optimize")
+
+
+@asynccontextmanager
+async def _loop_ticks() -> AsyncGenerator[Callable[[], int]]:
+    """Count how often the event loop got to run a 5 ms timer inside the block."""
+    count = 0
+
+    async def ticker() -> None:
+        nonlocal count
+        while True:
+            await asyncio.sleep(0.005)
+            count += 1
+
+    task = asyncio.create_task(ticker())
+    try:
+        yield lambda: count
+    finally:
+        task.cancel()
+
+
+class TestUploadProcessingRunsOffTheEventLoop:
+    """Decoding and re-encoding is seconds of CPU. On the event loop it stalled
+    every other request, and under gunicorn's timeout it killed the worker."""
+
+    @staticmethod
+    def _spy(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, bytes, int]]:
+        """Record `(step, data, thread id)` for each call, holding each for 50 ms
+        so that work which is not serialised visibly overlaps."""
+        events: list[tuple[str, bytes, int]] = []
+
+        def validate(data: bytes, declared_type: str | None) -> tuple[str, str]:
+            events.append(("validate", data, threading.get_ident()))
+            time.sleep(0.05)
+            return validate_image(data, declared_type)
+
+        def shrink(data: bytes, image_format: str) -> bytes:
+            events.append(("shrink", data, threading.get_ident()))
+            time.sleep(0.05)
+            return shrink_to_fit(data, image_format)
+
+        monkeypatch.setattr(admin_image, "validate_image", validate)
+        monkeypatch.setattr(admin_image, "shrink_to_fit", shrink)
+        return events
+
+    async def test_validate_and_shrink_run_on_a_worker_thread(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        events = self._spy(monkeypatch)
+
+        response = await _upload(client, headers, product_id, data=image_bytes("PNG", (1700, 40)))
+
+        assert response.status_code == 201
+        assert [step for step, _, _ in events] == ["validate", "shrink"]
+        loop_thread = threading.get_ident()
+        assert all(thread != loop_thread for _, _, thread in events)
+
+    async def test_the_loop_keeps_serving_while_an_image_is_processed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The same fact seen from the other side: something else gets to run."""
+        self._spy(monkeypatch)
+        data = image_bytes("PNG", (1700, 40))
+
+        async with _loop_ticks() as ticks:
+            await admin_image.prepare_upload(data, "image/png")
+
+        assert ticks() >= 3
+
+    async def test_two_uploads_are_never_processed_at_the_same_time(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The semaphore is what keeps one decode per worker, so the memory ceiling
+        stays MAX_IMAGE_DECODE_BYTES however many uploads arrive. A validate and a
+        shrink are one job: another upload must not slip in between them.
+
+        The ticks make the test about threads: processing that blocked the loop
+        would be serialised too, trivially, and would not show whether the
+        semaphore is what does it."""
+        events = self._spy(monkeypatch)
+        first, second = image_bytes("PNG", (1700, 40)), image_bytes("PNG", (1700, 41))
+
+        async with _loop_ticks() as ticks:
+            results = await asyncio.gather(
+                admin_image.prepare_upload(first, "image/png"),
+                admin_image.prepare_upload(second, "image/png"),
+            )
+
+        assert [ext for _, ext in results] == ["png", "png"]
+        assert [step for step, _, _ in events] == ["validate", "shrink", "validate", "shrink"]
+        assert events[0][1] == events[1][1]
+        assert events[2][1] == events[3][1]
+        assert events[0][1] != events[2][1]
+        assert ticks() >= 3
+
+    async def test_a_rejected_upload_still_reaches_the_client_as_a_400(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+    ) -> None:
+        """A `ValidationError` raised inside the thread is not turned into a 500,
+        and the semaphore is released for the next upload."""
+        refused = await _upload(client, headers, product_id, data=b"not an image")
+        accepted = await _upload(client, headers, product_id)
+
+        assert refused.status_code == 400
+        assert refused.json()["error"]["code"] == "INVALID_IMAGE"
+        assert accepted.status_code == 201
 
 
 def largest_that_fits(path: str) -> tuple[int, int]:

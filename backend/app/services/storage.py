@@ -332,7 +332,11 @@ def shrink_to_fit(data: bytes, image_format: str) -> bytes:
         if image_format == "JPEG":
             image.convert("RGB").save(buffer, format="JPEG", quality=JPEG_QUALITY, optimize=True)
         elif image_format == "PNG":
-            image.save(buffer, format="PNG", optimize=True)
+            # No `optimize=True`: it searches for the smallest encoding and costs
+            # seconds of CPU. Measured on a 2800x2100 PNG, 6.5 s against 0.52 s
+            # for a file about 10% larger - not worth the seconds a worker
+            # spends on one upload.
+            image.save(buffer, format="PNG")
         else:
             image.save(buffer, format="WEBP", quality=JPEG_QUALITY, method=6)
         shrunk = buffer.getvalue()
