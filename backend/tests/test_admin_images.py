@@ -11,6 +11,7 @@ without Supabase credentials.
 
 import asyncio
 import io
+import math
 import os
 import struct
 import subprocess
@@ -40,7 +41,7 @@ from app.services.storage import (
     shrink_to_fit,
     validate_image,
 )
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageCms, ImageOps, PngImagePlugin, UnidentifiedImageError
 from pydantic import SecretStr
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,6 +69,15 @@ def image_bytes(
     return buffer.getvalue()
 
 
+def png_chunk(kind: bytes, payload: bytes) -> bytes:
+    return (
+        struct.pack(">I", len(payload))
+        + kind
+        + payload
+        + struct.pack(">I", zlib.crc32(kind + payload))
+    )
+
+
 def header_only_png(width: int, height: int) -> bytes:
     """A PNG that declares a size and carries no picture.
 
@@ -75,21 +85,101 @@ def header_only_png(width: int, height: int) -> bytes:
     a decompression bomb - and `Image.open` only ever reads the header, so a few
     hand-written chunks are the honest way to present one.
     """
-
-    def chunk(kind: bytes, payload: bytes) -> bytes:
-        return (
-            struct.pack(">I", len(payload))
-            + kind
-            + payload
-            + struct.pack(">I", zlib.crc32(kind + payload))
-        )
-
     return (
         b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
-        + chunk(b"IDAT", zlib.compress(b""))
-        + chunk(b"IEND", b"")
+        + png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + png_chunk(b"IDAT", zlib.compress(b""))
+        + png_chunk(b"IEND", b"")
     )
+
+
+#: An sRGB profile, 588 bytes: something real to carry through a re-encode.
+ICC_PROFILE = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+
+EXIF_ORIENTATION = 0x0112
+EXIF_MAKE = 0x010F
+EXIF_GPS_IFD = 0x8825
+
+
+def exif_bytes(
+    orientation: int | None = None, *, gps: bool = False, make: str | None = None
+) -> bytes:
+    """EXIF the way a phone writes it: orientation, the maker, and where it was."""
+    exif = Image.Exif()
+    if orientation is not None:
+        exif[EXIF_ORIENTATION] = orientation
+    if make is not None:
+        exif[EXIF_MAKE] = make
+    if gps:
+        exif[EXIF_GPS_IFD] = {1: "N", 2: (41.0, 42.0, 0.0)}
+    return exif.tobytes()
+
+
+def patterned(size: tuple[int, int], mode: str = "RGB") -> Image.Image:
+    """A picture whose every pixel differs from its neighbours.
+
+    A flat colour decodes to the same bytes however it was damaged, so it cannot
+    show that a strip left the pixels alone.
+    """
+    count = size[0] * size[1] * len(mode)
+    return Image.frombytes(mode, size, (bytes(range(251)) * (count // 251 + 1))[:count])
+
+
+def encode(image: Image.Image, fmt: str, **options: object) -> bytes:
+    buffer = io.BytesIO()
+    image.save(buffer, format=fmt, **options)
+    return buffer.getvalue()
+
+
+def pixels(data: bytes) -> tuple[str, tuple[int, int], bytes]:
+    """What a decoder makes of the file: mode, size and every pixel."""
+    with Image.open(io.BytesIO(data)) as decoded:
+        return decoded.mode, decoded.size, decoded.tobytes()
+
+
+def jpeg_markers(data: bytes) -> list[int]:
+    """The marker codes of a JPEG's header segments, up to and including SOS."""
+    markers: list[int] = []
+    pos = 2
+    while True:
+        assert data[pos] == 0xFF
+        markers.append(data[pos + 1])
+        if data[pos + 1] == 0xDA:
+            return markers
+        pos += 2 + int.from_bytes(data[pos + 2 : pos + 4], "big")
+
+
+def jpeg_with_segments(jpeg: bytes, *segments: tuple[int, bytes], trailer: bytes = b"") -> bytes:
+    """`jpeg` with extra header segments after SOI, and bytes after its EOI."""
+    extra = b"".join(
+        bytes((0xFF, marker)) + (len(payload) + 2).to_bytes(2, "big") + payload
+        for marker, payload in segments
+    )
+    return jpeg[:2] + extra + jpeg[2:] + trailer
+
+
+def png_chunk_types(data: bytes) -> list[bytes]:
+    kinds: list[bytes] = []
+    pos = 8
+    while pos < len(data):
+        kinds.append(data[pos + 4 : pos + 8])
+        pos += 12 + int.from_bytes(data[pos : pos + 4], "big")
+    return kinds
+
+
+def webp_chunks(data: bytes) -> dict[bytes, bytes]:
+    chunks: dict[bytes, bytes] = {}
+    pos = 12
+    while pos < len(data):
+        length = int.from_bytes(data[pos + 4 : pos + 8], "little")
+        chunks[data[pos : pos + 4]] = data[pos + 8 : pos + 8 + length]
+        pos += 8 + length + length % 2
+    return chunks
+
+
+def only_object(storage: InMemoryStorage) -> bytes:
+    (stored,) = storage.objects.values()
+    return stored
 
 
 @pytest.fixture
@@ -601,7 +691,9 @@ class TestAnUploadIsStoredAtASaneSize:
         storage: InMemoryStorage,
         product_id: str,
     ) -> None:
-        """Re-encoding a small image only loses quality."""
+        """Re-encoding a small image only loses quality. This one has no metadata
+        to strip, so it comes back byte for byte (see
+        TestWhatAPhotoKnowsDoesNotReachThePublicBucket for one that has)."""
         small = image_bytes("JPEG", (800, 600))
 
         await client.post(
@@ -661,6 +753,399 @@ class TestAnUploadIsStoredAtASaneSize:
 
         assert [save["format"] for save in saves] == ["PNG"]
         assert not saves[0].get("optimize")
+
+
+DROPPED_PNG_CHUNKS = [b"eXIf", b"tEXt", b"zTXt", b"iTXt", b"tIME"]
+
+
+class TestWhatAPhotoKnowsDoesNotReachThePublicBucket:
+    """A phone writes where a photo was taken, and with what, into the file.
+
+    The bucket is public, so an upload kept as it arrived published that. The
+    same EXIF block carries the orientation: a photo taken in portrait is stored
+    as landscape pixels with a tag saying "turn me", and the resize used to drop
+    the tag and keep the pixels, so it showed sideways on the site.
+    """
+
+    async def _store(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+        data: bytes,
+        fmt: str = "jpeg",
+    ) -> bytes:
+        response = await _upload(
+            client,
+            headers,
+            product_id,
+            data=data,
+            filename=f"photo.{fmt}",
+            content_type=f"image/{fmt}",
+        )
+        assert response.status_code == 201, response.text
+        return only_object(storage)
+
+    async def test_a_portrait_phone_photo_is_stored_upright(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+    ) -> None:
+        """4000x3000 with Orientation 6 is a 3000x4000 portrait on the phone."""
+        photo = image_bytes("JPEG", (4000, 3000), exif=exif_bytes(6))
+
+        stored = await self._store(client, headers, storage, product_id, photo)
+
+        with Image.open(io.BytesIO(stored)) as saved:
+            assert saved.size == (1200, 1600)
+            assert EXIF_ORIENTATION not in saved.getexif()
+            assert "exif" not in saved.info
+
+    @pytest.mark.parametrize("progressive", [False, True])
+    async def test_a_small_photo_loses_its_gps_and_device_without_a_re_encode(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+        progressive: bool,
+    ) -> None:
+        """It fits, so it used to come back byte for byte - GPS and all.
+
+        Lossless: the pixels must decode identically, and the colour profile has
+        to survive. Progressive too, because the walk has to follow the file scan
+        by scan rather than look for the first EOI-shaped bytes.
+        """
+        original = encode(
+            patterned((1200, 900)),
+            "JPEG",
+            exif=exif_bytes(gps=True, make="Acme"),
+            icc_profile=ICC_PROFILE,
+            progressive=progressive,
+        )
+        assert 0xE1 in jpeg_markers(original)
+
+        stored = await self._store(client, headers, storage, product_id, original)
+
+        markers = jpeg_markers(stored)
+        assert 0xE1 not in markers  # APP1: EXIF and XMP
+        assert 0xE2 in markers  # APP2: the ICC profile
+        assert b"Acme" not in stored
+        with Image.open(io.BytesIO(stored)) as saved:
+            exif = saved.getexif()
+            assert not exif.get_ifd(EXIF_GPS_IFD)
+            assert EXIF_MAKE not in exif
+            assert saved.info["icc_profile"] == ICC_PROFILE
+        assert pixels(stored) == pixels(original)
+        assert len(stored) < len(original)
+
+    async def test_a_small_photo_in_portrait_is_turned_upright(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+    ) -> None:
+        """It fits, so before this it was returned as it came, still needing the
+        tag. The tag is metadata and goes, so the picture has to be turned.
+
+        Orientation 6 means "rotate 90 degrees clockwise to view": the left half,
+        red, ends up on top.
+        """
+        picture = Image.new("RGB", (1200, 900), (255, 0, 0))
+        picture.paste((0, 0, 255), (600, 0, 1200, 900))
+        photo = encode(
+            picture, "JPEG", exif=exif_bytes(6, gps=True, make="Acme"), icc_profile=ICC_PROFILE
+        )
+
+        stored = await self._store(client, headers, storage, product_id, photo)
+
+        with Image.open(io.BytesIO(stored)) as saved:
+            assert saved.size == (900, 1200)
+            exif = saved.getexif()
+            assert EXIF_ORIENTATION not in exif
+            assert not exif.get_ifd(EXIF_GPS_IFD)
+            assert saved.info["icc_profile"] == ICC_PROFILE
+            rgb = saved.convert("RGB")
+            top = rgb.getpixel((450, 100))
+            bottom = rgb.getpixel((450, 1100))
+        assert isinstance(top, tuple)
+        assert isinstance(bottom, tuple)
+        assert top[0] > 200 > top[2]
+        assert bottom[2] > 200 > bottom[0]
+
+    @pytest.mark.parametrize("orientation", range(2, 9))
+    def test_every_orientation_is_undone_exactly(self, orientation: int) -> None:
+        """Against Pillow's own `exif_transpose`, in a format that loses nothing,
+        so any difference is the rotation and not the codec."""
+        source = encode(patterned((60, 40)), "PNG", exif=exif_bytes(orientation))
+        with Image.open(io.BytesIO(source)) as opened:
+            expected = ImageOps.exif_transpose(opened)
+            assert expected is not None
+            assert expected.size == ((40, 60) if orientation >= 5 else (60, 40))
+
+        stored = shrink_to_fit(source, "PNG")
+
+        assert pixels(stored) == ("RGB", expected.size, expected.tobytes())
+        assert png_chunk_types(stored).count(b"eXIf") == 0
+
+    async def test_a_png_loses_every_chunk_that_carries_metadata(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+    ) -> None:
+        text = PngImagePlugin.PngInfo()
+        text.add_text("Author", "Jane Doe")  # tEXt
+        text.add_text("Comment", "secret note", zip=True)  # zTXt
+        text.add_itxt("Title", "secret title", zip=True)  # iTXt
+        written = encode(
+            patterned((120, 80)),
+            "PNG",
+            pnginfo=text,
+            exif=exif_bytes(gps=True, make="Acme"),
+            icc_profile=ICC_PROFILE,
+        )
+        # tIME, which Pillow does not write, and a trailer after IEND.
+        modified = png_chunk(b"tIME", struct.pack(">HBBBBB", 2024, 1, 2, 3, 4, 5))
+        original = written[:-12] + modified + written[-12:] + b"TRAILER-SECRET"
+        for kind in DROPPED_PNG_CHUNKS:
+            assert kind in png_chunk_types(original), kind
+
+        stored = await self._store(client, headers, storage, product_id, original, "png")
+
+        kinds = png_chunk_types(stored)
+        assert not set(DROPPED_PNG_CHUNKS) & set(kinds)
+        assert b"iCCP" in kinds
+        assert kinds[-1] == b"IEND"
+        for secret in (b"Jane Doe", b"Acme", b"TRAILER-SECRET"):
+            assert secret not in stored
+        assert pixels(stored) == pixels(original)
+
+    async def test_a_webp_loses_its_exif_and_xmp_and_keeps_its_profile(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+    ) -> None:
+        original = encode(
+            patterned((200, 100)),
+            "WEBP",
+            lossless=True,
+            exif=exif_bytes(gps=True, make="Acme"),
+            xmp=b"<x:xmpmeta>secret</x:xmpmeta>",
+            icc_profile=ICC_PROFILE,
+        )
+        before = webp_chunks(original)
+        assert {b"EXIF", b"XMP ", b"ICCP"} <= before.keys()
+        assert before[b"VP8X"][0] & 0x0C == 0x0C
+
+        stored = await self._store(client, headers, storage, product_id, original, "webp")
+
+        after = webp_chunks(stored)
+        assert b"EXIF" not in after
+        assert b"XMP " not in after
+        assert after[b"ICCP"] == ICC_PROFILE
+        # EXIF and XMP flags cleared, the ICC flag (0x20) untouched.
+        assert after[b"VP8X"][0] & 0x0C == 0
+        assert after[b"VP8X"][0] & 0x20 == before[b"VP8X"][0] & 0x20 != 0
+        assert int.from_bytes(stored[4:8], "little") == len(stored) - 8
+        assert b"Acme" not in stored
+        assert pixels(stored) == pixels(original)
+
+    @pytest.mark.parametrize(
+        ("fmt", "size"), [("JPEG", (2400, 1800)), ("PNG", (2000, 1000)), ("WEBP", (1700, 1000))]
+    )
+    def test_a_re_encode_keeps_the_colour_profile(self, fmt: str, size: tuple[int, int]) -> None:
+        """Pillow's JPEG and WebP writers drop it unless it is handed over, and a
+        wide-gamut photo then comes out duller than the one that was uploaded."""
+        original = image_bytes(fmt, size, icc_profile=ICC_PROFILE, exif=exif_bytes(gps=True))
+
+        stored = shrink_to_fit(original, fmt)
+
+        with Image.open(io.BytesIO(stored)) as saved:
+            assert max(saved.size) == MAX_STORED_EDGE
+            assert saved.info["icc_profile"] == ICC_PROFILE
+            assert "exif" not in saved.info
+
+    def test_a_cmyk_profile_is_not_put_on_the_rgb_it_becomes(self) -> None:
+        """A JPEG re-encode is RGB. A profile that describes CMYK would make a
+        browser colour those pixels wrongly, so it is the one thing dropped."""
+        cmyk_profile = ICC_PROFILE[:16] + b"CMYK" + ICC_PROFILE[20:]
+        original = image_bytes("JPEG", (2400, 1800), mode="CMYK", icc_profile=cmyk_profile)
+
+        stored = shrink_to_fit(original, "JPEG")
+
+        with Image.open(io.BytesIO(stored)) as saved:
+            assert saved.mode == "RGB"
+            assert "icc_profile" not in saved.info
+
+    async def test_comments_iptc_and_a_trailer_after_the_image_are_removed(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+    ) -> None:
+        """APP13 is where Photoshop and press agencies put names and captions; a
+        Samsung phone appends its own block after the EOI."""
+        original = jpeg_with_segments(
+            encode(patterned((300, 200)), "JPEG", icc_profile=ICC_PROFILE),
+            (0xED, b"Photoshop 3.0\x00" + b"8BIM caption-secret"),
+            (0xFE, b"comment-secret"),
+            (0xE1, b"http://ns.adobe.com/xmp/extension/\x00xmp-secret"),
+            trailer=b"TRAILER-SECRET",
+        )
+
+        stored = await self._store(client, headers, storage, product_id, original)
+
+        for secret in (
+            b"Photoshop",
+            b"caption-secret",
+            b"comment-secret",
+            b"xmp-secret",
+            b"TRAILER",
+        ):
+            assert secret not in stored
+        assert stored.endswith(b"\xff\xd9")
+        assert jpeg_markers(stored).count(0xE2) == 1
+        assert pixels(stored) == pixels(original)
+
+    def test_a_large_jpeg_does_not_carry_its_comment_into_the_re_encode(self) -> None:
+        """Pillow's JPEG writer copies the source's COM segment unless told not to."""
+        original = jpeg_with_segments(
+            encode(patterned((2000, 1500)), "JPEG"), (0xFE, b"comment-secret")
+        )
+
+        assert b"comment-secret" in original
+        assert b"comment-secret" not in shrink_to_fit(original, "JPEG")
+
+    def test_adobe_colour_information_survives_the_strip(self) -> None:
+        """APP14 says how to read a CMYK file's channels; without it the colours
+        invert."""
+        original = encode(patterned((200, 100), "CMYK"), "JPEG", exif=exif_bytes(gps=True))
+        assert {0xE1, 0xEE} <= set(jpeg_markers(original))
+
+        stored = shrink_to_fit(original, "JPEG")
+
+        assert 0xE1 not in jpeg_markers(stored)
+        assert 0xEE in jpeg_markers(stored)
+        assert pixels(stored) == pixels(original)
+
+    @pytest.mark.parametrize("fmt", ["JPEG", "PNG", "WEBP"])
+    def test_a_file_with_nothing_to_strip_is_stored_byte_for_byte(self, fmt: str) -> None:
+        clean = encode(patterned((64, 48)), fmt)
+
+        assert shrink_to_fit(clean, fmt) == clean
+
+    @pytest.mark.parametrize("value", [0, 9, 65535])
+    def test_an_orientation_that_is_not_a_rotation_is_not_one(self, value: int) -> None:
+        """Only 2..8 are rotations. Anything else is a damaged tag: the picture is
+        left as drawn, losslessly, and the tag goes with the rest of the EXIF."""
+        original = encode(patterned((400, 300)), "JPEG", exif=exif_bytes(value, make="Acme"))
+
+        stored = shrink_to_fit(original, "JPEG")
+
+        assert b"Acme" not in stored
+        assert pixels(stored) == pixels(original)
+
+    def test_damaged_exif_is_dropped_not_a_500(self) -> None:
+        original = jpeg_with_segments(
+            encode(patterned((400, 300)), "JPEG"), (0xE1, b"Exif\x00\x00not a tiff header at all")
+        )
+        assert validate_image(original, "image/jpeg") == ("JPEG", "jpg")
+
+        stored = shrink_to_fit(original, "JPEG")
+
+        assert 0xE1 not in jpeg_markers(stored)
+        assert pixels(stored) == pixels(original)
+
+    def test_padding_between_jpeg_segments_is_skipped_not_refused(self) -> None:
+        """Stray bytes between segments are junk, not a broken structure: the walk
+        steps over them and does not copy them. (Called directly: Pillow's own
+        `open` is stricter about where it tolerates them than the walk is.)"""
+        clean = encode(patterned((400, 300)), "JPEG")
+        padded = clean[:2] + b"\x00\x00\xff\xff" + clean[2:]
+
+        assert storage_module._STRIP_METADATA["JPEG"](padded) == clean
+
+    def test_a_webp_that_must_be_turned_is_costed_like_one_that_is_resized(self) -> None:
+        """A 1600x1600 WebP is never decoded and costs 4.9 MiB. With Orientation 6
+        it is decoded to be turned, and 2.56 megapixels of WebP is over the budget
+        - measured, a 1601x1599 one peaks at 120.6 MiB."""
+        assert validate_image(image_bytes("WEBP", (1600, 1600)), None)[0] == "WEBP"
+
+        with pytest.raises(ValidationError) as refused:
+            validate_image(image_bytes("WEBP", (1600, 1600), exif=exif_bytes(6)), None)
+
+        assert refused.value.code == "IMAGE_TOO_MANY_PIXELS"
+
+    @pytest.mark.parametrize("fmt", ["JPEG", "PNG"])
+    def test_a_jpeg_or_png_at_the_edge_that_must_be_turned_still_fits_the_budget(
+        self, fmt: str
+    ) -> None:
+        """Their budgets are above 1600x1600, so the rule costs them nothing."""
+        turned = image_bytes(fmt, (1600, 1600), exif=exif_bytes(6))
+
+        assert validate_image(turned, None)[0] == fmt
+
+    @pytest.mark.parametrize(
+        ("fmt", "broken"),
+        [
+            ("JPEG", "length past the end"),
+            ("JPEG", "no EOI"),
+            ("JPEG", "no scan"),
+            ("JPEG", "not a JPEG"),
+            ("PNG", "length past the end"),
+            ("PNG", "no IEND"),
+            ("PNG", "not a PNG"),
+            ("WEBP", "RIFF size past the end"),
+            ("WEBP", "chunk size past the end"),
+            ("WEBP", "not a WebP"),
+        ],
+    )
+    def test_a_container_that_cannot_be_walked_is_invalid_not_decoded(
+        self, fmt: str, broken: str
+    ) -> None:
+        good = {
+            "JPEG": encode(patterned((64, 48)), "JPEG"),
+            "PNG": encode(patterned((16, 16)), "PNG"),
+            "WEBP": encode(patterned((16, 16)), "WEBP", lossless=True),
+        }[fmt]
+        damaged = {
+            ("JPEG", "length past the end"): good[:2] + b"\xff\xe1\xff\xff" + good[2:],
+            ("JPEG", "no EOI"): good[:-2],
+            ("JPEG", "no scan"): b"\xff\xd8\xff\xd9",
+            ("JPEG", "not a JPEG"): b"nope",
+            ("PNG", "length past the end"): good[:8] + b"\x00\xff\xff\xff" + good[12:],
+            ("PNG", "no IEND"): good[:-12],
+            ("PNG", "not a PNG"): b"nope",
+            ("WEBP", "RIFF size past the end"): good[:4]
+            + (len(good) + 92).to_bytes(4, "little")
+            + good[8:],
+            ("WEBP", "chunk size past the end"): good[:16] + b"\xff\xff\xff\x7f" + good[20:],
+            ("WEBP", "not a WebP"): b"nope",
+        }[(fmt, broken)]
+
+        with pytest.raises(ValidationError) as refused:
+            storage_module._STRIP_METADATA[fmt](damaged)
+
+        assert refused.value.code == "INVALID_IMAGE"
+
+    def test_a_small_jpeg_with_no_eoi_is_refused_not_decoded(self) -> None:
+        """At or below the edge a decode would be unbudgeted, so there is no
+        fallback to one."""
+        original = encode(patterned((400, 300)), "JPEG")[:-2]
+
+        with pytest.raises(ValidationError) as refused:
+            shrink_to_fit(original, "JPEG")
+
+        assert refused.value.code == "INVALID_IMAGE"
 
 
 @asynccontextmanager
@@ -832,11 +1317,13 @@ class TestTheLimitIsMemoryRatherThanPixels:
 
     @pytest.mark.parametrize("fmt", ["JPEG", "PNG", "WEBP"])
     def test_an_image_stored_untouched_is_never_refused(self, fmt: str) -> None:
-        """MAX_STORED_EDGE is 1600, so this one is kept exactly as it arrived.
+        """MAX_STORED_EDGE is 1600, so this one is stored as it arrived (bar the
+        metadata, which has no pixels to decode).
 
         It is accepted because it is never decoded, not because it fits a limit:
         WebP's is 1.9 megapixels, below this image's 2.56, and `validate_image`
-        applies the budget only above MAX_STORED_EDGE. Before that condition
+        applies the budget only to an image that is decoded - one above
+        MAX_STORED_EDGE or to be turned upright. Before that condition
         existed this property had to be bought by keeping every limit above
         1600x1600, which is what made WebP impossible to price - the floor it
         imposed already cost 120.6 MiB on the worst shape.
@@ -1033,6 +1520,61 @@ class TestDecodeMemoryIsBounded:
             f"{path} peaked at {peak / 1024 / 1024:.0f} MiB, over the "
             f"{settings.max_image_decode_bytes / 1024 / 1024:.0f} MiB budget"
         )
+
+
+def largest_that_is_turned(path: str) -> list[tuple[int, int]]:
+    """The most expensive images of `path` that are decoded only to be turned.
+
+    No resize is involved, so the longest side is at most MAX_STORED_EDGE and the
+    pixel count is what the budget admits. Two shapes, because the cost is not
+    only the count: the squarest, and the widest and flattest (the full edge).
+    Where the budget is above 1600x1600 the only case is 1600x1600 itself.
+    """
+    fixed, per_pixel = DECODE_COST[path]
+    pixel_count = (settings.max_image_decode_bytes - fixed) // per_pixel
+    side = min(MAX_STORED_EDGE, math.isqrt(pixel_count))
+    shapes = [(side, side)]
+    if side < MAX_STORED_EDGE:
+        shapes.append((MAX_STORED_EDGE, pixel_count // MAX_STORED_EDGE))
+    return shapes
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32" and not sys.platform.startswith("linux"),
+    reason="peak memory is read from Windows or /proc",
+)
+class TestDecodeMemoryIsBoundedWhenOnlyTurning:
+    """An image that fits is no longer left undecoded when it has to be turned.
+
+    `TestDecodeMemoryIsBounded` covers what is resized. This is the other way to
+    be decoded: at most 1600x1600 with an EXIF Orientation, where the bitmap and
+    its rotated copy are alive together. The largest image `validate_image`
+    admits on each path must still stay inside the budget.
+    """
+
+    @pytest.mark.parametrize(
+        ("path", "fmt", "mode", "options"),
+        [
+            ("JPEG", "JPEG", "RGB", {"progressive": True}),
+            ("JPEG_FULL_CHROMA", "JPEG", "CMYK", {"progressive": True}),
+            ("PNG", "PNG", "RGBA", {"compress_level": 1}),
+            ("WEBP", "WEBP", "RGBA", {"lossless": True, "method": 0}),
+        ],
+    )
+    def test_the_largest_accepted_image_that_is_turned_stays_within_the_budget(
+        self, path: str, fmt: str, mode: str, options: dict[str, object]
+    ) -> None:
+        for size in largest_that_is_turned(path):
+            image = image_bytes(fmt, size, mode=mode, exif=exif_bytes(6), **options)
+            assert validate_image(image, None)[0] == fmt
+
+            peak = peak_decode_bytes(image)
+
+            print(f"turned {path} {size}: {peak / 1024 / 1024:.1f} MiB")
+            assert peak <= settings.max_image_decode_bytes, (
+                f"{path} {size} peaked at {peak / 1024 / 1024:.0f} MiB, over the "
+                f"{settings.max_image_decode_bytes / 1024 / 1024:.0f} MiB budget"
+            )
 
 
 SERVICE_KEY = "service-role-key-that-must-not-leak"

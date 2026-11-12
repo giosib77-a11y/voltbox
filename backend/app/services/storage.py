@@ -13,6 +13,7 @@ in a two-year-old order is not recoverable.
 from __future__ import annotations
 
 import io
+import re
 import uuid
 from typing import Protocol
 
@@ -122,9 +123,11 @@ _MIB = 1024 * 1024
 #: The shape matters as much as the count, and the worst one is the squarest:
 #: a source only just above MAX_STORED_EDGE is barely reduced, so the bitmap and
 #: an almost equally large result are alive together. Every number here is
-#: measured on that shape. An image at or below the edge is never costed at all
-#: - `validate_image` only applies the budget above it - so these limits are free
-#: to sit below 1600x1600, and WebP's now does.
+#: measured on that shape. An image at or below the edge with Orientation 1 is
+#: never costed at all - `validate_image` applies the budget only to an image
+#: that is decoded - so these limits are free to sit below 1600x1600, and WebP's
+#: now does. One at or below the edge that must be rotated is decoded, so it is
+#: costed like the rest.
 DECODE_COST = {
     # The bitmap (4 bytes per pixel even for RGB), reduce()'s half-size copy on
     # the way to MAX_STORED_EDGE, and a coefficient buffer. Admits 13.3
@@ -186,6 +189,38 @@ def _max_pixels(probe: Image.Image, image_format: str) -> int:
     return max(0, (settings.max_image_decode_bytes - fixed) // per_pixel)
 
 
+_ORIENTATION_TAG = 0x0112
+
+
+def _exif_orientation(probe: Image.Image) -> int:
+    """The EXIF Orientation of a just-opened image, 1 (upright) when there is none.
+
+    Header-only on purpose, and the one function both `validate_image` and
+    `shrink_to_fit` ask, so they agree on which images are decoded. It reads the
+    raw `info["exif"]` and parses only that. `getexif()` is avoided: on a PNG
+    whose `eXIf` chunk follows the pixel data it calls `load()`, which decodes the
+    whole image before the budget has been checked.
+
+    Only EXIF counts. A browser turns a picture upright by EXIF Orientation and
+    ignores the XMP one, and XMP is removed from what is stored anyway.
+
+    What still holds: a PNG whose `eXIf` chunk comes after the pixel data has no
+    `info["exif"]` at open, so it reads as upright and is stored as drawn. A value
+    outside 2..8 (0, 9, garbage, a non-integer) is not a rotation either, and
+    unreadable EXIF is not a reason to refuse a picture.
+    """
+    raw = probe.info.get("exif")
+    if not raw:
+        return 1
+    exif = Image.Exif()
+    try:
+        exif.load(raw)
+        value = exif.get(_ORIENTATION_TAG, 1)
+    except Exception:  # damaged EXIF must never turn an upload into a 500
+        return 1
+    return value if isinstance(value, int) and 2 <= value <= 8 else 1
+
+
 class StorageBackend(Protocol):
     """What the image service needs from storage."""
 
@@ -232,6 +267,7 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
             # sampling factors are only readable from the probe.
             allowed = image_format in ALLOWED_FORMATS
             pixel_budget = _max_pixels(probe, image_format) if allowed else 0
+            orientation = _exif_orientation(probe)
             probe.verify()
     except Image.DecompressionBombError as exc:
         # Pillow has a guard of its own: it warns above MAX_IMAGE_PIXELS
@@ -260,17 +296,21 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
     # count at this file's own cost. A WebP buys roughly a third of the pixels a
     # phone's JPEG does for the same memory.
     #
-    # Only an image that will actually be resized pays it. `shrink_to_fit`
-    # returns the original bytes when the longest side already fits, without
-    # materialising a pixel, so there is no allocation to bound - measured, a
-    # 1600x1600 WebP peaks at 4.9 MiB where a 1601x1599 one, one pixel wider and
-    # the same megapixels, peaks at 120.6 MiB. A cost in pixels alone cannot
-    # tell those two apart, and charging the cheap one as though it decoded is
-    # what used to pin the WebP limit at 2,560,000 pixels.
+    # Only an image that will actually be decoded pays it: one that is resized
+    # (longest side above the edge) or turned upright (EXIF Orientation other
+    # than 1). `shrink_to_fit` strips the metadata of any other image at the byte
+    # level, without materialising a pixel, so there is no allocation to bound -
+    # measured, a 1600x1600 WebP peaks at 4.9 MiB where a 1601x1599 one, one
+    # pixel wider and the same megapixels, peaks at 120.6 MiB. A cost in pixels
+    # alone cannot tell those two apart, and charging the cheap one as though it
+    # decoded is what used to pin the WebP limit at 2,560,000 pixels.
     #
-    # The unchecked path is bounded by the condition itself: max(w, h) <= 1600
-    # admits at most 1600x1600, and that is the 4.9 MiB case.
-    if max(width, height) > MAX_STORED_EDGE and width * height > pixel_budget:
+    # What is unchecked is exactly: at most 1600x1600 AND Orientation 1, which is
+    # never decoded. That is the 4.9 MiB case. The same 1600x1600 with an
+    # Orientation of 6 is decoded to be rotated, so it is costed like any other.
+    # Orientation is read by the same function `shrink_to_fit` uses, so the two
+    # cannot disagree about which images get decoded.
+    if (max(width, height) > MAX_STORED_EDGE or orientation != 1) and width * height > pixel_budget:
         # The largest version of *this* image that would fit, so the panel can
         # name a size to export instead of only refusing one.
         scale = (pixel_budget / (width * height)) ** 0.5
@@ -297,53 +337,299 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
 #: wide even on a desktop.
 #:
 #: Load-bearing a second way, which is not obvious from the name: `validate_image`
-#: applies the decode budget only above this edge, because at or below it nothing
-#: is decoded. So this constant is also the size of the upload that is admitted
-#: without being costed, and raising it widens that path - at 1600 the most an
-#: unchecked image can cost is a measured 4.9 MiB, but the cost of a decode grows
-#: with the square of the edge. Anything that raises this for a larger gallery
-#: image has to re-measure that number, not just this one.
+#: applies the decode budget only to an image that is decoded, and one at or below
+#: this edge with Orientation 1 is not - only its bytes are stripped. So this
+#: constant is also the size of the upload that is admitted without being costed,
+#: and raising it widens that path - at 1600 the most an unchecked image can cost
+#: is a measured 4.9 MiB, but the cost of a decode grows with the square of the
+#: edge. Anything that raises this for a larger gallery image has to re-measure
+#: that number, not just this one.
 MAX_STORED_EDGE = 1600
 
 #: JPEG quality for a re-encode. 82 is the point where the file stops shrinking
 #: much and the eye stops noticing.
 JPEG_QUALITY = 82
 
+#: What undoes each EXIF Orientation 2..8; 1 is upright and not in the table.
+#: The same mapping as `ImageOps.exif_transpose`, applied from the orientation
+#: `_exif_orientation` read, so the decision and the rotation cannot disagree.
+_UPRIGHT = {
+    2: Image.Transpose.FLIP_LEFT_RIGHT,
+    3: Image.Transpose.ROTATE_180,
+    4: Image.Transpose.FLIP_TOP_BOTTOM,
+    5: Image.Transpose.TRANSPOSE,
+    6: Image.Transpose.ROTATE_270,
+    7: Image.Transpose.TRANSVERSE,
+    8: Image.Transpose.ROTATE_90,
+}
+
+
+def _unreadable() -> ValidationError:
+    return ValidationError("This file is not a readable image", code="INVALID_IMAGE")
+
+
+# Lossless metadata removal. Each function below walks the container of one
+# format byte by byte - no Pillow, no decode, so no allocation to budget - and
+# copies everything except the metadata verbatim. Pixels are never touched. A
+# file whose structure does not hold together is refused rather than decoded:
+# these run on images the decode budget does not cover.
+
+
+#: An 0xFF that is not a stuffed byte (FF 00) or a restart marker (FF D0-D7): the
+#: first thing in entropy-coded data that can end it.
+_SCAN_END = re.compile(rb"\xff(?!\x00|[\xd0-\xd7])")
+
+
+def _strip_jpeg(data: bytes) -> bytes:
+    """A JPEG without EXIF, XMP, IPTC, comments or anything after the image.
+
+    Walks the segments from SOI to EOI. Kept: APP0 (JFIF), APP2 only when it is
+    an ICC profile, APP14 (Adobe - it says how to read the colours), and every
+    segment that is not an APPn or a comment (tables, frame and scan headers).
+    Dropped: all other APPn - APP1 is EXIF and XMP (extended XMP too), APP13 is
+    IPTC/Photoshop - and COM. Entropy-coded data is copied untouched, and the
+    walk ends at the first EOI: phones, Samsung among them, append metadata
+    trailers after it, and an MPO's second picture sits there too.
+
+    Entropy data is not searched for `FF D9` but walked marker by marker: a
+    progressive file has segments between its scans, and their bytes can be
+    anything. Inside a scan an `FF` is followed by 00 (a stuffed byte), RSTn, or
+    a marker that ends the scan.
+    """
+    size = len(data)
+    if data[:2] != b"\xff\xd8":
+        raise _unreadable()
+    out = bytearray(b"\xff\xd8")
+    pos = 2
+    in_scan = False
+    seen_scan = False
+    while pos < size:
+        if in_scan:
+            # Entropy-coded bytes up to the next marker, copied in one piece
+            # (stuffed bytes and restart markers go along with them).
+            ends_scan = _SCAN_END.search(data, pos)
+            if ends_scan is None:
+                raise _unreadable()
+            out += data[pos : ends_scan.start()]
+            pos = ends_scan.start()
+        if data[pos] != 0xFF:
+            # Between header segments, padding or junk before the next marker:
+            # not a broken structure, so it is stepped over. It is not copied.
+            pos = data.find(b"\xff", pos)
+            if pos < 0:
+                raise _unreadable()
+        # Any number of 0xFF fill bytes may precede a marker's code.
+        while pos < size and data[pos] == 0xFF:
+            pos += 1
+        if pos >= size:
+            raise _unreadable()
+        marker = data[pos]
+        pos += 1
+        if in_scan and (marker == 0x00 or 0xD0 <= marker <= 0xD7):
+            out += bytes((0xFF, marker))  # a stuffed 0xFF, or a restart marker
+            continue
+        if marker == 0xD9:
+            if not seen_scan:
+                raise _unreadable()
+            out += b"\xff\xd9"
+            return bytes(out)
+        if marker == 0x00 or marker == 0xD8:
+            raise _unreadable()
+        if marker == 0x01 or 0xD0 <= marker <= 0xD7:  # standalone, no length
+            out += bytes((0xFF, marker))
+            in_scan = False
+            continue
+        if pos + 2 > size:
+            raise _unreadable()
+        length = int.from_bytes(data[pos : pos + 2], "big")
+        end = pos + length
+        if length < 2 or end > size:
+            raise _unreadable()
+        payload = data[pos + 2 : end]
+        is_app = 0xE0 <= marker <= 0xEF
+        keep = (
+            marker in (0xE0, 0xEE)
+            or (marker == 0xE2 and payload.startswith(b"ICC_PROFILE\x00"))
+            or not (is_app or marker == 0xFE)
+        )
+        if keep:
+            out += bytes((0xFF, marker)) + data[pos:end]
+        in_scan = marker == 0xDA
+        seen_scan = seen_scan or in_scan
+        pos = end
+    raise _unreadable()  # no EOI
+
+
+#: PNG chunks that carry metadata. Kept: iCCP, sRGB, gAMA, cHRM, pHYs and the
+#: rest - they say how to show the picture, not who took it.
+_PNG_METADATA = frozenset({b"eXIf", b"tEXt", b"iTXt", b"zTXt", b"tIME"})
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def _strip_png(data: bytes) -> bytes:
+    """A PNG without EXIF, text chunks and the modification time.
+
+    Every chunk is length, type, data, CRC, and a kept one is copied whole - the
+    CRC with it, so nothing is recomputed. The walk ends after IEND, and what
+    follows it is dropped.
+    """
+    size = len(data)
+    if data[:8] != _PNG_SIGNATURE:
+        raise _unreadable()
+    out = bytearray(_PNG_SIGNATURE)
+    pos = 8
+    while pos + 12 <= size:
+        length = int.from_bytes(data[pos : pos + 4], "big")
+        kind = data[pos + 4 : pos + 8]
+        end = pos + 12 + length
+        if end > size:
+            raise _unreadable()
+        if kind not in _PNG_METADATA:
+            out += data[pos:end]
+        if kind == b"IEND":
+            return bytes(out)
+        pos = end
+    raise _unreadable()  # no IEND
+
+
+#: In a WebP `VP8X` header: the EXIF and XMP bits of the feature flags.
+_WEBP_EXIF_FLAG = 0x08
+_WEBP_XMP_FLAG = 0x04
+
+
+def _strip_webp(data: bytes) -> bytes:
+    """A WebP without its EXIF and XMP chunks.
+
+    A RIFF file: `RIFF`, a little-endian size, `WEBP`, then chunks of FourCC,
+    little-endian size and data padded to an even length. The `VP8X` header
+    announces which metadata chunks exist, so its EXIF and XMP bits are cleared
+    with them; ICCP and everything else is copied. The RIFF size is rewritten,
+    and what lies beyond the declared size is dropped.
+    """
+    if len(data) < 12 or data[:4] != b"RIFF" or data[8:12] != b"WEBP":
+        raise _unreadable()
+    riff_end = 8 + int.from_bytes(data[4:8], "little")
+    if riff_end > len(data):
+        raise _unreadable()
+    body = bytearray()
+    pos = 12
+    while pos < riff_end:
+        if pos + 8 > riff_end:
+            raise _unreadable()
+        fourcc = data[pos : pos + 4]
+        length = int.from_bytes(data[pos + 4 : pos + 8], "little")
+        payload_end = pos + 8 + length
+        if payload_end > riff_end:
+            raise _unreadable()
+        if fourcc not in (b"EXIF", b"XMP "):
+            payload = bytearray(data[pos + 8 : payload_end])
+            if fourcc == b"VP8X" and payload:
+                payload[0] &= ~(_WEBP_EXIF_FLAG | _WEBP_XMP_FLAG)
+            body += fourcc + length.to_bytes(4, "little") + payload
+            if length % 2:
+                body += b"\x00"  # chunks are padded to an even length
+        pos = payload_end + length % 2
+    return b"RIFF" + (4 + len(body)).to_bytes(4, "little") + b"WEBP" + bytes(body)
+
+
+_STRIP_METADATA = {"JPEG": _strip_jpeg, "PNG": _strip_png, "WEBP": _strip_webp}
+
+
+def _profile_for(info_profile: object, saved_as_gray: bool) -> bytes | None:
+    """The embedded ICC profile, when it still describes what is being saved.
+
+    The profile is part of how the picture looks, so a re-encode carries it:
+    Pillow's JPEG and WebP writers drop it unless it is passed. But a profile
+    describes a colour space, and a CMYK or greyscale source is saved as RGB
+    here - a CMYK profile on RGB pixels would colour them wrongly - so it is
+    kept only when its space (bytes 16-19 of the header) is the one being saved.
+    """
+    if not isinstance(info_profile, bytes) or len(info_profile) < 20:
+        return None
+    wanted = b"GRAY" if saved_as_gray else b"RGB "
+    return info_profile if info_profile[16:20] == wanted else None
+
 
 def shrink_to_fit(data: bytes, image_format: str) -> bytes:
-    """The same image with its longest side at most MAX_STORED_EDGE.
+    """The same image, upright, with no metadata and its longest side at most
+    MAX_STORED_EDGE.
 
-    Returns the original bytes untouched when it already fits. Re-encoding a
-    small image would only lose quality, and a supplier's already-optimised
-    photo is better left exactly as it arrived.
+    Metadata is removed from every file that is stored: EXIF, GPS, XMP, IPTC,
+    comments, thumbnails and trailing data. The bucket is public, so what a phone
+    wrote into a photo - where it was taken, with what - would be published with
+    it. The ICC profile stays; it changes how the colours look.
+
+    Losslessly whenever nothing has to be decoded: an image that fits and is
+    already upright is stripped at the byte level, pixel for pixel the file that
+    arrived. A re-encode happens for only two reasons, and loses quality only
+    then: the image is too large, or its EXIF Orientation is not 1. The latter
+    cannot be left alone - the tag is metadata and goes, so the picture has to
+    be turned upright for good or it would show sideways. The reduction comes
+    before the rotation, because the box is square so the result is the same
+    size either way, and rotating a reduced bitmap copies at most 1600x1600
+    pixels instead of the full-resolution one.
 
     The format is preserved rather than normalised to JPEG: a PNG product shot
     on a transparent background turns into one on a black background otherwise,
     which is a worse picture than a large one.
+
+    What still holds: nothing is decoded that `validate_image` did not cost
+    (it reads the orientation the same way), and a file with nothing to strip is
+    returned byte for byte. A file whose structure cannot be walked raises
+    INVALID_IMAGE rather than being decoded, because that path is unbudgeted.
     """
     # The one parser `validate_image` already accepted the file for, so a caller
     # that skips validation cannot reach another one through this call.
     with Image.open(io.BytesIO(data), formats=[image_format]) as image:
-        if max(image.size) <= MAX_STORED_EDGE:
-            return data
+        orientation = _exif_orientation(image)
+        if max(image.size) <= MAX_STORED_EDGE and orientation == 1:
+            return _STRIP_METADATA[image_format](data)
+
+        # Nothing is lost by taking these before the pixels are touched.
+        saved_as_gray = image_format == "PNG" and image.mode in ("L", "LA")
+        profile = _profile_for(image.info.get("icc_profile"), saved_as_gray)
 
         image.thumbnail((MAX_STORED_EDGE, MAX_STORED_EDGE), Image.Resampling.LANCZOS)
+        if orientation != 1:
+            upright = image.transpose(_UPRIGHT[orientation])
+            # The source bitmap is not needed again, and the encoder below is the
+            # most expensive step: keeping both alive through it measured 97.7 MiB
+            # for the largest WebP the budget admits, releasing the source 89.8.
+            image.close()
+        else:
+            upright = image
         buffer = io.BytesIO()
+        # No `exif=` anywhere: a writer given none writes none.
         if image_format == "JPEG":
-            image.convert("RGB").save(buffer, format="JPEG", quality=JPEG_QUALITY, optimize=True)
+            # `comment=b""` because Pillow's JPEG writer otherwise copies the
+            # source's COM segment across.
+            upright.convert("RGB").save(
+                buffer,
+                format="JPEG",
+                quality=JPEG_QUALITY,
+                optimize=True,
+                icc_profile=profile,
+                comment=b"",
+            )
         elif image_format == "PNG":
             # No `optimize=True`: it searches for the smallest encoding and costs
             # seconds of CPU. Measured on a 2800x2100 PNG, 6.5 s against 0.52 s
             # for a file about 10% larger - not worth the seconds a worker
             # spends on one upload.
-            image.save(buffer, format="PNG")
+            upright.save(buffer, format="PNG", icc_profile=profile)
         else:
-            image.save(buffer, format="WEBP", quality=JPEG_QUALITY, method=6)
+            upright.save(buffer, format="WEBP", quality=JPEG_QUALITY, method=6, icc_profile=profile)
         shrunk = buffer.getvalue()
 
+    # An image that was turned upright keeps its re-encode whatever the size: the
+    # stripped original would show sideways.
+    if orientation != 1:
+        return shrunk
     # A re-encode that came out larger is not worth keeping - it happens with
-    # small PNGs whose palette the resize expands.
-    return shrunk if len(shrunk) < len(data) else data
+    # small PNGs whose palette the resize expands. What it is compared with, and
+    # what wins, is the stripped original, never the raw one.
+    stripped = _STRIP_METADATA[image_format](data)
+    return shrunk if len(shrunk) < len(stripped) else stripped
 
 
 def object_key(product_id: uuid.UUID, extension: str) -> str:

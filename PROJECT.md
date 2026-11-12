@@ -351,6 +351,27 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-11-12 — Every stored image loses its metadata; a rotated one is re-encoded upright (A-033)
+- Decision (approved by the owner beforehand): replaces the old `shrink_to_fit` rule "an image that fits is
+  stored untouched". Now every upload is stripped of EXIF/GPS, XMP, IPTC, comments and trailing data:
+  byte-level and lossless (`_strip_jpeg` / `_strip_png` / `_strip_webp` in `app/services/storage.py`) when the
+  image fits and is upright; re-encoded only when it is larger than `MAX_STORED_EDGE` or its EXIF Orientation
+  is not 1 (reduce first, then rotate). The ICC profile is kept — on a re-encode only when its colour space
+  matches what is saved (a CMYK profile on the RGB it becomes would colour it wrongly).
+- Reason: the bucket is public. A 1200×900 phone photo used to be published byte for byte with its GPS
+  coordinates and device; a 4000×3000 one with Orientation 6 was stored sideways (the resize dropped the tag).
+  "A re-encode loses quality" still holds, which is why the clean case is byte-level and pixel-identical.
+- Also changed: the decode budget now applies to every image that is decoded, so a small image with
+  Orientation ≠ 1 is costed too (`DECODE_COST` and its formula unchanged). The only uncosted path is now
+  ≤ 1600×1600 AND Orientation 1, which is never decoded. Consequence: a WebP above 1.9 MP that needs turning
+  is refused with `IMAGE_TOO_MANY_PIXELS`. Measured (Windows) worst cases of that path: WebP 90.4–90.6 MiB,
+  JPEG 30.7, PNG 20.8 against the 100 MiB budget (`TestDecodeMemoryIsBoundedWhenOnlyTurning`); the source
+  bitmap is released before encoding, without which the WebP case measured 97.7 MiB.
+- What still holds: a file with nothing to strip is stored byte for byte; the format is preserved; a file
+  whose container cannot be walked is refused with `INVALID_IMAGE` (never decoded instead — that path is
+  unbudgeted), so a truncated small JPEG without EOI, once stored, is now refused. Orientation is read from
+  EXIF only, header-only: a PNG whose `eXIf` follows the pixel data reads as upright (AUDIT.md A-057).
+
 ### 2026-11-12 — Upload decoding runs in a thread, one at a time per worker (A-032)
 - Decision: `admin_image.prepare_upload` runs `validate_image` + `shrink_to_fit` in one `asyncio.to_thread`
   hop behind a module-level `asyncio.Semaphore(1)` (`_PROCESSING`), the same pattern as `_HASHING` in
@@ -360,7 +381,7 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
   photo-like 2800×2100 RGBA PNG, for a file about 10% larger.
 - What still holds: one decode per worker process, so the memory ceiling stays `MAX_IMAGE_DECODE_BYTES` per
   process and `WEB_CONCURRENCY` times that per deployment; `DECODE_COST` and `TestDecodeMemoryIsBounded`
-  unchanged. JPEG keeps `optimize=True` (0.2 s), WebP keeps `method=6` (not measured; Backlog).
+  unchanged. JPEG keeps `optimize=True` (0.2 s), WebP keeps `method=6` (its encode time is not measured: AUDIT.md A-056).
 - How to change: raising the semaphore multiplies the memory ceiling by its value.
 
 ### 2026-11-12 — `/auth/refresh` has its own limit, 30/min (A-031)
