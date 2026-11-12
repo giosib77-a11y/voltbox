@@ -207,3 +207,300 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   - CSP უცვლელია, ფონტები self-hosted;
   - `dangerouslySetInnerHTML`/`innerHTML`/`eval` არ არის, JSON-LD `textContent`-ით იწერება.
 - **Secrets:** 61 commit-ის ისტორიაში key ან `.env` არ ჩანს.
+
+
+---
+
+## გარე აუდიტი — 2026-11-12
+
+- **თარიღი:** 2026-11-12
+- **commit:** `7bcca3c`
+- **წყარო:** დამოუკიდებელი აუდიტი (Claude, claude.ai). კოდი წაკითხულია სრულად; ტესტები და სერვერი გაშვებულია
+  ლოკალურად (Python 3.14.6, Node 22, PostgreSQL 16, Redis; uvicorn და gunicorn 2 worker-ით). production-ს არ შევხებივართ.
+- **baseline:**
+  - backend: ruff ✅ · format ✅ · mypy ✅ · **pytest 1106 passed** · branch coverage 94% · alembic 0001→0016 + check ✅ ·
+    **pip-audit --strict ❌ 1 სისუსტე** (A-035)
+  - frontend: lint ✅ · **vitest 672 / 57** (22 `act()` გაფრთხილება) · line coverage 67.5% · build ✅ · npm audit 0
+- **შედეგი:** 0 critical · 8 should-fix (A-030–A-037) · 14 nit (A-038–A-051)
+- ყველა მიგნება გაშვებით ან კოდის წაკითხვით დადასტურდა; რომელი როგორ — თითოეულის „სცენარში“ წერია.
+- ამ სექციის მიგნებები A-001–A-029-ს არ იმეორებს. A-007, A-010 და A-011 ისევ ღიაა და ზემოთ ცხრილშია.
+
+### Should-fix
+
+#### A-030 · should-fix · refresh-ის 429 ან 5xx პასუხი მომხმარებელს სისტემიდან აგდებს
+- **ფაილი:** `frontend/src/services/session.js:224-227`
+- **სცენარი:** `POST /auth/refresh`-ის ნებისმიერ არა-2xx პასუხზე კოდი იძახებს `endSession()`-ს. ქსელის შეცდომაზე კი
+  (`:218-222`) სესია განზრახ რჩება. დროებითი vitest ტესტით: 429, 500, 502 და 503 — ოთხივეზე შენახული სესია `null` გახდა
+  და `sessionLost` handler გამოიძახა (login-ზე გადამისამართება). სერვერი ერთი IP-დან წუთში მეექვსე refresh-ს 429-ით
+  პასუხობს (გაზომილია, იხ. A-031). საერთო NAT-ის უკან მყოფ მომხმარებლებზე ან deploy-ის / ბაზის ხანმოკლე გათიშვისას
+  ეს ჩვეულებრივ გამოყენებაში ჩნდება.
+- **შედეგი:** სესია უმიზეზოდ იკარგება, კალათის სინქრონიზაცია ნახევრად სრულდება.
+- **გამოსწორება:** სესია დასრულდეს მხოლოდ 401-ზე (და 403-ზე, თუ `routes/auth.py`-ის refresh მას აბრუნებს). 429 და 5xx →
+  `return null` სესიის წაშლისა და გადამისამართების გარეშე, როგორც ქსელის შეცდომისას. ტესტები: 401 → სესია იშლება;
+  429/500/502/503 → სესია რჩება, `sessionLost` არ იძახება (სტილი: `src/services/sessionLost.test.js`).
+- **owner:** frontend-dev
+- **status:** open
+
+#### A-031 · should-fix · `/auth/refresh` იზიარებს login-ის 5/წთ ლიმიტს
+- **ფაილი:** `backend/app/core/rate_limit.py:47` (`AUTH_RATE_LIMIT = "5/minute"`), `backend/app/api/v1/routes/auth.py`
+  (refresh-ის `@limiter.limit(AUTH_RATE_LIMIT)`)
+- **სცენარი:** ერთი IP-დან 7 ზედიზედ refresh: 1–5 → 401, 6–7 → 429 (გაზომილია). login-ისთვის 5/წთ გამართლებულია
+  (brute force), refresh-ისთვის კი არა: მას `HttpOnly; SameSite=strict; Path=/api/v1/auth` cookie სჭირდება.
+  ერთი ოფისიდან ან მობილური ოპერატორის CGNAT-იდან რამდენიმე მომხმარებელი, რომელთა access token ერთდროულად იწურება,
+  ამ ზღვარს აღწევს. A-030-თან ერთად ეს logout-ია.
+- **შედეგი:** ლეგიტიმური მომხმარებლები 429-ს იღებენ.
+- **გამოსწორება:** ცალკე `REFRESH_RATE_LIMIT = "30/minute"` refresh-ის route-ზე; მიზეზი კომენტარში და Decision Log-ში
+  (რა რჩება ძალაში: login/register/reset 5/წთ). ტესტი: 30 refresh გადის, 31-ე → 429.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-032 · should-fix · PNG-ის ატვირთვა event loop-ს 6.5–8.2 წამით ბლოკავს
+- **ფაილი:** `backend/app/services/storage.py:335` (`image.save(buffer, format="PNG", optimize=True)`);
+  `backend/app/services/admin_image.py:63`, `:76` (`validate_image`, `shrink_to_fit` სინქრონულად, event loop-ზე)
+- **სცენარი:** გაზომილია სრულ CPU ბირთვზე, `shrink_to_fit` პირდაპირ:
+  - JPEG 4000×3000 — 0.2 წმ;
+  - PNG 2000×1500 (1.4 MB) — 7.5 წმ;
+  - PNG 2800×2100 (2.2 MB) — 6.5 წმ;
+  - PNG 2800×2100 RGBA (2.5 MB) — 8.2 წმ.
+  იგივე PNG `optimize=True`-ის გარეშე 0.52 წმ-ში ინახება (980 KB-ის ნაცვლად 1080 KB). Render-ის 0.5 CPU-ზე დრო დაახლ.
+  ორმაგდება და ამ ხნის განმავლობაში worker სხვა მოთხოვნებს ვერ ემსახურება. gunicorn-ზე `timeout=5`-ით ატვირთვამ
+  worker-ი მოკლა (`WORKER TIMEOUT` + `SIGABRT`, კლიენტმა კავშირის გაწყვეტა მიიღო). production-ის `timeout=60`-ს
+  უფასო გეგმის 0.1 CPU-ზე, გათვლით, სცდება (გაზომილი არ არის).
+- **შედეგი:** ადმინის ჩვეულებრივი მოქმედება (პროდუქტის PNG ფოტო) მაღაზიას ანელებს ან worker-ს კლავს.
+- **გამოსწორება:**
+  1. PNG-ის შენახვიდან `optimize=True` მოიხსნას (ნაგულისხმევი `compress_level`).
+  2. CPU-ის სამუშაო (`validate_image`, `shrink_to_fit`, A-033-ის ცვლილებები) გადავიდეს `asyncio.to_thread`-ში
+     `asyncio.Semaphore(1)`-ის უკან — იგივე ნიმუშით, რაც `backend/app/core/security.py:71`, `:81` (Argon2).
+     მეხსიერების ზღვარი და `DECODE_COST`-ის ლოგიკა არ იცვლება; `TestDecodeMemoryIsBounded` უნდა გადიოდეს.
+  3. ტესტები: PNG-ის შენახვის გზა `optimize`-ს აღარ იყენებს; დამუშავება event loop-ის გარეთ ხდება.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-033 · should-fix · ტელეფონის ფოტო გადაბრუნებული ინახება; პატარა ფოტოს GPS საჯარო bucket-ში ხვდება
+- **ფაილი:** `backend/app/services/storage.py:313-342` (`shrink_to_fit`)
+- **სცენარი (გაშვებით):**
+  - JPEG 4000×3000, `Orientation=6` (ტელეფონზე ვერტიკალური 3000×4000) → შეინახა 1600×1200, ორიენტაციის ნიშნის გარეშე.
+    `ImageOps.exif_transpose` არსად გამოიძახება, `thumbnail` კი EXIF-ს აგდებს. ფოტო საიტზე გვერდზე გადაბრუნებული ჩანს.
+  - JPEG 1200×900 GPS-ით და `Make`-ით → დაბრუნდა ბაიტ-ბაიტ უცვლელი (`:328-329` — „fits → return data“).
+    GPS კოორდინატები და მოწყობილობის მონაცემი საჯარო `product-images` bucket-ში ხვდება.
+- **შედეგი:** არასწორი შედეგი ჩვეულებრივ გამოყენებაში; ადმინის / მომწოდებლის ლოკაციის გაჟონვა.
+- **გამოსწორება:**
+  1. ორიენტაცია: `thumbnail`-მდე `ImageOps.exif_transpose`. თუ ფოტო ზომაში ეტევა, მაგრამ `Orientation ≠ 1`, ხელახლა
+     შენახვა საჭიროა.
+  2. მეტამონაცემები (EXIF, GPS, XMP, IPTC) მოშორდეს **ყველა** ფაილს, პატარასაც. ეს ცვლის `:315-318`-ის docstring-ის
+     გადაწყვეტილებას („small image left untouched“) — ახალი მიზეზი Decision Log-ში. სადაც შესაძლებელია,
+     ხარისხის დაკარგვის გარეშე (JPEG-ის APP1/APP13 სეგმენტები, PNG-ის `eXIf`/`tEXt`/`iTXt`/`zTXt` chunk-ები, WEBP-ის
+     EXIF/XMP chunk-ები); ICC profile რჩება.
+  3. ტესტები: `Orientation=6` → შენახული სურათი ვერტიკალურია და `Orientation` აღარ აქვს; GPS-იანი 1200×900 JPEG →
+     შენახულში არც GPS IFD არის, არც `Make`; არსებული სურათების ტესტები გადის.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-034 · should-fix · დაუმუშავებელი შეცდომისას მომხმარებლის ელფოსტა ლოგში scrub-ის გარეშე იწერება
+- **ფაილი:** `backend/app/core/logging.py:24-35` (`scrub`, `PG_DETAIL_VALUE`), `backend/gunicorn.conf.py:30-31`
+- **სცენარი (გაშვებით, gunicorn, 2 worker, Redis):** ერთი ელფოსტით ორი ერთდროული `POST /auth/register` → `[201, 500]`
+  (A-039). JSON ხაზში მნიშვნელობა გაწმენდილია (`Key (email)=(…)`). მაგრამ Starlette 500-ის შემდეგ გამონაკლისს
+  ხელახლა ისვრის და uvicorn მას `Exception in ASGI application`-ით `uvicorn.error` logger-ში წერს, scrub-ის გარეშე.
+  ლოგში ელფოსტა სამჯერ ჩაიწერა: `DETAIL: Key (email)=(pii-leak-probe-94bef7@example.com) already exists.`
+  იგივე ხდება `addresses`-ის `user_id`-ზე (A-040): 6 ერთდროული მოთხოვნის 3 რაუნდში 11 გაუწმენდავი traceback.
+- **შედეგი:** PII ჰოსტინგის ლოგში ხვდება — `logging.py`-ის დოკუმენტირებული წესის საწინააღმდეგოდ.
+- **გამოსწორება:** scrub-ის ფილტრი მიება `uvicorn.error`-ისა და `gunicorn.error`-ის handler-ებს (ან ორივე
+  გადავიდეს იმავე JSON handler-ზე), ისე რომ Postgres-ის `DETAIL` მნიშვნელობა ლოგის არცერთ ხაზში არ მოხვდეს.
+  ტესტი: `uvicorn.error`-ში დაწერილი ჩანაწერი, რომელიც `Key (email)=(x@y.com)`-ს შეიცავს, გამოსავალში `x@y.com`-ის
+  გარეშე ჩნდება. A-039 და A-040 ამ 500-ებს აქრობს, ეს კი იცავს ყველა მომავალ შემთხვევას.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-035 · should-fix · lock-ებში ცნობილი სისუსტეა (dnspython 2.8.0) — CI-ის `pip-audit` ისევ წითელია
+- **ფაილი:** `backend/requirements.txt:248`, `backend/requirements-dev.txt:327` (`dnspython==2.8.0`, via `email-validator`)
+- **სცენარი:** `pip-audit --strict --disable-pip -r requirements.txt -r requirements-dev.txt -r requirements-build.txt`
+  → exit 1: **CVE-2026-114605** (GHSA-45c3-73f7-pv4m), fix 2.9.0. სისუსტე DNS პასუხის დეკომპრესიაშია (CPU DoS).
+  აპლიკაცია DNS-ს არ იყენებს: pydantic `email_validator`-ს `check_deliverability=False`-ით იძახებს, `app/`-ში `dns`
+  არსად ჩანს. ამიტომ რეალური რისკი დაბალია. მაგრამ `.github/workflows/backend.yml`-ის audit step `--strict`-ით
+  ეშვება, ამიტომ backend-ის ყოველი შემდეგი push / PR წითელია (იგივე სიტუაცია, რაც A-001-ში).
+- **შედეგი:** CI-ის უსაფრთხოების კარიბჭე წითელია.
+- **გამოსწორება:** მხოლოდ `dnspython` → 2.9.0 ორივე lock-ში, Linux container-ში, `--upgrade-package dnspython`-ით
+  (`backend/README.md`, „დამოკიდებულებების lock“). სხვა პაკეტი არ იცვლება; Dependabot-ის ჯგუფურ PR-ს
+  (34 განახლება) არ ვეხებით. შემოწმება: `pip install --require-hashes` + `pip check`, pip-audit-ის CI-ის ფორმა = 0,
+  `docker build`, pytest.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-036 · should-fix · rate limit-ის IP წყარო (`FORWARDED_ALLOW_IPS`) production-ში გადაუმოწმებელია და ლოგით ვერ მოწმდება
+- **ფაილი:** `backend/app/core/logging.py:71-113` (access log), `backend/gunicorn.conf.py`; `PROGRESS.md`-ის Backlog
+  („`FORWARDED_ALLOW_IPS` value on Render — if wrong, all clients share one bucket“)
+- **სცენარი:** ყველა ლიმიტი (`ORDER_RATE_LIMIT` 5/წთ;30/დღე, auth 5/წთ) კლიენტის IP-ზეა. `gunicorn.conf.py` მხოლოდ
+  ცარიელ მნიშვნელობასა და `*`-ს უარყოფს. თუ მნიშვნელობა არასწორია, ყველა მყიდველი Render-ის proxy-ის IP-ით ჩანს და
+  მთელ მაღაზიას ერთი bucket რჩება (30 შეკვეთა დღეში). access log კი კლიენტის არანაირ იდენტიფიკატორს არ წერს, ამიტომ
+  ამის გადამოწმება ლოგიდან შეუძლებელია.
+- **შედეგი:** შესაძლო გათიშვა პირველივე დატვირთვაზე, რომელიც ვერ დიაგნოსტირდება.
+- **გამოსწორება:**
+  1. access log-ს დაემატოს `client`: `sha256(salt + request.client.host)`-ის პირველი 12 სიმბოლო. salt
+     `JWT_SECRET`-იდან HMAC-ით მიიღება, ნედლი IP არსად ინახება.
+  2. `docs/deployment.md`-ს დაემატოს შემოწმების პროცედურა: deploy-ის შემდეგ ორი ქსელიდან (Wi-Fi და მობილური)
+     `curl`-ით `GET /api/v1/health/live` → ლოგში ორი განსხვავებული `client` უნდა ჩანდეს.
+  3. Render-ზე შემოწმება მფლობელისაა → `## Blockers`. ამ ჩანაწერის status: `fixed (reviewed)` + „owner check pending“.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-037 · should-fix · ადმინის ანგარიშს მხოლოდ სუსტი პაროლის წესი იცავს; დაბლოკვა შეუმჩნეველია
+- **ფაილი:** `backend/app/core/security.py:29` (`COMMON_PASSWORDS`, 17 ჩანაწერი), `:50` (`MIN_PASSWORD_LENGTH = 8`);
+  `backend/app/core/config.py:117` (`max_failed_logins = 10`); `backend/scripts/manage_admin.py:36-50`
+- **სცენარი:** ადმინი შედის იმავე `/auth/login`-ით, მეორე ფაქტორის გარეშე; პანელი ყველა მყიდველის სახელს, ტელეფონს,
+  მისამართსა და შეკვეთებს აჩვენებს. ახალი პაროლის ვალიდაციამ მიიღო `aaaaaaaa`, `12345678a`, `qwertyuiop`,
+  `Password1!` (გაშვებით). 10 არასწორი ცდა ანგარიშს 15 წუთით კეტავს — ვინც ადმინის ელფოსტა იცის, პანელს
+  დაკეტილს შეინარჩუნებს და ამას არავინ შეამჩნევს.
+- **შედეგი:** ადმინის ანგარიშის ხელში ჩაგდება = ყველა მომხმარებლის PII.
+- **გამოსწორება (ამ ID-ში — TOTP-ის გარეშე; TOTP ცალკე stage-ია):**
+  1. ახალი პაროლის წესი ყველასთვის: ერთი სიმბოლოს გამეორება და მარტივი მიმდევრობები (`12345678`, `abcdefgh`,
+     `qwertyui`) იკრძალება; გავრცელებული პაროლების სია ≥ 10 000 ჩანაწერი, ოფლაინ, მონაცემთა ფაილად (ახალი
+     dependency-ის გარეშე; წყარო და ლიცენზია Decision Log-ში).
+  2. ადმინის როლზე მინიმუმ 12 სიმბოლო (`manage_admin.py`, change-password, reset).
+  3. არსებული პაროლები აგრძელებს მუშაობას — წესი მხოლოდ ახალი პაროლის დაყენებისას მოქმედებს.
+  4. ადმინის ანგარიშის დაბლოკვისას შეტყობინება Telegram-ში არსებული `app/services/telegram.py`-ით
+     (ელფოსტა ნიღბით, IP-ის გარეშე).
+  5. ტესტები ოთხივე პუნქტზე.
+- **owner:** backend-dev
+- **status:** open
+
+### Nit
+
+#### A-038 · nit · უზარმაზარი `page` საჯარო endpoint-ზე 500-ს აბრუნებს
+- **ფაილი:** `backend/app/core/pagination.py:22` (`page: int = Field(default=1, ge=1)`) და ყველა სხვა `page` პარამეტრი
+- **სცენარი:** `GET /api/v1/products?page=9223372036854775807` (ავტორიზაციის გარეშე) → 500, asyncpg:
+  `value out of int64 range` (OFFSET). იგივე `GET /admin/orders`-ზე.
+- **გამოსწორება:** `le=10_000` ყველა `page`-ზე → 400 `VALIDATION_ERROR`. ტესტი: 10 000 გადის, 10 001 → 400.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-039 · nit · ერთი ელფოსტით ერთდროული რეგისტრაცია 409-ის ნაცვლად 500-ს აბრუნებს
+- **ფაილი:** `backend/app/services/auth.py:79-88` (ჯერ SELECT, მერე INSERT); შეამოწმე `:698`-ის მსგავსი გზაც
+- **სცენარი:** gunicorn, 2 worker: `[201, 500]`. მეორე მოთხოვნა unique constraint-ზე ვარდება. იწვევს A-034-ს.
+- **გამოსწორება:** ამ constraint-ის `IntegrityError` → იგივე `EMAIL_ALREADY_EXISTS` (409); SELECT რჩება.
+  ტესტი ნამდვილ ბაზაზე, `asyncio.gather`-ით: `[201, 409]`.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-040 · nit · ერთდროული „ძირითადი მისამართის“ შექმნა 500-ს აბრუნებს
+- **ფაილი:** `backend/app/services/address.py:55-80` (`_clear_other_defaults`, `create`);
+  `uq_addresses_one_default_per_user` (`backend/app/db/models/users.py:111`)
+- **სცენარი:** 6 ერთდროული `POST /addresses` `isDefault: true`-ით, 3 რაუნდი → 18-დან 11 იყო 500. ორი ტრანზაქცია
+  ერთდროულად ასუფთავებს ძველ default-ს და ორივე ახალს წერს — partial unique index-ზე ვარდება. იწვევს A-034-ს.
+- **გამოსწორება:** `_clear_other_defaults`-მდე მომხმარებლის რიგის lock (`SELECT ... FROM users WHERE id = :id FOR UPDATE`)
+  იმავე ტრანზაქციაში; იგივე update-ის გზაზეც. ტესტი: 4 ერთდროული → არცერთი 500, ბოლოს ზუსტად ერთი default.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-041 · nit · მისამართების რაოდენობა შეუზღუდავია და ყველა ავტორიზებულ მოთხოვნაზე იტვირთება
+- **ფაილი:** `backend/app/db/models/users.py:67-68` (`lazy="selectin"`), `backend/app/core/deps.py`,
+  `backend/app/services/address.py`
+- **სცენარი:** ერთმა მომხმარებელმა 55 მისამართი შექმნა (500-სიმბოლოიანი ველებით, სიის პასუხი 37 KB). მომხმარებლის
+  ჩატვირთვა (`deps.py`) ასრულებს 2 SQL-ს და ყველა მისამართს მეხსიერებაში ტვირთავს — ყოველ ავტორიზებულ მოთხოვნაზე.
+- **გამოსწორება:**
+  1. ლიმიტი 20 მისამართი მომხმარებელზე; გადაჭარბება → 409 `ADDRESS_LIMIT_REACHED`, ტექსტი
+     `frontend/src/i18n/ka.json`-სა და `en.json`-ში.
+  2. `lazy="selectin"` → `lazy="raise"` (ან `noload`); მისამართები ჩაიტვირთოს მხოლოდ იქ, სადაც საჭიროა, explicit
+     `selectinload`-ით. ჯერ `user.addresses`-ის ყველა გამოყენება მოიძებნოს.
+  3. ტესტები: 20 გადის, 21-ე → 409; `GET /auth/me` ზუსტად 1 SQL-ს ასრულებს (`before_cursor_execute` listener).
+- **owner:** backend-dev
+- **status:** open
+
+#### A-042 · nit · იმავე Idempotency-Key-ით სხვა კალათა ჩუმად ძველ შეკვეთას აბრუნებს
+- **ფაილი:** `backend/app/services/order.py:50` (`uq_orders_idempotency_key`), `:131` (`IDEMPOTENCY_KEY_CONFLICT`)
+- **სცენარი:** სტუმრის შეკვეთა qty 1 → 201. იმავე გასაღებით და იმავე კონტაქტით, მაგრამ qty 5 → 201 და ძველი შეკვეთა
+  qty 1-ით. კლიენტი ფიქრობს, რომ 5 ცალი შეუკვეთა. სხვა კონტაქტით იმავე გასაღებზე 409 სწორად ბრუნდება.
+- **გამოსწორება:**
+  1. შეკვეთაზე `request_hash` (sha256 კანონიკური JSON-იდან: დალაგებული items, customer, paymentMethod).
+     migration `0017`, nullable სვეტი (ახალი ცხრილი არ არის → RLS არ სჭირდება).
+  2. იგივე გასაღები + სხვა hash → 409 `IDEMPOTENCY_KEY_REUSED` (ტექსტი ka/en); იგივე hash → არსებული ქცევა;
+     hash-ის გარეშე (ძველი) შეკვეთა → შემოწმება გამოტოვდება.
+  3. ლაივ migration მხოლოდ `alembic upgrade 0016:0017 --sql`-ით (`public.`-ით), მფლობელისთვის `## Blockers`-ში.
+  4. ტესტები სამივე შემთხვევაზე; `alembic upgrade head` + `alembic check`.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-043 · nit · შეკვეთის ნომრის თარიღი UTC-ია, არა თბილისის
+- **ფაილი:** `backend/app/services/order.py:76` (`to_char(now(), 'YYYYMMDD')`)
+- **სცენარი:** ბაზის დროის სარტყელი UTC-ია, ამიტომ თბილისის დროით 00:00–04:00 შორის მიღებული შეკვეთა წინა დღის
+  თარიღს იღებს (`VB-YYYYMMDD-…`).
+- **გამოსწორება:** `to_char(now() AT TIME ZONE 'Asia/Tbilisi', 'YYYYMMDD')`. ტესტი: SQL-ის დონეზე, დროის სარტყლით.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-044 · nit · `manage_admin.py` ელფოსტას არ ამოწმებს — იქმნება ადმინი, რომელიც ვერასოდეს შევა
+- **ფაილი:** `backend/scripts/manage_admin.py:60-76`
+- **სცენარი:** `create-admin --email audit-admin@example.test` → ადმინი შეიქმნა. `/auth/login` კი ამ ელფოსტას 400-ით
+  უარყოფს (`EmailStr`-ს `.test` დომენი არ მოსწონს), ამიტომ ეს ანგარიში გამოუსადეგარია.
+- **გამოსწორება:** იგივე ვალიდაცია, რაც `app/schemas/auth.py`-ში (pydantic `EmailStr` / `TypeAdapter`), სამივე
+  ბრძანებაში; არავალიდურზე `SystemExit` გასაგები ტექსტით. ტესტი.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-045 · nit · ძებნაში სიტყვების რაოდენობა შეუზღუდავია
+- **ფაილი:** `backend/app/services/search.py:187`
+- **სცენარი:** 100 ერთასოიანი სიტყვა → 89 მწმ (`/search`), 116 მწმ (`/products?q=`); ჩვეულებრივი ძებნა — 14 მწმ
+  (61 პროდუქტზე). სხვაობა კატალოგთან ერთად იზრდება; endpoint საჯაროა.
+- **გამოსწორება:** მაქსიმუმ 8 token (stopword-ების შემდეგ), დანარჩენი ჩუმად იკვეთება. ტესტი.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-046 · nit · პასუხის header-ების წვრილმანები
+- **ფაილი:** `backend/app/core/logging.py:20`, `backend/app/core/errors.py:95`, `backend/gunicorn.conf.py`,
+  `backend/app/api/v1/routes/health.py:70`
+- **სცენარი (გაშვებით):**
+  - პასუხს აქვს `Server: uvicorn`;
+  - 308-სიმბოლოიანი `X-Request-ID`, რომელიც `<script>`-ით მთავრდება, უცვლელად ბრუნდება და ლოგში იწერება;
+  - 429-ს `Retry-After` არ ახლავს;
+  - `GET /health` აჩვენებს `environment`-ს.
+- **გამოსწორება:** `server_header` გამოირთოს (uvicorn worker-ის კონფიგით); შემოსული `X-Request-ID` მიიღება მხოლოდ
+  `^[A-Za-z0-9-]{8,64}$`-ზე, სხვა შემთხვევაში იქმნება ახალი; 429-ს `Retry-After`; `/health`-იდან `environment`
+  ამოიღოს (ჯერ შემოწმდეს, ვინ კითხულობს). ტესტები.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-047 · nit · ორივე ენის და ადმინის ყველა ტექსტი storefront-ის საწყის bundle-შია
+- **ფაილი:** `frontend/src/i18n/*`, `frontend/vite.config.js`
+- **სცენარი:** `npm run build` (http): `constants-*.js` 84.75 kB (22.34 kB gzip) შეიცავს ქართულს, ინგლისურს და ადმინის
+  ტექსტებს, და ყველა გვერდზე იტვირთება. საწყისი JS ჯამში ≈ 138 kB gzip.
+- **გამოსწორება:** ინგლისური — მხოლოდ `/en`-ზე, ადმინის ტექსტები — ადმინის chunk-ში. build-ის ზომები ცვლილებამდე
+  და შემდეგ — report-ში.
+- **owner:** frontend-dev
+- **status:** open
+
+#### A-048 · nit · `robots.txt` ინგლისურ პირად გვერდებს არ ფარავს
+- **ფაილი:** `frontend/public/robots.txt:8-11`
+- **სცენარი:** იკრძალება `/admin`, `/checkout`, `/account`, `/cart`, მაგრამ არა `/en/checkout`, `/en/account`, `/en/cart`.
+- **გამოსწორება:** დაემატოს `/en/` ვარიანტები.
+- **owner:** frontend-dev
+- **status:** open
+
+#### A-049 · nit · frontend-ის 9 ფაილს ტესტი საერთოდ არ აქვს; 22 `act()` გაფრთხილება
+- **ფაილი:** `frontend/src/pages/Register.jsx`, `frontend/src/pages/Account/Addresses.jsx`,
+  `frontend/src/components/catalog/Pagination.jsx`, `frontend/src/components/search/SearchSuggestions.jsx`,
+  `frontend/src/admin/pages/{InventoryList,CustomerList,CategoryList,CustomerDetail,AdminDashboard}.jsx`
+- **სცენარი:** `vitest --coverage`: ამ ფაილებზე 0% ხაზი; ჯამში ხაზები 67.5%, ფუნქციები 55.9%. `npm test`-ის
+  გამოსავალში 22-ჯერ `not wrapped in act(...)` (მაგ. `ToastProvider`).
+- **გამოსწორება:** ტესტები პრიორიტეტით: Register (ვალიდაცია, redirect, სერვერის შეცდომა), Addresses (CRUD, default),
+  Pagination; ადმინის გვერდებზე smoke (რენდერი, ცარიელი მდგომარეობა, შეცდომა). `act()` გაფრთხილებები გასწორდეს.
+- **owner:** frontend-dev
+- **status:** open
+
+#### A-050 · nit · დოკუმენტაცია კოდს ჩამორჩება
+- **ფაილი / სცენარი:**
+  - `README.md:11`, `frontend/README.md:60` — „React Router 6“, `package.json` — `react-router ^7.18.4`;
+  - `frontend/vite.config.js:51` — `vendor` „66.9 kB“, build-ში vendor 89.04 kB gzip;
+  - `frontend/src/context/AuthContext.jsx:8` — „MOCK ONLY — replace with real auth API“ (რეალური API კარგა ხანია მუშაობს);
+  - `TODO.md` №18 — „სრული e2e CI-ში არაა“, `.github/workflows/e2e.yml` კი არსებობს (განრიგით + `workflow_dispatch`).
+- **გამოსწორება:** ოთხივე ადგილი სიმართლეს შეესაბამოს.
+- **owner:** task-executor
+- **status:** open
+
+#### A-051 · nit · დაუდასტურებელი შეკვეთა მარაგს უვადოდ იკავებს
+- **ფაილი:** `backend/app/services/order.py`, `backend/app/services/order_status.py`
+- **სცენარი (კოდით):** `pending` შეკვეთა მარაგს მაშინვე იკავებს და ავტომატურად არასოდეს ათავისუფლებს. დაცვა მხოლოდ
+  IP-ლიმიტია (5/წთ; 30/დღე); სტუმრის ელფოსტა არ მოწმდება. IP-ის ცვლით შესაძლებელია პოპულარული პროდუქტის მთელი
+  მარაგის „დაჯავშნა“.
+- **გამოსწორება:** ბიზნეს-გადაწყვეტილებაა (ვადა, გაუქმების მექანიზმი უფასო Render-ზე cron-ის გარეშე) → Stage 4-ის
+  დაგეგმვაში.
+- **owner:** backend-dev
+- **status:** needs decision
