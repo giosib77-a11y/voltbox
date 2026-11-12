@@ -714,7 +714,17 @@ Unverified (check before acting):
   not reproducible locally. Deploy checklist item 6 (photo over 5 MB on live) answers it.
 
 ## Blockers
-- None. (2026-10-21: the 390/360 card CTA overflow, left here after Stage 3's fix rounds, was fixed on the owner's request — see Last Session.)
+- **2026-11-12, owner — verify the live schema (AUDIT.md A-061).** A scratchpad pytest plugin imported `app` before
+  `tests/conftest.py`, so the session fixture ran `alembic downgrade base` against `backend/.env`'s database twice; it
+  failed inside 0010's downgrade after 0016→0011 had run in the same transaction (rolled back by code reading, not
+  verified). In the Supabase SQL Editor: `select version_num from public.alembic_version;` → `0016`;
+  `select table_name, column_name from information_schema.columns where table_schema='public' and ((table_name='orders' and column_name='deleted_at') or column_name in ('name_en','description_en'));`
+  → 5 rows; `select to_regclass('public.password_reset_tokens');` → not null. Then decide whether to `/fix A-061`
+  (a guard in `_run_alembic` that refuses any database but the test one).
+- **2026-11-12, owner — photos already in the bucket (AUDIT.md A-062).** Images uploaded before `6469e57` at ≤1600 px
+  were stored byte for byte and may still carry GPS/device EXIF at their public URLs. Decide: re-process in place, or
+  re-upload from the panel.
+- (2026-10-21: the 390/360 card CTA overflow, left here after Stage 3's fix rounds, was fixed on the owner's request — see Last Session.)
 
 ## Run State
 - Stage: Stage 3 — Storefront redesign

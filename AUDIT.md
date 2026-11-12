@@ -239,6 +239,21 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   alembic 0001→0016 + check ✅ (scratch ბაზაზე) · `docker build` ✅ · eslint ✅ · vitest 677 / 57 · build `http` ✅ ·
   build `mock` ✅. არ გაშვებულა: e2e, ნამდვილი ბრაუზერი, frontend Node 22-ზე.
 
+**`/fix A-032 A-033` 2026-11-12** (ბრენჩი `fix/external-a032-a033`, `agent-system`-იდან, `85a2781`):
+- A-032 — fixed (verified), `e903dcd`. 4 ახალი ტესტი ძველ კოდზე ვარდება (`optimize: True`; validate/shrink loop-ის thread-ზე;
+  loop-ის 0 tick), ახალზე გადის. re-review: code-reviewer — დახურულია, 2 nit (A-055, A-056).
+- A-033 — fixed (verified), `6469e57`. 46 ახალი ტესტი; 35 ძველ კოდზე ვარდება. ორკესტრატორმა აუდიტის ორივე სცენარი ორივე
+  კოდზე გაუშვა: HEAD — 1600×1200 და ბაიტ-ბაიტ უცვლელი ფაილი GPS-ით და `Make`-ით; ახალი — 1200×1600, GPS/`Make` აღარ არის.
+  მეხსიერების ორივე კლასი (`TestDecodeMemoryIsBounded` და ახალი `…WhenOnlyTurning`) Linux-ზე, production image-ში
+  (python:3.14.7-slim, Pillow 13) — 8/8 budget-ში. re-review: security-auditor — დახურულია ახალი ატვირთვებისთვის, 4 nit
+  (A-057–A-060) და დაუდასტურებელი A-062.
+- **ინციდენტი (A-061):** A-033-ის დეველოპერის scratchpad pytest-plugin-მა `app` conftest-მდე დააიმპორტა და session fixture-ის
+  `alembic downgrade base` ორჯერ გაეშვა `backend/.env`-ის ბაზაზე (სავარაუდოდ ლაივ Supabase). ორივეჯერ 0010-ის downgrade-ზე
+  ჩავარდა, 0016→0011 იმავე ტრანზაქციაში უკვე შესრულებული იყო. კოდის მიხედვით ყველაფერი rollback-ით გაუქმდა (ერთი
+  ტრანზაქცია, autocommit არსად) — **ლაივ ბაზაზე გადამოწმებული არ არის**, მფლობელისაა.
+- gate-ები (`6469e57`, ორკესტრატორი, მარტო გაშვებული): ruff ✅ · format 167 ✅ · mypy 148 ✅ · **pytest 1159 passed**
+  (baseline 1108 + 51) · `docker build` ✅.
+
 ### Should-fix
 
 #### A-030 · should-fix · refresh-ის 429 ან 5xx პასუხი მომხმარებელს სისტემიდან აგდებს
@@ -288,7 +303,7 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
      მეხსიერების ზღვარი და `DECODE_COST`-ის ლოგიკა არ იცვლება; `TestDecodeMemoryIsBounded` უნდა გადიოდეს.
   3. ტესტები: PNG-ის შენახვის გზა `optimize`-ს აღარ იყენებს; დამუშავება event loop-ის გარეთ ხდება.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `e903dcd` (re-review: code-reviewer)
 
 #### A-033 · should-fix · ტელეფონის ფოტო გადაბრუნებული ინახება; პატარა ფოტოს GPS საჯარო bucket-ში ხვდება
 - **ფაილი:** `backend/app/services/storage.py:313-342` (`shrink_to_fit`)
@@ -308,7 +323,7 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   3. ტესტები: `Orientation=6` → შენახული სურათი ვერტიკალურია და `Orientation` აღარ აქვს; GPS-იანი 1200×900 JPEG →
      შენახულში არც GPS IFD არის, არც `Make`; არსებული სურათების ტესტები გადის.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `6469e57` (re-review: security-auditor). bucket-ში უკვე შენახული ფოტოები — A-062.
 
 #### A-034 · should-fix · დაუმუშავებელი შეცდომისას მომხმარებლის ელფოსტა ლოგში scrub-ის გარეშე იწერება
 - **ფაილი:** `backend/app/core/logging.py:24-35` (`scrub`, `PG_DETAIL_VALUE`), `backend/gunicorn.conf.py:30-31`
@@ -545,4 +560,81 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   `apiErrors.fallback`-ს აჩვენებს; ქსელის შეცდომაზე `apiErrors.network` უფრო ზუსტი იქნებოდა).
 - **გამოსწორება:** კომენტარების ტექსტი; სურვილისამებრ ქსელის შემთხვევაში `apiErrors.network`.
 - **owner:** frontend-dev
+- **status:** open
+
+### A-032/A-033-ის re-review და ინციდენტი (2026-11-12)
+
+#### A-061 · critical · ტესტების fixture `downgrade base`-ს ნებისმიერ ბაზაზე უშვებს, რომელსაც `settings` აჩვენებს
+- **ფაილი:** `backend/tests/conftest.py:50-72` (`_run_alembic`, `_create_schema`), `backend/alembic/env.py:30`
+- **სცენარი (მოხდა 2026-11-12):** დაცვა (`VOLTBOX_NO_DOTENV=1`, `DATABASE_URL` → `voltbox_test`) მხოლოდ მაშინ მუშაობს, თუ
+  `app`-ს პირველი conftest აიმპორტებს. pytest plugin (`-p`), რომელმაც `app.core.config` ადრე დააიმპორტა, `Settings`-ი
+  `backend/.env`-იდან შექმნა, და autouse session fixture-მა `alembic downgrade base` იმ ბაზაზე გაუშვა — ორჯერ. 0016→0011
+  შესრულდა, 0010-ზე ჩავარდა (`ck_orders_payment_method_allowed does not exist` — ლოკალურ ბაზებზე ეს constraint არსებობს,
+  ამიტომ ბაზა სავარაუდოდ ლაივ Supabase იყო). ერთ ტრანზაქციაში იყო, ამიტომ კოდის მიხედვით rollback-ით გაუქმდა.
+- **შედეგი:** ერთი შეცდომა plugin-ში ან სკრიპტში = ლაივ სქემის და მონაცემების (`name_en`, `deleted_at`,
+  `password_reset_tokens`, …) წაშლა, თუ downgrade ბოლომდე გავა.
+- **გამოსწორება:** `_run_alembic` alembic-მდე ამოწმებს, რომ `settings.database_url` ზუსტად `TEST_DATABASE_URL`-ია (ან host
+  `localhost`/`127.0.0.1` და ბაზის სახელი `_test`-ით მთავრდება), სხვა შემთხვევაში `pytest.exit` გასაგები ტექსტით; ტესტი,
+  რომელიც ამ დაცვას ამოწმებს. სურვილისამებრ `alembic/env.py`-ში `downgrade` არა-ლოკალურ host-ზე იკრძალება.
+- **owner:** backend-dev
+- **status:** open — ამ `/fix`-ის ფარგლებს გარეთაა (მითითებული იყო მხოლოდ A-032, A-033); მფლობელმა ჯერ ლაივ ბაზა უნდა
+  გადაამოწმოს (`PROGRESS.md` → Blockers).
+
+#### A-062 · should-fix (დაუდასტურებელი) · bucket-ში უკვე შენახული პატარა ფოტოები GPS-ს ინარჩუნებენ
+- **ფაილი:** ლაივ `product-images` bucket; `backend/app/services/storage.py` (`shrink_to_fit`)
+- **სცენარი:** A-033 მხოლოდ ახალ ატვირთვებზე მოქმედებს. `6469e57`-მდე ატვირთული ≤1600 px ფოტო ბაიტ-ბაიტ ინახებოდა, ამიტომ
+  ტელეფონის GPS / `Make` საჯარო URL-ზე რჩება. მფლობელი რეალურ პროდუქტებს ადმინიდან ტვირთავს. bucket-ზე წვდომა არ გვქონდა.
+- **გამოსწორება:** მფლობელის გადაწყვეტილება: ერთჯერადი გადამუშავება (`shrink_to_fit` თითოეულ ობიექტზე, იგივე key-ით) ან
+  ფოტოების ხელახლა ატვირთვა ადმინიდან და ძველის წაშლა. ჯერ — რამდენ ობიექტს აქვს EXIF.
+- **owner:** მფლობელი
+- **status:** needs decision
+
+#### A-055 · nit · `_PROCESSING`-ის კომენტარი „40 by default in anyio"-ს ამბობს
+- **ფაილი:** `backend/app/services/admin_image.py:52-54`
+- **სცენარი (კოდით):** `asyncio.to_thread` loop-ის ნაგულისხმევ executor-ს იყენებს: `min(32, process_cpu_count() + 4)`.
+  40 anyio-ს `run_in_threadpool`-ისაა. დასკვნა („გიგაბაიტები") ძალაში რჩება.
+- **გამოსწორება:** „up to the default executor's size, min(32, CPUs + 4)".
+- **owner:** backend-dev
+- **status:** open
+
+#### A-056 · nit · WebP-ის `method=6` encode-ის დრო გაზომილი არ არის
+- **ფაილი:** `backend/app/services/storage.py` (`shrink_to_fit`, WebP-ის შტო)
+- **სცენარი:** `method=6` libwebp-ის ყველაზე ნელი რეჟიმია. A-032-ის შემდეგ ის loop-ს აღარ ბლოკავს, მაგრამ semaphore-ის ქვეშ
+  CPU-ს წვავს და სხვა ატვირთვებს აყოვნებს.
+- **გამოსწორება:** გაზომვა (1600 px შედეგი, `method` 4 vs 6: დრო და ზომა); მერე გადაწყვეტა.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-057 · nit · PNG, რომლის `eXIf` IDAT-ის შემდეგაა, ორიენტაციას კარგავს
+- **ფაილი:** `backend/app/services/storage.py` (`_exif_orientation`)
+- **სცენარი:** ასეთ ფაილზე `info["exif"]` გახსნისას არ არსებობს, ამიტომ ორიენტაცია 1-ად ითვლება; chunk-ი იშლება, ფოტო
+  შეიძლება გვერდზე ჩანდეს. კამერები PNG-ს ასე არ წერენ.
+- **გამოსწორება:** byte-level `eXIf` ძებნა header-only წაკითხვისთვის, ან ასეთი ფაილის `INVALID_IMAGE`.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-058 · nit · PNG/WebP-ის stripper denylist-ია; JPEG-ის APP0/APP14 identifier-ს არ ამოწმებს
+- **ფაილი:** `backend/app/services/storage.py` (`_PNG_METADATA`, `_strip_webp`, `_strip_jpeg`-ის `keep`)
+- **სცენარი (კოდით):** PNG-ში რჩება `caBX` (C2PA, შეიძლება ავტორი), `exIf`/`zxIf`, `iDOT`, private chunk-ები; WebP-ში
+  ნებისმიერი უცნობი FourCC (`C2PA`). JPEG-ში APP0 (JFXX-ის thumbnail-ით) და APP14 მთლიანად რჩება. JPEG-ის C2PA (APP11)
+  კი იშლება — ფორმატები განსხვავებულად იქცევიან.
+- **გამოსწორება:** allowlist: PNG — IHDR, PLTE, IDAT, IEND, tRNS, gAMA, cHRM, sRGB, iCCP, sBIT, bKGD, pHYs, cICP, mDCV, cLLI,
+  acTL, fcTL, fdAT; WebP — VP8X, VP8, VP8L, ALPH, ANIM, ANMF, ICCP; APP0 მხოლოდ `JFIF\0`-ით, APP14 მხოლოდ `Adobe`-ით.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-059 · nit · resize-ის გზაზე stripper-ის შეცდომა უკვე მზა re-encode-ს უარყოფს
+- **ფაილი:** `backend/app/services/storage.py` (`shrink_to_fit`-ის ბოლო ორი ხაზი)
+- **სცენარი (კოდით):** >1600 JPEG EOI-ის გარეშე — Pillow დეკოდავს (budget-ში), მაგრამ შედარებისთვის `_STRIP_METADATA`
+  `INVALID_IMAGE`-ს ისვრის და ატვირთვა 400-ია, თუმცა სუფთა `shrunk` უკვე არსებობს.
+- **გამოსწორება:** `try: stripped = …` / `except ValidationError: return shrunk`.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-060 · nit · JPEG-ის walker-ს marker-ების რაოდენობის ზღვარი არ აქვს
+- **ფაილი:** `backend/app/services/storage.py` (`_strip_jpeg`)
+- **სცენარი (კოდით, გაზომილი არ არის):** JPEG-ის `verify()` SOS-ის შემდეგ არაფერს ამოწმებს; 5 MB `FF 01`/`FF FF 00` ≈ 2.5M
+  Python iteration — შეფასებით რამდენიმე წამი CPU ერთ ატვირთვაზე (მხოლოდ ავტორიზებული ადმინი).
+- **გამოსწორება:** marker-ების ლიმიტი (მაგ. 65 536) → `INVALID_IMAGE`; გაზომვა.
+- **owner:** backend-dev
 - **status:** open
