@@ -66,3 +66,4 @@ frontend — `frontend/`-იდან.
 - storefront-ის ახალი ტექსტი — გასაღები ორივე i18n ფაილში; კომპონენტში ქართული ტექსტი პირდაპირ არა.
 - ტესტის საერთო კოდი — `tests/factories.py`.
 - გადაწყვეტილების მიზეზი — კომენტარში ან `PROJECT.md`-ის Decision Log-ში; შეზღუდვის აღწერისას ისიც თქვი, რა რჩება ძალაში.
+- Docker container-ში რეპო მთლიანად არ კოპირდება და არ mount-დება — მხოლოდ საჭირო ფაილები (`backend/requirements*.txt`, `backend/pyproject.toml`); `backend/.env` container-ში არასდროს.
