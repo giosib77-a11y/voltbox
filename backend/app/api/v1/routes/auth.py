@@ -17,6 +17,7 @@ from app.core.deps import CurrentUser, Db
 from app.core.errors import AppError, UnauthorizedError
 from app.core.rate_limit import (
     AUTH_RATE_LIMIT,
+    REFRESH_RATE_LIMIT,
     RESET_EMAIL_ADDRESS_LIMIT,
     hit_per_address,
     limiter,
@@ -126,7 +127,7 @@ async def login(request: Request, response: Response, db: Db, payload: LoginRequ
     ),
     response_model=SessionOut,
 )
-@limiter.limit(AUTH_RATE_LIMIT)
+@limiter.limit(REFRESH_RATE_LIMIT)
 async def refresh(
     request: Request, response: Response, db: Db, refresh_token: RefreshCookie = None
 ) -> SessionOut:

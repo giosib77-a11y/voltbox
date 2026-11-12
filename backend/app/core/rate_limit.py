@@ -46,6 +46,21 @@ logger = logging.getLogger(__name__)
 # ბრუტფორსის ზღვარი — შესვლასა და რეგისტრაციაზე მკაცრი
 AUTH_RATE_LIMIT = "5/minute"
 
+#: `POST /auth/refresh`. Not AUTH_RATE_LIMIT: that one is there to stop password
+#: guessing, and refresh has no password to guess. It is spent with the
+#: `HttpOnly; SameSite=strict; Path=/api/v1/auth` cookie, whose token is 256-bit
+#: random and rotated on every use, so no rate makes it guessable. What the
+#: endpoint does meet is many shoppers behind one address (office NAT, mobile
+#: CGNAT) whose access tokens expire within the same minutes; at five a minute
+#: the sixth got a 429, which the storefront treats as a logout. Thirty a minute
+#: carries a crowd of real sessions and still caps a script hammering the
+#: endpoint (each call is a database lookup and, on a hit, a write).
+#:
+#: Still at AUTH_RATE_LIMIT, because they check or change a password or send an
+#: email: login, register, forgot/reset password, change-password and profile
+#: update.
+REFRESH_RATE_LIMIT = "30/minute"
+
 #: Password reset emails one address can be sent. The per-IP limit in front of
 #: the endpoint is AUTH_RATE_LIMIT, like login; this one is for the mailbox on
 #: the other end. Behind a botnet every request comes from a fresh IP, and

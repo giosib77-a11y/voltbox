@@ -7,7 +7,7 @@ import httpx
 import jwt
 import pytest
 from app.core.config import settings
-from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
+from app.core.rate_limit import AUTH_RATE_LIMIT, REFRESH_RATE_LIMIT, limiter
 from app.core.security import decode_access_token, hash_password, verify_password_async
 from app.db.models import PasswordResetToken, RefreshToken, User
 from app.db.session import get_db
@@ -963,6 +963,51 @@ async def test_change_password_is_rate_limited_per_address(client: httpx.AsyncCl
         limiter.enabled = False
 
     assert statuses == [400] * per_minute + [429]
+
+
+async def test_refresh_allows_far_more_than_login_before_it_is_limited(
+    client: httpx.AsyncClient,
+) -> None:
+    # Many shoppers share one address (office NAT, mobile CGNAT) and their access
+    # tokens expire together. Refresh has no password to guess, so it must not
+    # share login's five a minute, which the storefront would turn into a logout.
+    per_minute = int(REFRESH_RATE_LIMIT.split("/")[0])
+    assert per_minute > int(AUTH_RATE_LIMIT.split("/")[0])
+
+    limiter.enabled = True
+    limiter.reset()
+    try:
+        statuses = [
+            (await client.post("/api/v1/auth/refresh")).status_code for _ in range(per_minute + 1)
+        ]
+    finally:
+        limiter.reset()
+        limiter.enabled = False
+
+    # No cookie: the normal answer is 401, which is what the limit must not replace.
+    assert statuses == [401] * per_minute + [429]
+
+
+async def test_login_stays_limited_at_the_auth_limit(client: httpx.AsyncClient) -> None:
+    per_minute = int(AUTH_RATE_LIMIT.split("/")[0])
+
+    limiter.enabled = True
+    limiter.reset()
+    try:
+        statuses = [
+            (
+                await client.post(
+                    "/api/v1/auth/login",
+                    json={"email": "nobody@example.ge", "password": "definitely-not-it"},
+                )
+            ).status_code
+            for _ in range(per_minute + 1)
+        ]
+    finally:
+        limiter.reset()
+        limiter.enabled = False
+
+    assert statuses == [401] * per_minute + [429]
 
 
 async def test_profile_update_is_rate_limited_per_address(client: httpx.AsyncClient) -> None:
