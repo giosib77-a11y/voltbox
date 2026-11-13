@@ -251,6 +251,7 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   `alembic downgrade base` ორჯერ გაეშვა `backend/.env`-ის ბაზაზე (სავარაუდოდ ლაივ Supabase). ორივეჯერ 0010-ის downgrade-ზე
   ჩავარდა, 0016→0011 იმავე ტრანზაქციაში უკვე შესრულებული იყო. კოდის მიხედვით ყველაფერი rollback-ით გაუქმდა (ერთი
   ტრანზაქცია, autocommit არსად) — **ლაივ ბაზაზე გადამოწმებული არ არის**, მფლობელისაა.
+  განახლება 2026-11-14: მფლობელმა გადაამოწმა (0016, დაზიანება არ არის); A-061 — fixed (verified), `6ca1bdc`.
 - gate-ები (`6469e57`, ორკესტრატორი, მარტო გაშვებული): ruff ✅ · format 167 ✅ · mypy 148 ✅ · **pytest 1159 passed**
   (baseline 1108 + 51) · `docker build` ✅.
 
@@ -577,8 +578,53 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   `localhost`/`127.0.0.1` და ბაზის სახელი `_test`-ით მთავრდება), სხვა შემთხვევაში `pytest.exit` გასაგები ტექსტით; ტესტი,
   რომელიც ამ დაცვას ამოწმებს. სურვილისამებრ `alembic/env.py`-ში `downgrade` არა-ლოკალურ host-ზე იკრძალება.
 - **owner:** backend-dev
-- **status:** open — ამ `/fix`-ის ფარგლებს გარეთაა (მითითებული იყო მხოლოდ A-032, A-033); მფლობელმა ჯერ ლაივ ბაზა უნდა
-  გადაამოწმოს (`PROGRESS.md` → Blockers).
+- **status:** fixed (verified) — `6ca1bdc` (+ CLAUDE.md-ის წესი `1e4a0c0`). ლაივ სქემა მფლობელმა გადაამოწმა (0016, დაზიანება
+  არ არის). `app/db/local_url.py`; conftest import-ზე ამოწმებს cached settings-ს და `engine.url`-ს (ლოკალური host + `_test`),
+  `_run_alembic` — alembic-ის URL-ს `command.*`-მდე; `alembic/env.py` ონლაინ რეჟიმში არალოკალურ host-ს უარყოფს
+  `VOLTBOX_ALLOW_REMOTE_MIGRATION=1`-ის გარეშე, `--sql` უცვლელია. 37 ახალი ტესტი, 27 ძველ conftest/env.py-ზე ვარდება.
+  ორკესტრატორმა ხელით: `alembic downgrade base` `db.invalid.example`-ზე → `FAILED: Refusing to run alembic online …`;
+  `TEST_DATABASE_URL=…db.invalid.example/voltbox_test pytest` → conftest-ის import-ის შეცდომა collection-მდე; ლოკალური
+  `upgrade head` + `check` სუფთაა. re-review (security-auditor): 0 critical, 0 should-fix; nit-ები A-064–A-066, ახალი A-063.
+
+#### A-063 · should-fix · `docker-compose.yml`-ის `api` service `backend/.env`-ს container-ში ტვირთავს
+- **ფაილი:** `backend/docker-compose.yml:51-52` (`env_file: - .env`, profile `full`)
+- **სცენარი (კოდით):** `docker compose --profile full up` `.env`-ის ყველა ცვლადს container-ში აწვდის. `DATABASE_URL`-ს და
+  `REDIS_URL`-ს `environment:` გადაფარავს, მაგრამ `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TOKEN`, `RESEND_API_KEY` ლაივია —
+  ლოკალური API ლაივ bucket-ში ატვირთავს და ნამდვილ Telegram/ელფოსტას გააგზავნის. CLAUDE.md: „`backend/.env` container-ში
+  არასდროს". A-061-მდეც ასე იყო. ახლა `.env` პროექტიდან გატანილია, ამიტომ ეს profile ჯერ საერთოდ არ ეშვება.
+- **გამოსწორება:** `env_file` ამოღება და საჭირო ცვლადები (`JWT_SECRET` ლოკალური მნიშვნელობით, გარე credentials ცარიელი)
+  `environment:`-ში; ან `env_file: .env.example`-ის მსგავსი ლოკალური ფაილი.
+- **owner:** backend-dev
+- **status:** open — ამ `/fix`-ის ფარგლებს გარეთაა (მითითებული იყო მხოლოდ A-061)
+
+#### A-064 · nit · conftest-ის module-level შემოწმებებს ტესტი არ იცავს
+- **ფაილი:** `backend/tests/conftest.py` (`require_settings_built_for_this_run()` და `require_test_database(engine.url, …)`
+  module level-ზე)
+- **სცენარი:** ამ ორი გამოძახების წაშლისას `test_database_guard.py` მწვანე რჩება (ფუნქციებს პირდაპირ იძახებს). დამანგრეველ
+  გზას (`_run_alembic`) ტესტი იცავს, ამიტომ რისკი დაბალია.
+- **გამოსწორება:** subprocess ტესტი, რომელიც ინციდენტს plugin-ის გარეშე იმეორებს: ჯერ `app.core.config`, მერე `tests.conftest`
+  იმპორტი, `DATABASE_URL=…db.invalid.example/voltbox` → exit ≠ 0 და `built before tests/conftest.py`.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-065 · nit · `alembic/env.py`-ში `%`-იანი პაროლი URL-ს traceback-ში ბეჭდავს (fix-მდეც ასე იყო)
+- **ფაილი:** `backend/alembic/env.py` (`config.set_main_option("sqlalchemy.url", …)`)
+- **სცენარი:** percent-encoded პაროლი (`%40`) ConfigParser-ის interpolation-ზე `ValueError("invalid interpolation syntax in
+  '<URL პაროლით>'")`-ს აგდებს, `--sql`-ზეც. A-061-ის შემოწმებაზე გავლენა არ აქვს (`get_main_option` და `get_section`
+  ერთნაირად interpolate-ს აკეთებენ).
+- **გამოსწორება:** `settings.database_url.get_secret_value().replace("%", "%%")`.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-066 · nit · ლაივზე `alembic check` ახლა override-ს ითხოვს; docs ამას არ ამბობს
+- **ფაილი:** `docs/deployment.md` §5 („`alembic check` სუფთაა"; იქვე „ბაზა `0011`-ზეა" — მოძველებულია, ახლა 0016),
+  `docs/pre-deployment-checklist.md:73`
+- **სცენარი:** მფლობელს ლაივზე წასაკითხი `alembic check` სჭირდება `VOLTBOX_ALLOW_REMOTE_MIGRATION=1`-ით; shell-ში `export`-ით
+  დატოვებული ცვლადი მომდევნო `upgrade`/`downgrade`-ზეც თიშავს დაცვას.
+- **გამოსწორება:** §5-ში: ლაივის შემოწმება მხოლოდ `VOLTBOX_ALLOW_REMOTE_MIGRATION=1 alembic check` ერთ ბრძანებაზე, `export`-ის
+  გარეშე; „0011" → მიმდინარე revision.
+- **owner:** backend-dev
+- **status:** open
 
 #### A-062 · should-fix (დაუდასტურებელი) · bucket-ში უკვე შენახული პატარა ფოტოები GPS-ს ინარჩუნებენ
 - **ფაილი:** ლაივ `product-images` bucket; `backend/app/services/storage.py` (`shrink_to_fit`)

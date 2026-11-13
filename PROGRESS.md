@@ -714,7 +714,8 @@ Unverified (check before acting):
   not reproducible locally. Deploy checklist item 6 (photo over 5 MB on live) answers it.
 
 ## Blockers
-- **2026-11-12, owner — verify the live schema (AUDIT.md A-061).** A scratchpad pytest plugin imported `app` before
+- (2026-11-14: resolved — the owner verified the live schema (0016, no damage) and A-061 is fixed, `6ca1bdc`. Kept below for the record.)
+- ~~**2026-11-12, owner — verify the live schema (AUDIT.md A-061).**~~ A scratchpad pytest plugin imported `app` before
   `tests/conftest.py`, so the session fixture ran `alembic downgrade base` against `backend/.env`'s database twice; it
   failed inside 0010's downgrade after 0016→0011 had run in the same transaction (rolled back by code reading, not
   verified). In the Supabase SQL Editor: `select version_num from public.alembic_version;` → `0016`;
@@ -769,6 +770,13 @@ Unverified (check before acting):
   (verified), re-reviewed closed; nits A-052–A-054 in AUDIT.md. Gates at 92a8647: ruff, format 167, mypy 148,
   pytest 1108, alembic check, docker build; eslint, vitest 677, both builds. Merge into `agent-system`
   is the owner's.
+- 2026-11-14 (outside Stage 3, branch `agent-system`): AUDIT.md A-061 (critical) — fixed (verified), `6ca1bdc`.
+  conftest refuses, before any connection, settings cached from another URL and any database that is not
+  localhost/127.0.0.1/::1 + `*_test`; online alembic refuses a non-local host without `VOLTBOX_ALLOW_REMOTE_MIGRATION=1`
+  (`--sql` unchanged). 37 new tests, 27 fail on the old code. CLAUDE.md: no own pytest plugins (`1e4a0c0`).
+  security-auditor re-review: 0 critical / 0 should-fix; new A-063 (should-fix, compose `env_file: .env`, pre-existing,
+  open) and nits A-064–A-066 in AUDIT.md. Gates: ruff, format 169, mypy 150, pytest 1196 (alone; a run overlapping
+  another pytest on `voltbox_test` fails with "relation does not exist" — collision, not code), alembic upgrade + check.
 
 ## Stage 2 — Done
 Last session of Stage 2:
