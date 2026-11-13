@@ -5,14 +5,17 @@ URL Settings-იდან მოდის (და არა alembic.ini-და�
 """
 
 import asyncio
+import os
 from logging.config import fileConfig
 
 from alembic import context
+from alembic.util import CommandError
 from app.core.config import settings
 
 # ყველა მოდელი უნდა დაიმპორტდეს, თორემ autogenerate ცხრილებს ვერ დაინახავს
 from app.db import models  # noqa: F401
 from app.db.base import Base
+from app.db.local_url import migration_refusal
 from app.db.ssl import build_connect_args
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlalchemy.pool import NullPool
@@ -55,6 +58,15 @@ def do_run_migrations(connection: object) -> None:
 
 
 async def run_async_migrations() -> None:
+    # Every online command (upgrade, downgrade, stamp, check, current) passes
+    # here, before any engine exists. On 2026-11-12 a test run reached live
+    # Supabase and ran `downgrade base` there; the target is now checked, not
+    # assumed. VOLTBOX_ALLOW_REMOTE_MIGRATION=1 overrides this and nothing else;
+    # offline `--sql` never gets here and is unchanged.
+    refusal = migration_refusal(config.get_main_option("sqlalchemy.url") or "", os.environ)
+    if refusal is not None:
+        raise CommandError(refusal)
+
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

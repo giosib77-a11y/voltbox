@@ -567,6 +567,10 @@ alembic upgrade <ძველი>:<ახალი> --sql > migration.sql
 # ხელით დაამატეთ public. ყველა ცხრილის სახელს, მერე SQL Editor-ში
 ```
 
+ონლაინ რეჟიმში `alembic` (`upgrade`, `downgrade`, `stamp`, `check`) უარს ამბობს
+არალოკალურ ჰოსტზე, თუ `VOLTBOX_ALLOW_REMOTE_MIGRATION=1` არ არის დაყენებული;
+`--sql` ამას არ ეხება.
+
 ამჟამად ბაზა `0011`-ზეა და `alembic check` სუფთაა.
 
 ---
