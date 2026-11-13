@@ -28,6 +28,16 @@
   `TELEGRAM_BOT_TOKEN`/`RESEND_API_KEY`/`REDIS_URL`-ით (env ცვლადი `.env`-ს ჯაბნის).
 - ტესტები მხოლოდ ლოკალურად. `tests/conftest.py` `DATABASE_URL`-ს `TEST_DATABASE_URL`-ზე
   (ნაგულისხმევად `localhost:55432/voltbox_test`) აყენებს და გარე credentials-ს ცლის.
+- **ტესტებისთვის საკუთარი pytest plugin-ები აკრძალულია** — არც `-p`-ით ჩატვირთვა, არც
+  `PYTEST_PLUGINS`/`PYTEST_ADDOPTS`, არც დამატებითი/scratchpad conftest, არც სხვა გზა, რომელიც
+  `app`-ს `tests/conftest.py`-მდე დააიმპორტებს ან conftest-ს გვერდს აუვლის (A-061: ასეთმა plugin-მა
+  `backend/.env`-ის ლაივ URL დააქეშა და fixture-მა ლაივ Supabase-ზე `alembic downgrade base` გაუშვა).
+  „ტესტი ძველ კოდზე ვარდება"-ს შემოწმება — მხოლოდ `git stash`-ით (იმპლემენტაციის ფაილები, ტესტი რჩება)
+  ან ცალკე `git worktree`-ით, ჩვეულებრივი `pytest`-ით `backend/`-იდან (subagent-ს, რომელსაც git-ის
+  ჩაწერა hook-ით აქვს დაბლოკილი: ძველი ვერსია `git show HEAD:<file>`-ით, მერე ახალი აღადგინე). ძალაში რჩება conftest-ის
+  დაცვაც: ბაზა ლოკალური host + `_test`-ით დამთავრებული სახელი, სხვა შემთხვევაში run კავშირამდე ჩერდება;
+  `alembic/env.py` ონლაინ რეჟიმში არალოკალურ host-ს უარყოფს, თუ `VOLTBOX_ALLOW_REMOTE_MIGRATION=1`
+  არ არის (ეს ცვლადი agent-ს არასდროს დააყენოს).
 - ახალი ცხრილის migration-ი **RLS-ს რთავს** (`ALTER TABLE public.<t> ENABLE ROW LEVEL SECURITY`) —
   Supabase-ის საჯარო API-ით სხვაგვარად გაიხსნება.
 
