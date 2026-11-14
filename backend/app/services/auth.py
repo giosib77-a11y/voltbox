@@ -14,6 +14,7 @@ from math import ceil
 
 from sqlalchemy import ColumnElement, String, case, delete, func, literal, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -76,6 +77,21 @@ async def _issue_session(
     }
 
 
+#: The unique constraint on `users.email`. Named explicitly because only *this*
+#: violation may become "already registered" - any other IntegrityError is a
+#: real fault and has to keep propagating (see `order.IDEMPOTENCY_CONSTRAINT`).
+EMAIL_CONSTRAINT = "uq_users_email"
+
+
+def _is_email_clash(error: IntegrityError) -> bool:
+    """Only the email's own unique violation, never anything else."""
+    return EMAIL_CONSTRAINT in str(getattr(error, "orig", error))
+
+
+def _email_taken() -> ConflictError:
+    return ConflictError("Email is already registered", code="EMAIL_ALREADY_EXISTS")
+
+
 async def register(
     db: AsyncSession, *, first_name: str, last_name: str, email: str, password: str
 ) -> dict[str, object]:
@@ -85,7 +101,7 @@ async def register(
     normalized = email.strip().lower()
     existing = await db.scalar(select(User).where(User.email == normalized))
     if existing is not None:
-        raise ConflictError("Email is already registered", code="EMAIL_ALREADY_EXISTS")
+        raise _email_taken()
 
     user = User(
         email=normalized,
@@ -94,7 +110,16 @@ async def register(
         last_name=last_name.strip(),
     )
     db.add(user)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as error:
+        # The SELECT above cannot see a registration that has not committed yet,
+        # so two requests for one address both pass it and the unique index
+        # decides. No savepoint: the refusal ends the request, and `get_db`
+        # rolls the session back on the way out.
+        if _is_email_clash(error):
+            raise _email_taken() from None
+        raise
     return await _issue_session(db, user)
 
 
@@ -695,21 +720,29 @@ async def update_profile(db: AsyncSession, *, user: User, changes: dict[str, obj
                 select(User).where(User.email == normalized, User.id != user.id)
             )
             if taken is not None:
-                raise ConflictError("Email is already registered", code="EMAIL_ALREADY_EXISTS")
+                raise _email_taken()
             # Conditional as in `change_password`: a lock that landed since the
             # pre-check, or a password replaced since the hash, refuses the
             # change even to the right password.
-            moved = await db.execute(
-                update(User)
-                .where(
-                    User.id == user.id,
-                    _unlocked(datetime.now(UTC)),
-                    User.password_hash == user.password_hash,
+            try:
+                moved = await db.execute(
+                    update(User)
+                    .where(
+                        User.id == user.id,
+                        _unlocked(datetime.now(UTC)),
+                        User.password_hash == user.password_hash,
+                    )
+                    .values(email=normalized)
+                    .returning(User.id)
+                    .execution_options(synchronize_session="fetch")
                 )
-                .values(email=normalized)
-                .returning(User.id)
-                .execution_options(synchronize_session="fetch")
-            )
+            except IntegrityError as error:
+                # As in `register`: the pre-check cannot see an address another
+                # request has written and not yet committed. The route rolls
+                # back on this refusal, which is not one of its counted ones.
+                if _is_email_clash(error):
+                    raise _email_taken() from None
+                raise
             if moved.first() is None:
                 raise await _refused_write(db, user)
             # A link already sent goes to the old address; it must not outlive

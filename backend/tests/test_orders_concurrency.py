@@ -34,6 +34,7 @@ from app.services import admin_customers
 from app.services import auth as auth_service
 from app.services import order as order_service
 from sqlalchemy import Row, delete, func, select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.factories import make_user
@@ -516,6 +517,136 @@ async def _until_queued_behind(holder: AsyncSession) -> None:
                 return
             await asyncio.sleep(0.01)
     raise AssertionError("nothing ever queued behind the held row")
+
+
+async def _wipe_users(*emails: str) -> None:
+    """Remove accounts written on their own connections, whatever they own."""
+    async with SessionLocal() as cleanup:
+        mine = select(User.id).where(User.email.in_(emails))
+        await cleanup.execute(delete(RefreshToken).where(RefreshToken.user_id.in_(mine)))
+        await cleanup.execute(
+            delete(PasswordResetToken).where(PasswordResetToken.user_id.in_(mine))
+        )
+        await cleanup.execute(delete(User).where(User.email.in_(emails)))
+        await cleanup.commit()
+
+
+async def _contend(
+    first: Callable[[AsyncSession], Awaitable[object]],
+    second: Callable[[AsyncSession], Awaitable[object]],
+) -> list[tuple[str, str]]:
+    """Two writes to one email on their own connections, in a fixed interleaving.
+
+    `first` runs and stays uncommitted. `second` starts only then, so it passes
+    its own "is the address taken?" read - the row it would find is invisible -
+    and its write queues behind the unique index entry `first` holds. Only once
+    it is queued does `first` commit, so `second` is certain to reach the unique
+    index rather than the read. → one (outcome, detail) per call, in order.
+    """
+    first_written = asyncio.Event()
+
+    async def run_first() -> tuple[str, str]:
+        async with SessionLocal() as session:
+            try:
+                await first(session)
+                first_written.set()
+                await _until_queued_behind(session)
+                await session.commit()
+            except Exception as exc:
+                # Broad on purpose and hiding nothing: callers assert on outcomes.
+                first_written.set()
+                await session.rollback()
+                return "error", type(exc).__name__
+            return "ok", "committed"
+
+    async def run_second() -> tuple[str, str]:
+        await first_written.wait()
+        async with SessionLocal() as session:
+            try:
+                await second(session)
+                await session.commit()
+            except ConflictError as exc:
+                await session.rollback()
+                return "conflict", exc.code
+            except Exception as exc:
+                await session.rollback()
+                return "error", type(exc).__name__
+            return "ok", "committed"
+
+    return list(await asyncio.gather(run_first(), run_second()))
+
+
+async def test_two_parallel_registrations_of_one_email_make_one_account() -> None:
+    """Both pass the "already registered?" read; the unique index picks the loser.
+
+    The loser used to die on `uq_users_email` and the visitor saw a 500 for an
+    address that was, a moment later, in fact registered.
+    """
+    email = "twice@voltbox.ge"
+
+    async def register(session: AsyncSession) -> object:
+        return await auth_service.register(
+            session, first_name="Ann", last_name="Lee", email=email, password=PASSWORD
+        )
+
+    try:
+        results = await _contend(register, register)
+
+        assert results == [("ok", "committed"), ("conflict", "EMAIL_ALREADY_EXISTS")], results
+        async with SessionLocal() as check:
+            accounts = await check.scalar(
+                select(func.count()).select_from(User).where(User.email == email)
+            )
+        assert accounts == 1
+    finally:
+        await _wipe_users(email)
+
+
+async def test_two_accounts_moving_to_one_email_do_not_both_get_it() -> None:
+    """The same race on the address change: the pre-check cannot see the other write."""
+    target = "contested@voltbox.ge"
+    mine, theirs = "mover-a@voltbox.ge", "mover-b@voltbox.ge"
+    async with SessionLocal() as setup:
+        ids = [(await make_user(setup, email=e, password=PASSWORD)).id for e in (mine, theirs)]
+        await setup.commit()
+
+    def move(user_id: uuid.UUID) -> Callable[[AsyncSession], Awaitable[object]]:
+        async def run(session: AsyncSession) -> object:
+            user = await session.scalar(select(User).where(User.id == user_id))
+            assert user is not None
+            return await auth_service.update_profile(
+                session, user=user, changes={"email": target, "current_password": PASSWORD}
+            )
+
+        return run
+
+    try:
+        results = await _contend(move(ids[0]), move(ids[1]))
+
+        assert results == [("ok", "committed"), ("conflict", "EMAIL_ALREADY_EXISTS")], results
+        async with SessionLocal() as check:
+            holders = await check.scalar(
+                select(func.count()).select_from(User).where(User.email == target)
+            )
+            stayed = await check.scalar(select(User.email).where(User.id == ids[1]))
+        assert holders == 1
+        assert stayed == theirs, "the refused account keeps its own address"
+    finally:
+        await _wipe_users(target, mine, theirs)
+
+
+def test_only_the_email_constraint_reads_as_an_email_clash() -> None:
+    """Any other integrity fault has to keep propagating as the 500 it is."""
+
+    def violation(constraint: str) -> IntegrityError:
+        detail = f'duplicate key value violates unique constraint "{constraint}"'
+        return IntegrityError("INSERT ...", {}, Exception(detail))
+
+    assert auth_service._is_email_clash(violation("uq_users_email"))
+    assert not auth_service._is_email_clash(violation("uq_orders_order_number"))
+    assert not auth_service._is_email_clash(
+        IntegrityError("INSERT ...", {}, Exception("null value in column violates not-null"))
+    )
 
 
 async def test_a_burst_of_wrong_passwords_locks_the_account(lockable: User) -> None:
