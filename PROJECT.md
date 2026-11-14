@@ -351,6 +351,33 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-11-14 — The server's own loggers write through our JSON handler (A-034)
+- Decision: `configure_logging()` (run from the lifespan) clears the handlers of `uvicorn`, `uvicorn.error`
+  and `gunicorn.error` and lets them propagate to the root JSON handler; `JsonFormatter` scrubs the message
+  and a pre-rendered `exc_text` as well as `exc_info`.
+- Reason: under gunicorn, `UvicornWorker` gives `uvicorn.error` gunicorn's own plain handlers with
+  `propagate=False`, so the "Exception in ASGI application" traceback after a 500 skipped `scrub` and
+  carried Postgres's `Key (email)=(…)` into the log. A scrubbing filter on gunicorn's handlers was the
+  alternative; rejected because it keeps a second, plain-text format and a second place the rule lives.
+- Visible consequence: those lines are now JSON on stdout with `"logger": "uvicorn.error"`, not gunicorn's
+  `[pid] [LEVEL]` text on stderr — a log filter written for the old text needs updating.
+- What still holds: the gunicorn master never runs `configure_logging()` and stays plain text (it logs
+  workers starting and exiting, no request data), and so do a worker's errors before the lifespan.
+  `scrub` still knows only the `Key (…)=(…)` shape — `Failing row contains (…)` is open as AUDIT.md A-067.
+
+### 2026-11-14 — Default-address writes queue on the owner's row (A-040)
+- Decision: `address.create` (only for a default) and `address.update_one` (always, before the read) take
+  `FOR NO KEY UPDATE` on the owner's `users` row; `_get_owned` and `list_for_user` read with
+  `populate_existing`.
+- Reason: "clear the old default, then write the new one" raced to `uq_addresses_one_default_per_user`
+  (a 500). `FOR NO KEY UPDATE` rather than the audit's `FOR UPDATE`: it serializes the same way and is the
+  level `auth.py` already takes on that row, but does not block the `FOR KEY SHARE` of FK checks (orders,
+  tokens, addresses inserts). `populate_existing` because `get_current_user` loads the addresses
+  (`selectin`) on the same session before the lock; a waiting request otherwise wrote against a stale
+  `is_default` and left the user with no default.
+- What still holds: a plain address is created without waiting; unsetting the only default still leaves
+  none (as before); a concurrent DELETE and PUT of one address may still 500 (AUDIT.md A-071, pre-existing).
+
 ### 2026-11-12 — Every stored image loses its metadata; a rotated one is re-encoded upright (A-033)
 - Decision (approved by the owner beforehand): replaces the old `shrink_to_fit` rule "an image that fits is
   stored untouched". Now every upload is stripped of EXIF/GPS, XMP, IPTC, comments and trailing data:

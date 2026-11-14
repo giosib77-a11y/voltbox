@@ -255,6 +255,20 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 - gate-ები (`6469e57`, ორკესტრატორი, მარტო გაშვებული): ruff ✅ · format 167 ✅ · mypy 148 ✅ · **pytest 1159 passed**
   (baseline 1108 + 51) · `docker build` ✅.
 
+**`/fix A-039 A-040 A-034` 2026-11-14** (ბრენჩი `fix/a039-a040-a034`, `agent-system`-იდან, `4a358a2`):
+- A-039 — fixed (verified), `227ad5d`. 2 race-ტესტი ძველ კოდზე ვარდება, ახალზე გადის. re-review: code-reviewer — დახურულია.
+- A-040 — fixed (verified), `a18e3ff`. 7 race-ტესტი ძველ კოდზე 7/7 ვარდება. re-review: code-reviewer — დახურულია, deadlock-ის
+  გზა არ არის; ფიქსამდელი შესამოწმებელი A-071.
+- A-034 — fixed (verified), `b530418`, აუდიტში აღწერილი გზისთვის (`uvicorn.error`/`gunicorn.error`). 12 ტესტი ძველ კოდზე
+  ვარდება. re-review: security-auditor — დახურულია; ნარჩენი should-fix A-067 (`Failing row contains`), nit-ები A-068–A-070.
+- ორკესტრატორის baseline (`4a358a2`): pytest 1199 → 1220 (+21). gate-ები (`b530418`, მარტო გაშვებული): ruff ✅ ·
+  format 170 ✅ · mypy 151 ✅ · **pytest 1220 passed**.
+- **სატესტო ბაზის შეჯახება:** subagent-ის დასრულებისას Stop hook-ის (`verify.sh`) `pytest` ორკესტრატორის `pytest`-თან ერთად
+  გაეშვა ერთ `voltbox_test`-ზე. შედეგი იყო ცალკეული შეცდომები: teardown-ის `alembic downgrade`-ის deadlock,
+  `relation "users" does not exist`. პარალელურ pytest-ს პირველი ორი პირდაპირ დაუკავშირდა (`tasklist`-ში უცხო `pytest.exe`
+  ჩანდა). ერთი `test_search`-ის assertion-იც, სავარაუდოდ, იგივე მიზეზით იყო, მაგრამ ეს დამტკიცებული არ არის. მარტო გაშვებისას
+  ყველა გაშვება მწვანეა.
+
 ### Should-fix
 
 #### A-030 · should-fix · refresh-ის 429 ან 5xx პასუხი მომხმარებელს სისტემიდან აგდებს
@@ -339,7 +353,11 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   ტესტი: `uvicorn.error`-ში დაწერილი ჩანაწერი, რომელიც `Key (email)=(x@y.com)`-ს შეიცავს, გამოსავალში `x@y.com`-ის
   გარეშე ჩნდება. A-039 და A-040 ამ 500-ებს აქრობს, ეს კი იცავს ყველა მომავალ შემთხვევას.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `b530418` (re-review: security-auditor). `configure_logging()` `uvicorn`, `uvicorn.error`
+  და `gunicorn.error`-ს root JSON handler-ზე გადაიყვანს; `JsonFormatter` message-ს და `exc_text`-საც ასუფთავებს. 12 ახალი
+  ტესტი (`tests/test_server_log_secrecy.py`, UvicornWorker-ის და uvicorn dev-ის wiring `configure_logging()`-მდე) ძველ
+  `logging.py`-ზე ვარდება — გამოსავალში ელფოსტაა, ახალზე გადის. რეალური gunicorn-ით გაშვებული არ არის (Windows).
+  **ნარჩენი:** `scrub` მხოლოდ `Key (…)=(…)`-ს იცნობს — `Failing row contains (…)` (NOT NULL/CHECK) ისევ გაუწმენდავია → A-067.
 
 #### A-035 · should-fix · lock-ებში ცნობილი სისუსტეა (dnspython 2.8.0) — CI-ის `pip-audit` ისევ წითელია
 - **ფაილი:** `backend/requirements.txt:248`, `backend/requirements-dev.txt:327` (`dnspython==2.8.0`, via `email-validator`)
@@ -409,7 +427,11 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 - **გამოსწორება:** ამ constraint-ის `IntegrityError` → იგივე `EMAIL_ALREADY_EXISTS` (409); SELECT რჩება.
   ტესტი ნამდვილ ბაზაზე, `asyncio.gather`-ით: `[201, 409]`.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `227ad5d` (re-review: code-reviewer). მხოლოდ `uq_users_email`-ის `IntegrityError` →
+  `EMAIL_ALREADY_EXISTS` (409), `register`-შიც და `update_profile`-ის email-ის შეცვლაზეც (იგივე race). 2 race-ტესტი
+  ნამდვილ ბაზაზე, ფიქსირებული interleaving-ით (`_contend` + `_until_queued_behind`): ძველ კოდზე
+  `[('ok','committed'), ('error','IntegrityError')]`, ახალზე `[('ok','committed'), ('conflict','EMAIL_ALREADY_EXISTS')]`
+  (ორკესტრატორმაც გაუშვა `git stash`-ით). HTTP-ის დონეზე gunicorn-ით არ გაშვებულა.
 
 #### A-040 · nit · ერთდროული „ძირითადი მისამართის“ შექმნა 500-ს აბრუნებს
 - **ფაილი:** `backend/app/services/address.py:55-80` (`_clear_other_defaults`, `create`);
@@ -419,7 +441,11 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 - **გამოსწორება:** `_clear_other_defaults`-მდე მომხმარებლის რიგის lock (`SELECT ... FROM users WHERE id = :id FOR UPDATE`)
   იმავე ტრანზაქციაში; იგივე update-ის გზაზეც. ტესტი: 4 ერთდროული → არცერთი 500, ბოლოს ზუსტად ერთი default.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `a18e3ff` (re-review: code-reviewer). `_lock_default_writes`: მფლობელის `users` რიგი
+  `FOR NO KEY UPDATE`-ით (იგივე დონე, რასაც `auth.py` იღებს; FK-ის `KEY SHARE`-ს არ ბლოკავს), `create`-ში მხოლოდ default-ზე,
+  `update_one`-ში ყოველთვის. დამატებით `_get_owned`/`list_for_user` — `populate_existing`: route-ზე `get_current_user`
+  მისამართებს (`selectin`) lock-მდე ტვირთავს, და მოლოდინში მყოფი მოთხოვნა ძველ `is_default`-ს ხედავდა → default არ რჩებოდა.
+  7 race-ტესტი ძველ `address.py`-ზე 7/7 ვარდება (ორკესტრატორი, `git stash`), ახალზე გადის.
 
 #### A-041 · nit · მისამართების რაოდენობა შეუზღუდავია და ყველა ავტორიზებულ მოთხოვნაზე იტვირთება
 - **ფაილი:** `backend/app/db/models/users.py:67-68` (`lazy="selectin"`), `backend/app/core/deps.py`,
@@ -682,5 +708,57 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 - **სცენარი (კოდით, გაზომილი არ არის):** JPEG-ის `verify()` SOS-ის შემდეგ არაფერს ამოწმებს; 5 MB `FF 01`/`FF FF 00` ≈ 2.5M
   Python iteration — შეფასებით რამდენიმე წამი CPU ერთ ატვირთვაზე (მხოლოდ ავტორიზებული ადმინი).
 - **გამოსწორება:** marker-ების ლიმიტი (მაგ. 65 536) → `INVALID_IMAGE`; გაზომვა.
+- **owner:** backend-dev
+- **status:** open
+
+### A-039/A-040/A-034-ის re-review (2026-11-14)
+
+#### A-067 · should-fix · `scrub` Postgres-ის `Failing row contains (…)` DETAIL-ს არ ასუფთავებს
+- **ფაილი:** `backend/app/core/logging.py:30` (`PG_DETAIL_VALUE = r"(Key \([^)]*\)=\()[^)]*\)"`), `:35`
+- **სცენარი (კოდით, security-auditor; regex-ში `Key \(` სიტყვასიტყვით წერია):** asyncpg-ის `__str__` DETAIL-ს სიტყვასიტყვით
+  სვამს (`asyncpg/exceptions/_base.py:168-175`), ამიტომ `hide_parameters=True` მას ვერ აჩერებს. NOT NULL და CHECK-ის დარღვევისას
+  DETAIL არის `Failing row contains (<მთელი სტრიქონი>)`. ეს ხაზი არ იწმინდება ლოგის არცერთ ხაზში (`voltbox.error`,
+  `uvicorn.error`, ჯაჭვური asyncpg-ის გამონაკლისი). `orders`-ის CHECK-ზე (`models/orders.py:75-94`) ეს `guest_email`-ია,
+  `guest_phone` და `customer` JSON; `users`-ზე — `email` და `password_hash`. დღეს ჩვეულებრივი გზა ამას ვერ იწვევს (სქემის
+  ვალიდაცია, `order_status.py`), მაგრამ A-034-ის მიზანი, „DETAIL-ის მნიშვნელობა არცერთ ხაზში", ამ ფორმაზე არ სრულდება.
+- **გამოსწორება:** DETAIL-ის მნიშვნელობა ხაზის ბოლომდე ჩამოიჭრას, მაგ.
+  `(Key \(.*?\)=\(|Failing row contains \()[^\n]*` → `\1…)` (ხურავს A-068-საც და `Key (lower(email))=(…)`-საც). რაც
+  ძალაში რჩება: მრავალხაზიანი მნიშვნელობის (`notes`) მომდევნო ხაზები. ტესტი: `uvicorn.error`-ზე
+  `Failing row contains (…, x@y.com, …)` → გამოსავალში `x@y.com` არ არის.
+- **owner:** backend-dev
+- **status:** open — ამ `/fix`-ის ფარგლებს გარეთაა (მითითებული იყო მხოლოდ A-039, A-040, A-034)
+
+#### A-068 · nit · `)`-იანი მნიშვნელობა `Key (…)=(…)`-ში ნაწილობრივ ჟონავს
+- **ფაილი:** `backend/app/core/logging.py:30` (`[^)]*` პირველ `)`-ზე ჩერდება)
+- **სცენარი (კოდით):** `Key (name)=(Foo) Bar) already exists.` → `Key (name)=(…) Bar) already exists.`. PII-იანი unique სვეტი
+  მხოლოდ `users.email`-ია, email-ის ვალიდაცია კი `)`-ს არ უშვებს, ამიტომ დღეს რეალური გაჟონვა არ არის.
+- **გამოსწორება:** A-067-ის regex.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-069 · nit · `test_server_log_secrecy.py`-ის fixture root-ზე pytest-ის ძველ `LogCaptureHandler`-ს ტოვებს
+- **ფაილი:** `backend/tests/test_server_log_secrecy.py:34-46` (`restore_logging`)
+- **სცენარი (კოდით):** handler-ები setup ფაზაში ინახება და teardown-ში ბრუნდება. ამიტომ setup ფაზის caplog handler-ი root-ზე
+  რჩება, ფაზის ბოლოს pytest მას ვეღარ შლის: 14 ტესტის შემდეგ 14 მკვდარი handler, სანამ lifespan-იანი ტესტი root-ს არ
+  გაასუფთავებს. შედეგზე გავლენა არ ჩანს, მხოლოდ მეხსიერება იხარჯება.
+- **გამოსწორება:** მდგომარეობის შენახვა და აღდგენა ტესტის სხეულში (context manager), ან teardown-ში pytest-ის მიმდინარე handler-ების შენარჩუნება.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-070 · nit · ტესტში `dictConfig(uvicorn.config.LOGGING_CONFIG)` პროცესის ყველა handler-ს ხურავს
+- **ფაილი:** `backend/tests/test_server_log_secrecy.py:68`
+- **სცენარი (კოდით):** non-incremental `dictConfig` → `_clearExistingHandlers()` → `logging.shutdown(...)`. pytest-ის
+  `_FileHandler` ამის შემდეგ ჩანაწერებს ჩუმად აგდებს. ზიანი მხოლოდ `--log-file`-ით გაშვებისას ჩნდება.
+- **გამოსწორება:** uvicorn-ის dev wiring ხელით აწყობა (`uvicorn` logger-ს საკუთარი handler, `uvicorn.error` propagate), `dictConfig`-ის გარეშე.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-071 · nit (დაუდასტურებელი) · ერთდროული `DELETE` და `PUT` ერთ მისამართზე შეიძლება 500 იყოს
+- **ფაილი:** `backend/app/services/address.py` (`update_one`-ის flush, `remove`). ფიქსამდეც ასე იყო.
+- **სცენარი (კოდით, code-reviewer, არ გამეორებულა):** T2 X-ს შლის და commit არ გაუკეთებია. T1 `_get_owned`-ით X-ს ისევ ხედავს,
+  მისი UPDATE T2-ს ელოდება. T2-ის commit-ის შემდეგ ORM UPDATE 0 რიგს ემთხვევა → `StaleDataError`, ანუ 500. მონაცემები
+  შეთანხმებული რჩება, რადგან T1 rollback-დება.
+- **გამოსწორება:** `remove`-მაც აიღოს `_lock_default_writes`, ან `update_one`-მა `StaleDataError` → 404 `ADDRESS_NOT_FOUND`.
+  ტესტი: `_contend(remove, _moving)`.
 - **owner:** backend-dev
 - **status:** open
