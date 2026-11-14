@@ -268,6 +268,10 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   `relation "users" does not exist`. პარალელურ pytest-ს პირველი ორი პირდაპირ დაუკავშირდა (`tasklist`-ში უცხო `pytest.exe`
   ჩანდა). ერთი `test_search`-ის assertion-იც, სავარაუდოდ, იგივე მიზეზით იყო, მაგრამ ეს დამტკიცებული არ არის. მარტო გაშვებისას
   ყველა გაშვება მწვანეა.
+- საბოლოო შემოწმება (`1c05975`, tester, პარალელური pytest არ ყოფილა): ruff ✅ · format 170 ✅ · mypy 151 ✅ ·
+  pytest 1220 passed · alembic 0001→0016 + check ✅ (scratch ბაზაზე; სჭირდება `JWT_SECRET`) · eslint ✅ ·
+  vitest 677 / 57 · build `http` ✅ · build `mock` ✅. არ გაშვებულა: რეალური gunicorn (Linux), e2e, frontend Node 22-ზე,
+  `docker build` (Dockerfile და დამოკიდებულებები არ შეცვლილა).
 
 ### Should-fix
 
