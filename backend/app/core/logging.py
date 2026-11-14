@@ -47,14 +47,30 @@ class JsonFormatter(logging.Formatter):
             "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
             "level": record.levelname,
             "logger": record.name,
-            "message": record.getMessage(),
+            # Scrubbed too: a library can log `%s` of an exception, and then the
+            # DETAIL line is in the message, not in a traceback.
+            "message": scrub(record.getMessage()),
         }
         if extra := getattr(record, "extra_fields", None):
             payload.update(extra)
         if record.exc_info:
             # Scrubbed: a traceback is not a neutral object. See `scrub`.
             payload["exception"] = scrub(self.formatException(record.exc_info))
+        elif record.exc_text:
+            payload["exception"] = scrub(record.exc_text)
         return json.dumps(payload, ensure_ascii=False)
+
+
+#: Loggers whose handlers the server wires up by itself, before the application
+#: starts, and which therefore never pass through JsonFormatter on their own:
+#:
+#: - `uvicorn.error` and `gunicorn.error`: under gunicorn, UvicornWorker gives
+#:   `uvicorn.error` gunicorn's own handlers and sets propagate=False; gunicorn
+#:   does the same for its error logger. This is where Starlette's re-raised
+#:   "Exception in ASGI application" lands after a 500.
+#: - `uvicorn`: under plain `uvicorn`, its dictConfig gives this parent logger a
+#:   handler of its own, and `uvicorn.error` propagates into it.
+SERVER_LOGGERS = ("uvicorn", "uvicorn.error", "gunicorn.error")
 
 
 def configure_logging(level: str = "INFO") -> None:
@@ -64,6 +80,17 @@ def configure_logging(level: str = "INFO") -> None:
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(level)
+    # The server's own loggers go through the same handler, so the one scrub in
+    # JsonFormatter covers them - a traceback of an unhandled error was written
+    # by uvicorn.error as plain text, with Postgres's `DETAIL: Key (email)=(...)`
+    # in it. Run from the lifespan, i.e. after the server wired them, so this
+    # has to undo that rather than precede it. The master process never runs
+    # this, and what it logs (workers starting and exiting) carries no customer
+    # data.
+    for name in SERVER_LOGGERS:
+        server_logger = logging.getLogger(name)
+        server_logger.handlers.clear()
+        server_logger.propagate = True
     # uvicorn-ის საკუთარი access-ლოგი ჩვენსას დუბლირებს
     logging.getLogger("uvicorn.access").disabled = True
 
