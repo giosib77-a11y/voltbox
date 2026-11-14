@@ -18,6 +18,7 @@ from app.core.errors import ConflictError, UnauthorizedError
 from app.db.models import (
     REASON_ORDER_CANCELLED,
     ROLE_ADMIN,
+    Address,
     Brand,
     Category,
     InventoryMovement,
@@ -30,6 +31,8 @@ from app.db.models import (
     User,
 )
 from app.db.session import SessionLocal
+from app.schemas.address import AddressRequest
+from app.services import address as address_service
 from app.services import admin_customers
 from app.services import auth as auth_service
 from app.services import order as order_service
@@ -633,6 +636,185 @@ async def test_two_accounts_moving_to_one_email_do_not_both_get_it() -> None:
         assert stayed == theirs, "the refused account keeps its own address"
     finally:
         await _wipe_users(target, mine, theirs)
+
+
+ADDRESS_OWNER = "address-race@voltbox.ge"
+
+
+def _address(label: str, *, default: bool) -> AddressRequest:
+    return AddressRequest(
+        label=label, city="Tbilisi", address="Chavchavadze 42", is_default=default
+    )
+
+
+@pytest.fixture
+async def address_owner() -> AsyncGenerator[uuid.UUID]:
+    """An account with no addresses, written on its own connection."""
+    async with SessionLocal() as setup:
+        user = await make_user(setup, email=ADDRESS_OWNER)
+        await setup.commit()
+        owner_id = user.id
+
+    yield owner_id
+
+    async with SessionLocal() as cleanup:
+        await cleanup.execute(delete(Address).where(Address.user_id == owner_id))
+        await cleanup.commit()
+    await _wipe_users(ADDRESS_OWNER)
+
+
+async def _plain_addresses(owner_id: uuid.UUID, *labels: str) -> dict[str, uuid.UUID]:
+    """Committed addresses without a default. → label -> id."""
+    async with SessionLocal() as setup:
+        for label in labels:
+            await address_service.create(setup, owner_id, _address(label, default=False))
+        await setup.commit()
+        rows = await setup.execute(
+            select(Address.label, Address.id).where(Address.user_id == owner_id)
+        )
+        return dict(rows.tuples().all())
+
+
+async def _defaults(owner_id: uuid.UUID) -> list[str]:
+    async with SessionLocal() as check:
+        return list(
+            await check.scalars(
+                select(Address.label).where(Address.user_id == owner_id, Address.is_default)
+            )
+        )
+
+
+def _creating(owner_id: uuid.UUID, label: str) -> Callable[[AsyncSession], Awaitable[object]]:
+    """A new default address, for `_write_address` or `_contend`."""
+
+    async def run(session: AsyncSession) -> object:
+        return await address_service.create(session, owner_id, _address(label, default=True))
+
+    return run
+
+
+def _moving(
+    owner_id: uuid.UUID, address_id: uuid.UUID, label: str
+) -> Callable[[AsyncSession], Awaitable[object]]:
+    """An existing address made the default, as the route reaches it.
+
+    `get_current_user` loads the account on the request's own session, and
+    `User.addresses` is selectin-loaded, so every address of the account is in
+    the session before `update_one` starts. Loading it here does the same.
+    """
+
+    async def run(session: AsyncSession) -> object:
+        # Held to the end, as the route holds `user`: the identity map is weak,
+        # so a discarded account would take its addresses with it.
+        user = await session.scalar(select(User).where(User.id == owner_id))
+        moved = await address_service.update_one(
+            session, owner_id, address_id, _address(label, default=True)
+        )
+        assert user is not None
+        return moved
+
+    return run
+
+
+async def _write_address(
+    write: Callable[[AsyncSession], Awaitable[object]],
+) -> tuple[str, str]:
+    """One address write on its own connection, committed as the route commits it."""
+    async with SessionLocal() as session:
+        try:
+            await write(session)
+            await session.commit()
+        except Exception as exc:
+            # Broad on purpose and hiding nothing: callers assert that no
+            # outcome is "error", so anything caught here fails by name.
+            await session.rollback()
+            return "error", type(exc).__name__
+        return "ok", "committed"
+
+
+@pytest.mark.parametrize("round_", range(3))
+async def test_parallel_default_addresses_leave_exactly_one_default(
+    address_owner: uuid.UUID, round_: int
+) -> None:
+    """Four new defaults at once: all clear nothing, all write a default.
+
+    Each clear could not see the others' uncommitted default, so the later
+    writes died on `uq_addresses_one_default_per_user` and the shopper saw a 500.
+    """
+    results = await asyncio.gather(
+        *(_write_address(_creating(address_owner, f"a{n}")) for n in range(4))
+    )
+
+    assert results == [("ok", "committed")] * 4, results
+    assert len(await _defaults(address_owner)) == 1
+
+
+async def test_parallel_moves_of_the_default_leave_exactly_one_default(
+    address_owner: uuid.UUID,
+) -> None:
+    """The same race on the update path: four existing addresses, all made default."""
+    ids = await _plain_addresses(address_owner, "a0", "a1", "a2", "a3")
+
+    results = await asyncio.gather(
+        *(
+            _write_address(_moving(address_owner, address_id, label))
+            for label, address_id in ids.items()
+        )
+    )
+
+    assert results == [("ok", "committed")] * 4, results
+    assert len(await _defaults(address_owner)) == 1
+
+
+async def test_a_default_created_behind_another_new_default_replaces_it(
+    address_owner: uuid.UUID,
+) -> None:
+    """The interleaving that needs no luck: the second starts while the first is uncommitted.
+
+    On the second's clear the first's default does not exist yet, so only
+    waiting for the first (on the owner's row) lets it be found and cleared.
+    """
+    results = await _contend(_creating(address_owner, "first"), _creating(address_owner, "second"))
+
+    assert results == [("ok", "committed"), ("ok", "committed")], results
+    assert await _defaults(address_owner) == ["second"]
+
+
+async def test_two_addresses_made_default_in_the_same_instant_leave_one(
+    address_owner: uuid.UUID,
+) -> None:
+    """Update path, no default yet: the second write queues behind the first's index entry."""
+    ids = await _plain_addresses(address_owner, "first", "second")
+
+    results = await _contend(
+        _moving(address_owner, ids["first"], "first"),
+        _moving(address_owner, ids["second"], "second"),
+    )
+
+    assert results == [("ok", "committed"), ("ok", "committed")], results
+    assert await _defaults(address_owner) == ["second"]
+
+
+async def test_a_default_moved_while_another_move_waits_is_not_lost(
+    address_owner: uuid.UUID,
+) -> None:
+    """`old` is the default; `new` becomes it while `old` is asked to become it again.
+
+    The second move must read `old` after the first has committed: read before,
+    it still looks like the default, the ORM sees nothing to write, and the
+    account ends on `new` as if the second request had never been made.
+    """
+    ids = await _plain_addresses(address_owner, "old", "new")
+    async with SessionLocal() as setup:
+        await _moving(address_owner, ids["old"], "old")(setup)
+        await setup.commit()
+
+    results = await _contend(
+        _moving(address_owner, ids["new"], "new"), _moving(address_owner, ids["old"], "old")
+    )
+
+    assert results == [("ok", "committed"), ("ok", "committed")], results
+    assert await _defaults(address_owner) == ["old"]
 
 
 def test_only_the_email_constraint_reads_as_an_email_clash() -> None:
