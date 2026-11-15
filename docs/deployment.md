@@ -173,6 +173,7 @@ group-ში `sync: false` გაჩნდება, ან თუ ფაილ�
 | `WEB_CONCURRENCY` | 2 | ↓ იხ. კავშირებისა და მეხსიერების ბიუჯეტი — ორივეს ამრავლებს |
 | `MAX_IMAGE_DECODE_BYTES` | `104857600` (100 MiB) | ერთ სურათის ატვირთვის მეხსიერების ჭერი. ↓ იხ. მეხსიერების ბიუჯეტი |
 | `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | 5 / 5 | **სერვერი არ აიწევს**, თუ `worker × (pool+overflow)` ბიუჯეტს გადააჭარბებს |
+| `DB_SSL_MODE` / `DB_SSL_ROOT_CERT` | გაშვებამდე: `verify-full` / `/etc/secrets/supabase-ca.crt`. `backend/render.yaml`-ში არ წერია, ამიტომ დაუყენებლად მუშაობს `require` | `require` ბაზასთან ტრაფიკს შიფრავს, მაგრამ სერვერს **არ ამოწმებს** — MITM-ისგან არ იცავს; დეპლოიზე გაშვებისას ლოგში WARNING ჩნდება. `verify-full` + ცუდი CA ან hostname — **სერვერი არ აიწევს**. ↓ იხ. ბაზასთან TLS |
 
 ### ⚠️ TRUSTED_HOSTS — API-ს host-ი, არა storefront-ის
 
@@ -235,6 +236,58 @@ Supabase-ის საკუთარ სერვისებს უჭირ�
 2 worker × (5 + 5) = 20 კავშირი   ✅
 4 worker × (10 + 10) = 80         ❌ სერვერი უარს იტყვის აწევაზე
 ```
+
+### ⚠️ ბაზასთან TLS — `require`-დან `verify-full`-ზე
+
+ახლა API ბაზას `DB_SSL_MODE=require`-ით უკავშირდება (ნაგულისხმევი; `render.yaml`-ში
+არ წერია): ტრაფიკი დაშიფრულია, მაგრამ სერვერის სერტიფიკატი **არ მოწმდება** —
+გზაზე ჩადგომილი მხარე თავს Supabase-ად გაასაღებს და ვერ შევამჩნევთ.
+Supabase-ის სერტიფიკატს საკუთარი CA აწერს ხელს და ის საჯარო trust store-ში არ
+არის, ამიტომ `verify-full`-ს CA-ს ფაილი სჭირდება. დეპლოიზე (`APP_ENV` =
+`production`/`staging`) `require`-ზე გაშვებისას ლოგში ერთხელ იწერება WARNING
+(`voltbox.db`): „encrypted but the server is not authenticated“. სერვისი ამით
+არ ჩერდება — გაშვებამდე ის უნდა გაქრეს.
+
+გადართვა (მფლობელის ხელით, Render-ის პანელში; `render.yaml` არ იცვლება):
+
+1. **CA-ს ჩამოტვირთვა:** Supabase Dashboard → Project Settings → Database →
+   SSL Configuration → „Download certificate“. ჩამოტვირთული `.crt` ფაილის შიგთავსი
+   PEM ტექსტია (`-----BEGIN CERTIFICATE-----`). ფაილი საიდუმლო არ არის, მაგრამ
+   repository-შიც არ ვინახავთ.
+2. **Render-ზე მიწოდება:** API სერვისი → Environment → **Secret Files** → Add:
+   Filename `supabase-ca.crt`, Contents — ფაილის შიგთავსი. Render მას
+   `/etc/secrets/supabase-ca.crt`-ზე ამოიტანს.
+3. **ცვლადები API სერვისზე** (იგივე Environment, ფაილში არ წერია, ამიტომ
+   sync მათ არ გადააწერს):
+   - `DB_SSL_MODE=verify-full`
+   - `DB_SSL_ROOT_CERT=/etc/secrets/supabase-ca.crt`
+
+   შენახვა ახალ deploy-ს იწყებს.
+4. **შემოწმება deploy-ის შემდეგ:**
+   - სერვისი აიწია (Events → Deploy live);
+   - `curl https://<api-host>/api/v1/health` პასუხში `"database": "up"`;
+   - ლოგში „not authenticated“ WARNING აღარ არის.
+
+**თუ ეს არ გამოვა** (სერვისი არ აიწევს და ლოგში `DB_SSL_ROOT_CERT … cannot be
+used as a CA bundle`, ან certificate/hostname-ის შეცდომაა; ან `health` აბრუნებს
+`"database": "down"`): ორივე ცვლადი წაშალეთ (`DB_SSL_MODE`, `DB_SSL_ROOT_CERT`) —
+სისტემა ისევ `require`-ზე დადგება და ძველებურად იმუშავებს — და შედეგი
+დააფიქსირეთ. ყველაზე სავარაუდო მიზეზი: `DATABASE_URL`-ის hostname-ს სერტიფიკატი
+არ ფარავს. პირდაპირი `db.<ref>.supabase.co` და pooler-ი (`*.pooler.supabase.com`)
+სხვადასხვა hostname-ია, და ამ შემოწმებით სწორედ ესაა გასარკვევი — ვარაუდით
+არ ვწერთ, ფარავს თუ არა ჩამოტვირთული CA ორივეს. ფაილი არასწორი გზით ან
+დაზიანებული PEM-ით სერვერს გაშვებისას აჩერებს და შეცდომა `DB_SSL_ROOT_CERT`-ს
+ასახელებს (URL-ს — არასოდეს).
+
+`DB_SSL_ROOT_CERT` დაყენებული `require`-ზეც სრულ ვერიფიკაციას რთავს (ვერიფიკაციის
+განზრახვა მდუმარედ არ გამოირთვება), მაგრამ ორივე ცვლადი ერთად სჯობს: მაშინ
+კონფიგურაცია თავადვე ამბობს, რომ ვერიფიკაცია ჩართულია.
+
+**ლოკალურად და მიგრაციებისთვის:** `alembic` იმავე `build_connect_args()`-ს
+იყენებს, ამიტომ ონლაინ რეჟიმი (`upgrade`, `check`…) იგივე `DB_SSL_*`
+ცვლადებით მუშაობს. §5-ის გზა — `alembic upgrade <ძველი>:<ახალი> --sql` —
+ბაზას არ უკავშირდება და ამ ცვლილებას არ ეხება. ლოკალური ბაზა (`localhost`,
+`127.0.0.1`) TLS-ს არ იყენებს, `DB_SSL_MODE=verify-full`-ის დროსაც.
 
 ### ⚠️ მეხსიერების ბიუჯეტი — სურათის ატვირთვა
 
