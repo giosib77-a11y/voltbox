@@ -352,6 +352,23 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-11-15 — Logs name a client only by a keyed pseudonym; transport and header hardening (A-036, A-046, A-011, A-010, A-063)
+- Decision (owner-approved scope; the details chosen in the fix): the access line's `client` and slowapi's
+  "ratelimit exceeded" WARNING carry the first 12 hex chars of HMAC(HMAC(JWT_SECRET, a fixed label), client
+  address); gunicorn's own access log is off (`accesslog = None`), because under UvicornWorker it printed the
+  raw IP. `Server` is dropped by a UvicornWorker subclass (`app/core/uvicorn_worker.py`, under `app/` so the
+  Dockerfile ships it). A 429's `Retry-After` is the seconds left in the failed limit's window, falling back
+  to the window length. `DB_SSL_MODE=require` with `DB_SSL_ROOT_CERT` set keeps verifying fully, and a
+  deployed `require` without it logs a warning instead of refusing. The storefront's HSTS is `max-age=300`
+  until voltbox.ge. The compose `api` service has no `env_file`, and its external credentials are blank.
+- Reason: the rate limiter's IP source had to become checkable from the log without the log holding IPs.
+  A plain hash of an IPv4 is reversible by enumeration. A configured CA should never be dropped silently.
+  Production must keep starting on today's settings until the owner installs the Supabase CA.
+- What still holds: the admin audit log still stores the IP in the database. Rotating JWT_SECRET changes
+  every pseudonym. Production's effective DB mode is still `require` (encrypted, not authenticated) until
+  the owner switches (PROGRESS.md Blockers). How to change: the HSTS value and the DB mode are a Render/
+  render.yaml edit each (docs/deployment.md §7, "ბაზასთან TLS").
+
 ### 2026-11-15 — A repeated Idempotency-Key is compared on the request too (A-042)
 - Decision: `orders.request_hash` (migration 0017, nullable `VARCHAR(64)`, no index) holds the SHA-256 of the
   canonical request: merged quantities ordered by product id, the validated customer with email and phone
