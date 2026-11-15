@@ -40,6 +40,11 @@ MIN_SUBSTRING_LEN = 3
 # გაზომვით: ბეჭდვითი შეცდომა ("samsnug") → 0.5, შემთხვევითი სიტყვა → ≤0.15
 WORD_SIMILARITY_THRESHOLD = 0.4
 
+# A query is read up to this many words (stopwords not counted); the rest are
+# dropped silently. Every word adds an AND condition per form, and the endpoint is
+# public, so the cost of one request must not grow with the length of the query.
+MAX_QUERY_TOKENS = 8
+
 # ხმაურის სიტყვები — მარტო მათგან შემდგარი მოთხოვნა ცარიელ შედეგს აბრუნებს
 STOPWORDS = frozenset({"და", "the", "for", "with", "ის", "თუ", "ან", "or", "and"})
 
@@ -181,14 +186,33 @@ async def search_products(
     return []
 
 
+def _parse_query(query: str) -> tuple[list[str], str]:
+    """The query's searchable tokens and its normalized text, capped at `MAX_QUERY_TOKENS`.
+
+    The one place every path (`/search`, `/products?q=`, ranking, the typo stage)
+    reads a query through, so none of them sees more than the cap. Stopwords do
+    not count toward it. A query within the cap is returned whole, exactly as
+    `normalize` makes it; a longer one is cut after its last counted token.
+    """
+    words = tokenize(query)
+    tokens: list[str] = []
+    cut = len(words)
+    for position, word in enumerate(words):
+        if word in STOPWORDS:
+            continue
+        if len(tokens) == MAX_QUERY_TOKENS:
+            cut = position
+            break
+        tokens.append(word)
+    return tokens, " ".join(words[:cut])
+
+
 async def _run(
     db: AsyncSession, query: str, *, limit: int, offset: int, fuzzy: bool
 ) -> list[Product]:
-    tokens = [token for token in tokenize(query) if token not in STOPWORDS]
+    tokens, normalized_query = _parse_query(query)
     if not tokens:
         return []
-
-    normalized_query = normalize(query)
 
     if fuzzy:
         match = _name_similarity(normalized_query) > WORD_SIMILARITY_THRESHOLD
@@ -213,13 +237,13 @@ async def _run(
 
 def relevance_expression(query: str) -> Any:
     """რელევანტურობის ქულა კატალოგის სიისთვის (`?sort=relevance`)."""
-    tokens = [token for token in tokenize(query) if token not in STOPWORDS]
-    return _relevance(tokens, normalize(query))
+    tokens, normalized_query = _parse_query(query)
+    return _relevance(tokens, normalized_query)
 
 
 def search_condition(query: str) -> Any:
     """კატალოგის სიისთვის — ფილტრებთან შესაერთებელი პირობა (`?q=`)."""
-    tokens = [token for token in tokenize(query) if token not in STOPWORDS]
+    tokens, _ = _parse_query(query)
     if not tokens:
         return None
     return and_(*[_token_condition(token) for token in tokens])
