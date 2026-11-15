@@ -287,6 +287,10 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 - A-045 — fixed (verified), `c4d2217`; re-review: code-reviewer — დახურულია, ახალი nit A-074.
 - A-060 — fixed (verified), `cc6abee`; re-review: security-auditor — დახურულია, დაუდასტურებელი A-075 (WEBP).
 - pytest: 1220 (baseline `b74e108`) → 1226 → 1251 → 1258 → 1268 → 1271 → 1285 → **1289**.
+- საბოლოო შემოწმება (`264e199`, ორკესტრატორი, foreground-ში, პარალელური pytest არ ყოფილა — `tester` აგენტი არ გამოიყენებოდა,
+  რომ Stop hook-ს არ შეჯახებოდა): ruff ✅ · format 172 ✅ · mypy 153 ✅ · **pytest 1289 passed** · alembic 0001→0016 + check ✅
+  (ახალ ცარიელ ლოკალურ `voltbox_check`-ზე) · eslint ✅ · vitest 677 / 57 · build `http` ✅ · build `mock` ✅. არ გაშვებულა:
+  `docker build` (Dockerfile/დამოკიდებულებები არ შეცვლილა), e2e, ნამდვილი ბრაუზერი, frontend Node 22-ზე, HTTP-ის დონის race.
 - **სატესტო ბაზის შეჯახება ისევ:** ორკესტრატორის Stop hook-ის `pytest` ყოველ სვლის ბოლოს ეშვება და 6-ჯერ დაემთხვა
   subagent-ის ან ორკესტრატორის `pytest`-ს (`relation "users"/"categories" does not exist`, ასობით error). ეს შედეგები
   არ ჩაითვალა. ყველა ჩათვლილი გაშვება `tasklist`-ის guard-ით, მარტო იყო. ორჯერ hook-მა subagent-ის „ძველ კოდზე“ შემოწმების
