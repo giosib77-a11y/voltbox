@@ -739,6 +739,13 @@ Unverified (check before acting):
   ```
   The UPDATE must show `UPDATE 1` (0 → the head was not 0016; stop). After: `select version_num from public.alembic_version;`
   → `0017`. Nullable, no default, no backfill: existing orders are untouched. No new table, so no RLS to enable.
+- **2026-11-15, owner — check for live rows above the new admin bounds (AUDIT.md A-073), before or right after the
+  deploy.** The admin forms resend `position` / `lowStockThreshold` on every save, so a row already above a bound
+  cannot be saved from the panel (400) until that value is lowered. In the Supabase SQL Editor (read-only):
+  `select id, slug, position from public.categories where position > 10000;`
+  `select id, slug, low_stock_threshold from public.products where low_stock_threshold > 100000;`
+  `select id, slug, stock from public.products where stock > 1000000;` (above the stock ceiling: still sold down, but
+  no increase is accepted). All three empty → nothing to do.
 
 ## Run State
 - Stage: Stage 3 — Storefront redesign
@@ -790,6 +797,11 @@ Unverified (check before acting):
   security-auditor re-review: 0 critical / 0 should-fix; new A-063 (should-fix, compose `env_file: .env`, pre-existing,
   open) and nits A-064–A-066 in AUDIT.md. Gates: ruff, format 169, mypy 150, pytest 1196 (alone; a run overlapping
   another pytest on `voltbox_test` fails with "relation does not exist" — collision, not code), alembic upgrade + check.
+- 2026-11-15 (outside Stage 3, branch `fix/a042-a074` from `agent-system` `c193db4`): AUDIT.md A-042 (migration 0017,
+  `orders.request_hash`, 409 `IDEMPOTENCY_KEY_REUSED`), A-043, A-044, A-070, A-072, A-073, A-074 — fixed (verified),
+  re-reviewed closed; A-069 not reproduced (measured, no change). New nits A-077–A-079 open. **Before deploying: run
+  `docs/migrations/0017_orders_request_hash.sql` on live** (Blockers). Gates at 0927590: ruff, format 178, mypy 158,
+  pytest 1364, alembic 0001→0017 + check; eslint, vitest 677, both builds. Merge into `agent-system` is the owner's.
 
 ## Stage 2 — Done
 Last session of Stage 2:

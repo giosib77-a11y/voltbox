@@ -296,6 +296,26 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   არ ჩაითვალა. ყველა ჩათვლილი გაშვება `tasklist`-ის guard-ით, მარტო იყო. ორჯერ hook-მა subagent-ის „ძველ კოდზე“ შემოწმების
   მომენტი დაიჭირა (ახალი ტესტები მოსალოდნელად ჩავარდა).
 
+**`/fix A-042 A-043 A-044 A-069 A-070 A-072 A-073 A-074` 2026-11-15** (ბრენჩი `fix/a042-a074`, `agent-system`-იდან, `c193db4`).
+ყოველ finding-ზე ორკესტრატორმა თავად გაუშვა ruff/format/mypy/სრული pytest მარტო (`tasklist`-ის guard-ით) და ძველ კოდზე
+ჩავარდნა `git stash`-ით (A-070-ზე — ძველი გამოძახების დროებით ჩასმით, A-072-ზე — ძველი ფაილი + მხოლოდ კონსტანტა).
+- A-042 — fixed (verified), `ec0c98f`; migration 0017; re-review: security-auditor — დახურულია. **ლაივ SQL deploy-მდე** (Blockers).
+- A-043 — fixed (verified), `0765bb8`; re-review: code-reviewer — დახურულია.
+- A-044 — fixed (verified), `12b2723`; `demote-user` შეგნებულად არ ამოწმებს; re-review: code-reviewer — დახურულია.
+- A-069 — **not reproduced (measured)**, კოდი არ შეცვლილა; დეველოპერის ცვლილება უარყოფილია (დეტალები finding-ში).
+- A-070 — fixed (verified), `ccb494d`; re-review: code-reviewer — დახურულია.
+- A-072 — fixed (verified), `23566e9`; DB CHECK-ის გარეშე; re-review: code-reviewer — დახურულია.
+- A-073 — fixed (verified), `4a15441`; re-review: code-reviewer — დახურულია.
+- A-074 — fixed (verified), `0927590`; re-review: code-reviewer — დახურულია.
+- re-review-ის ახალი nit-ები: A-076 (გასწორდა A-072-ში), A-077, A-078, A-079 — ღია.
+- pytest: 1289 (baseline `c193db4`) → 1308 → 1312 → 1334 → 1335 → 1348 → 1363 → **1364**.
+- საბოლოო შემოწმება (`0927590`, ორკესტრატორი, foreground-ში, პარალელური pytest არ ყოფილა): ruff ✅ · format 178 ✅ · mypy 158 ✅ ·
+  **pytest 1364 passed** · alembic 0001→0017 + check ✅ (ახალ ცარიელ ლოკალურ `voltbox_final_check`-ზე, შემდეგ წაიშალა) ·
+  eslint ✅ · vitest 677 / 57 · build `http` ✅ · build `mock` ✅. არ გაშვებულა: `docker build` (Dockerfile/დამოკიდებულებები
+  არ შეცვლილა), e2e, ნამდვილი ბრაუზერი, frontend Node 22-ზე, ლაივ ბაზა.
+- **სატესტო ბაზის შეჯახება:** Stop hook-ს ახლა საკუთარი `voltbox_hook_test` აქვს, მაგრამ ორკესტრატორის და subagent-ის hook-ები
+  ერთმანეთს ამ ბაზაზე 5-ჯერ დაემთხვა (`relation "users"/"categories" does not exist`, ერთხელ deadlock). ეს შედეგები არ ჩაითვალა.
+
 ### Should-fix
 
 #### A-030 · should-fix · refresh-ის 429 ან 5xx პასუხი მომხმარებელს სისტემიდან აგდებს
@@ -512,7 +532,13 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   3. ლაივ migration მხოლოდ `alembic upgrade 0016:0017 --sql`-ით (`public.`-ით), მფლობელისთვის `## Blockers`-ში.
   4. ტესტები სამივე შემთხვევაზე; `alembic upgrade head` + `alembic check`.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `ec0c98f` (re-review: security-auditor — დახურულია). migration 0017: `orders.request_hash`
+  `VARCHAR(64)` nullable, index-ის და backfill-ის გარეშე. hash = SHA-256 კანონიკური JSON-იდან (გაერთიანებული რაოდენობები
+  product id-ით, ვალიდირებული customer — email/phone `owns_order`-ის ნორმალიზებით, paymentMethod). `_replay`-ში ჯერ
+  მფლობელობა (უცხოს — `IDEMPOTENCY_KEY_CONFLICT`, oracle არ არის), მერე hash → `IDEMPOTENCY_KEY_REUSED`; ორივე გზაზე (pre-check
+  და unique-index clash). 18 ახალი ტესტიდან 10 ძველ `order.py`-ზე ვარდება (ორკესტრატორმა `git stash`-ით გაუშვა). alembic
+  upgrade head + check სუფთა scratch ბაზაზე. ლაივისთვის SQL: `docs/migrations/0017_orders_request_hash.sql`, PROGRESS.md
+  `## Blockers` — **deploy-მდე**. auditor-ის nit → A-076.
 
 #### A-043 · nit · შეკვეთის ნომრის თარიღი UTC-ია, არა თბილისის
 - **ფაილი:** `backend/app/services/order.py:76` (`to_char(now(), 'YYYYMMDD')`)
@@ -520,7 +546,10 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   თარიღს იღებს (`VB-YYYYMMDD-…`).
 - **გამოსწორება:** `to_char(now() AT TIME ZONE 'Asia/Tbilisi', 'YYYYMMDD')`. ტესტი: SQL-ის დონეზე, დროის სარტყლით.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `0765bb8` (re-review: code-reviewer — დახურულია). ტესტი სესიის სარტყელს UTC+14-სა და
+  UTC−12-ზე აყენებს ერთ ტრანზაქციაში (26 საათი → ძველი გამოსახულება ნებისმიერ მომენტში ორ თარიღს იძლევა); 4-დან 2 ძველ
+  კოდზე ვარდება (ორკესტრატორმა `git stash`-ით გაუშვა). „დამოუკიდებლობის" ტესტი ძველ კოდზე ყოველთვის ვარდება, პარამეტრიზებული
+  შემთხვევები — მხოლოდ დღის ნაწილში. reviewer-ის nit → A-077.
 
 #### A-044 · nit · `manage_admin.py` ელფოსტას არ ამოწმებს — იქმნება ადმინი, რომელიც ვერასოდეს შევა
 - **ფაილი:** `backend/scripts/manage_admin.py:60-76`
@@ -529,7 +558,11 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 - **გამოსწორება:** იგივე ვალიდაცია, რაც `app/schemas/auth.py`-ში (pydantic `EmailStr` / `TypeAdapter`), სამივე
   ბრძანებაში; არავალიდურზე `SystemExit` გასაგები ტექსტით. ტესტი.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `12b2723` (re-review: code-reviewer — დახურულია, ახალი პრობლემა არ არის). `create-admin` და
+  `promote-user` — `TypeAdapter(EmailStr)` იმავე strip-ის შემდეგ, რაც login-ში; პაროლის კითხვამდე და ბაზამდე. ტესტი script-სა
+  და `LoginRequest`-ს ერთსა და იმავე input-ებზე ადარებს. **გადახრა აუდიტის ტექსტიდან:** `demote-user` შეგნებულად არ ამოწმებს —
+  როლის ჩამორთმევა ნებისმიერ არსებულ რიგზე უნდა მუშაობდეს, მათ შორის ამ შემოწმებამდე შექმნილ `.test`-იან ადმინზე (guard
+  ტესტი). 22 ახალი ტესტიდან 18 ძველ script-ზე ვარდება (ორკესტრატორმა `git stash`-ით გაუშვა).
 
 #### A-045 · nit · ძებნაში სიტყვების რაოდენობა შეუზღუდავია
 - **ფაილი:** `backend/app/services/search.py:187`
@@ -795,7 +828,13 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   გაასუფთავებს. შედეგზე გავლენა არ ჩანს, მხოლოდ მეხსიერება იხარჯება.
 - **გამოსწორება:** მდგომარეობის შენახვა და აღდგენა ტესტის სხეულში (context manager), ან teardown-ში pytest-ის მიმდინარე handler-ების შენარჩუნება.
 - **owner:** backend-dev
-- **status:** open
+- **status:** not reproduced (measured, 2026-11-15) — კოდი არ შეცვლილა. pytest 9.1.1-ში `LoggingPlugin` `caplog_handler`-სა
+  და `report_handler`-ს ერთხელ ქმნის (`_pytest/logging.py:674-676`) და ყველა ფაზაში იმავე instance-ს ამაგრებს root-ზე
+  (`catching_logs.__enter__`/`__exit__`). teardown-ში დაბრუნებული „setup-ის handler-ი" იგივე ობიექტია, რომელსაც pytest
+  teardown-ის ბოლოს თვითონ ხსნის, ამიტომ არაფერი გროვდება. გაზომვა: დროებითმა ტესტმა, რომელიც ამ მოდულის 17 ტესტის შემდეგ
+  გაეშვა, root-ზე ძველ fixture-ზეც 2 `LogCaptureHandler` დაითვალა (მიმდინარე ფაზის caplog + report), არა 19. დეველოპერის
+  ცვლილება (`_pytest.logging`-ის კერძო კლასზე ფილტრი და guard, რომელიც ფაზებს ცალ-ცალკე instance-ებით აწყობდა, რაც pytest-ს
+  არ აქვს) არ შევიდა. რაც ძალაში რჩება: თუ pytest ფაზაზე ახალ instance-ს შექმნის, აუდიტის სცენარი აღდგება.
 
 #### A-070 · nit · ტესტში `dictConfig(uvicorn.config.LOGGING_CONFIG)` პროცესის ყველა handler-ს ხურავს
 - **ფაილი:** `backend/tests/test_server_log_secrecy.py:68`
@@ -803,7 +842,11 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   `_FileHandler` ამის შემდეგ ჩანაწერებს ჩუმად აგდებს. ზიანი მხოლოდ `--log-file`-ით გაშვებისას ჩნდება.
 - **გამოსწორება:** uvicorn-ის dev wiring ხელით აწყობა (`uvicorn` logger-ს საკუთარი handler, `uvicorn.error` propagate), `dictConfig`-ის გარეშე.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `ccb494d` (re-review: code-reviewer — დახურულია, ახალი პრობლემა არ არის). helper `uvicorn`-ს
+  (საკუთარი `StreamHandler`, `DefaultFormatter`, level, propagate) და `uvicorn.error`-ს (handler-ის გარეშე, propagate) თავად
+  `LOGGING_CONFIG`-ის მნიშვნელობებით აწყობს, ფორმის assert-ებით. guard (root-ზე mode `'w'` `FileHandler` wiring-ის შემდეგაც
+  წერს) ძველი `dictConfig`-ით ვარდება (ორკესტრატორმა დროებით ჩასვა და გაუშვა). scrubber-ის ტესტები გაფუჭებულ `scrub`-ზე ისევ
+  ვარდება (16/18, დეველოპერის გაშვება). მხოლოდ ტესტის ცვლილებაა.
 
 #### A-071 · nit (დაუდასტურებელი) · ერთდროული `DELETE` და `PUT` ერთ მისამართზე შეიძლება 500 იყოს
 - **ფაილი:** `backend/app/services/address.py` (`update_one`-ის flush, `remove`). ფიქსამდეც ასე იყო.
@@ -830,7 +873,13 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 - **გამოსწორება:** ზედა ზღვარი `adjust_stock`-ში (მაგ. 1 000 000) კოდით (`STOCK_LIMIT_EXCEEDED`, ka/en) + DB CHECK; ზღვრის
   მნიშვნელობა მფლობელის გადაწყვეტილებაა.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `23566e9` (re-review: code-reviewer — დახურულია, nit-ები → A-078). `inventory.MAX_STOCK =
+  1_000_000` (მფლობელის მნიშვნელობა); `adjust_stock` ყოველ ზრდას, რომლის შედეგი ზღვარს გადააჭარბებს, 400
+  `STOCK_LIMIT_EXCEEDED`-ით უარყოფს, სანამ რამე ჩაიწერება (ka/en). შემცირება არასდროს — ზღვარს ზემოთ ძველი row ისევ იყიდება.
+  **გადახრა აუდიტის ტექსტიდან:** DB CHECK და migration არ დაემატა (მფლობელმა მხოლოდ 0017-ის `request_hash` დაამტკიცა;
+  `adjust_stock` ერთადერთი ჩამწერია — reviewer-მა grep-ით დაადასტურა). გაუქმების restock-იც ზღვარს ექვემდებარება; უარი
+  ტრანზაქციას მთლიანად აბრუნებს (reviewer). 12 ახალი ტესტიდან 6 ძველ `inventory.py`-ზე (+ მხოლოდ კონსტანტა) ვარდება
+  (ორკესტრატორმა გაუშვა).
 
 #### A-073 · nit · სამ სხვა admin int ველს ზედა ზღვარი არ აქვს → int4 overflow → 500
 - **ფაილი:** `backend/app/schemas/admin_product.py:108` (`ProductCreate.stock`, `ge=0`), `:105`/`:150`
@@ -841,7 +890,12 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 - **გამოსწორება:** `le=MAX_STOCK_ADJUSTMENT` `stock`-ზე, გონივრული `le=` დანარჩენზე (მაგ. 100 000 და 10 000); out-of-range
   ტესტები, როგორც `test_stock_adjust_bounds.py`-ში.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `4a15441` (re-review: code-reviewer — დახურულია). საწყისი `stock` ≤ `MAX_STOCK_ADJUSTMENT`
+  (100 000), `low_stock_threshold` ≤ `MAX_LOW_STOCK_THRESHOLD` (100 000), კატეგორიის `position` ≤ `MAX_CATEGORY_POSITION`
+  (10 000), create-ზეც და update-ზეც; გადაჭარბება → 400 `VALIDATION_ERROR`, არაფერი იწერება. 15 ახალი HTTP ტესტიდან 10 ძველ
+  სქემებზე ვარდება (ორკესტრატორმა `git stash`-ით გაუშვა). reviewer: სხვა client-input გზა ამ ველებს არ იღებს; PATCH
+  `exclude_unset`-ით მუშაობს, მაგრამ admin UI ამ ველებს ყოველ შენახვაზე ხელახლა აგზავნის — ლაივზე ზღვარს ზემოთ არსებული row
+  panel-იდან ვერ შეინახება, სანამ მნიშვნელობას არ შეამცირებ (შემოწმების SQL — PROGRESS.md `## Blockers`). import script → A-078.
 
 #### A-074 · nit · ძებნის ლიმიტი ნორმალიზებულ token-ებს ითვლის, არა აკრეფილ სიტყვებს
 - **ფაილი:** `backend/app/services/search.py` (`_parse_query`)
@@ -852,7 +906,11 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   სიტყვად ჩაითვალოს (ან ლიმიტი აკრეფილ, whitespace-ით გაყოფილ სიტყვებზე). მფლობელმა „8 token“ დაამტკიცა — „8 სიტყვაზე“
   გადასვლა მისი გადაწყვეტილებაა. ტესტი: `_parse_query("Baseus Flash Series USB-C — USB-C 100W კაბელი 2მ")` ყველა token-ს ინახავს.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `0927590`. მფლობელის გადაწყვეტილებით `MAX_QUERY_TOKENS` 8 → 16, dedupe-ისა და დათვლის
+  ცვლილების გარეშე (Decision Log განახლდა). Baseus-ის სახელი (12 token) მთლიანად იკითხება; A-045-ის ზღვრის ტესტები
+  `MAX_QUERY_TOKENS`-ზე გადავიდა (30-სიტყვიანი მოთხოვნა ბაზაში ზუსტად ამდენ სიტყვას აგზავნის). 4 ტესტი ძველ `search.py`-ზე
+  ვარდება (ორკესტრატორმა `git stash`-ით გაუშვა). რაც ძალაში რჩება: ზღვარი ნორმალიზებულ token-ებზეა. re-review: code-reviewer —
+  დახურულია; ხარჯი წრფივად ×2 (ერთ statement-ში ≤64 token-clause, `/products?q=` ≤320 ერთ request-ზე, ადრე 160); nit-ები → A-079.
 
 #### A-075 · nit (დაუდასტურებელი) · WEBP-ის stripper-ს chunk-ების რაოდენობის ზღვარი არ აქვს
 - **ფაილი:** `backend/app/services/storage.py:541-556` (`_strip_webp`)
@@ -861,5 +919,44 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   დაუდასტურებელია, მიიღებს თუ არა libwebp ასეთ ფაილს, და ხარჯის ზომა. PNG-ის მსგავს გზას Pillow-ის `verify()` თავადაც იხდის,
   ამიტომ ის ცალკე პრობლემად არ ჩაითვალა.
 - **გამოსწორება (თუ დადასტურდება):** chunk-ების მრიცხველი → `INVALID_IMAGE`, როგორც A-060-ში.
+- **owner:** backend-dev
+- **status:** open
+
+### A-042/A-043/A-044/A-069/A-070/A-072/A-073/A-074-ის re-review (2026-11-15)
+
+#### A-076 · nit · `IDEMPOTENCY_KEY_REUSED`-ის ტექსტი „სხვა კალათას" ამბობდა
+- **ფაილი:** `frontend/src/i18n/ka.json`, `en.json` (`apiErrors.IDEMPOTENCY_KEY_REUSED`)
+- **სცენარი (კოდით, security-auditor):** 409 მხოლოდ სახელის/მისამართის/კომენტარის ცვლილებაზეც ბრუნდება, ტექსტი კი კალათას ასახელებდა.
+- **owner:** backend-dev
+- **status:** fixed (reviewed) — `23566e9`, A-072-თან ერთად: „სხვა მონაცემებით" / „with different details".
+
+#### A-077 · nit · შეკვეთის ნომრის სარტყელი პირდაპირ წერია, admin-ის ფილტრები `settings.store_timezone`-ს იყენებს
+- **ფაილი:** `backend/app/services/order.py` (`_next_order_number`), `app/core/config.py` (`store_timezone`), `admin_orders.py:34`
+- **სცენარი (კოდით, code-reviewer):** `STORE_TIMEZONE` სხვა მნიშვნელობით რომ დაყენდეს, „დღეს"-ის ფილტრი და ნომრის თარიღი
+  ერთმანეთს აღარ დაემთხვევა. დღეს ეს არ ხდება: `render.yaml` მას არ აყენებს, ნაგულისხმევი Asia/Tbilisi-ა; მფლობელმა
+  პირდაპირი მნიშვნელობა დაამტკიცა.
+- **გამოსწორება:** `AT TIME ZONE :tz` bind-პარამეტრით, `{"tz": settings.store_timezone}`.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-078 · nit · `import_products.py` ახალ ზღვრებს `validate()`-ში წინასწარ არ ამოწმებს; ცოტა რამ A-072-ის ტესტებში
+- **ფაილი:** `backend/scripts/import_products.py:78` (`validate`), `:130`, `:160-163`; `backend/tests/test_stock_ceiling.py`;
+  `backend/app/services/inventory.py:74-76` (კომენტარი)
+- **სცენარი (კოდით, code-reviewer ×2):** `"stock": 2000000` ან `"lowStockThreshold": 3000000000` `--dry-run`-ზე „✔ validation"-ს
+  იღებს, ნამდვილი გაშვება კი raw traceback-ით ჩერდება (`STOCK_LIMIT_EXCEEDED` `ProductImportError` არ არის; threshold-ზე int4
+  overflow `flush`-ზე). ერთი commit-ია, ამიტომ არაფერი ნახევრად არ იწერება. ამასთან: product-create-ის გზაზე ზღვრის ტესტი არ
+  არის (კოდით სწორია); კომენტარი გაუქმებისას ზღვართან დაშორებას „20 × 10"-ს წერს, სინამდვილეში თითო პროდუქტზე ≤ 10-ია
+  (`MAX_LINE_QUANTITY`); `test_checkout_below_the_ceiling_is_unaffected` ზღვარს ზემოთ იწყება.
+- **გამოსწორება:** `validate()`-ში `MAX_STOCK` (ან `MAX_STOCK_ADJUSTMENT`) და `MAX_LOW_STOCK_THRESHOLD` → `ProductImportError`
+  + unit-ტესტი; create-ის ტესტი `test_stock_ceiling.py`-ში; კომენტარისა და ტესტის სახელის გასწორება.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-079 · nit · ძებნის cap-ის ტესტები: ერთი კომენტარი არასწორია, layout candidate-ის გზა არ მოწმდება
+- **ფაილი:** `backend/tests/test_search.py:286-287`, `:351-378`
+- **სცენარი (კოდით, code-reviewer):** კომენტარი ამბობს, რომ ძველი cap „usb c usb c 100 w"-ის შემდეგ ჭრიდა — მერვე token `100`-ია.
+  SQL-ის ტესტები params-ში ლათინურ სიტყვებს ეძებს, layout candidate კი ქართულ/ტრანსლიტ ფორმებს აგზავნის, ამიტომ თუ ის
+  მომავალში `_parse_query`-ს გვერდს აუვლის, ტესტები მაინც გაივლის. ახლანდელი კოდი სწორია (`_run` ორივეს `_parse_query`-ით კითხულობს).
+- **გამოსწორება:** კომენტარში `"... 100"`; `:365`/`:378`-ზე იგივე შემოწმება `to_latin(fix_layout(word))`-ზე.
 - **owner:** backend-dev
 - **status:** open
