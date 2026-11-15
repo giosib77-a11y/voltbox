@@ -27,6 +27,19 @@ MAX_SPEC_VALUE_LENGTH = 200
 MAX_TAGS = 30
 MAX_TAG_LENGTH = 50
 
+#: products.stock is an int4 column. A single manual adjustment of +-100 000 is far
+#: beyond anything real, and the bound keeps an absurd value (3 000 000 000) a 400
+#: instead of an int4 overflow 500. The same constant bounds the initial stock of a
+#: new product. Zero is not rejected for an adjustment here: the service already
+#: answers it with the established 400 EMPTY_ADJUSTMENT. The running total is held
+#: separately by `inventory.MAX_STOCK` (400 STOCK_LIMIT_EXCEEDED in `adjust_stock`).
+MAX_STOCK_ADJUSTMENT = 100_000
+
+#: products.low_stock_threshold is an int4 column too. 100 000 matches the stock
+#: bounds above (a threshold above any reachable initial stock means nothing), and
+#: keeps 3 000 000 000 a 400 instead of an int4 overflow 500.
+MAX_LOW_STOCK_THRESHOLD = 100_000
+
 SpecValue = str | int | float | bool
 
 
@@ -102,10 +115,10 @@ class ProductCreate(ApiRequest):
     description_en: str = ""
     specs: dict[str, Any] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
-    low_stock_threshold: int = Field(default=3, ge=0)
+    low_stock_threshold: int = Field(default=3, ge=0, le=MAX_LOW_STOCK_THRESHOLD)
     # Create-only. Afterwards stock moves through the inventory endpoints so
     # every change is recorded in inventory_movements.
-    stock: int = Field(default=0, ge=0)
+    stock: int = Field(default=0, ge=0, le=MAX_STOCK_ADJUSTMENT)
     is_active: bool = False
     is_featured: bool = False
     is_new: bool = False
@@ -147,7 +160,7 @@ class ProductUpdate(ApiRequest):
     description_en: str = ""
     specs: dict[str, Any] | None = None
     tags: list[str] | None = None
-    low_stock_threshold: int | None = Field(default=None, ge=0)
+    low_stock_threshold: int | None = Field(default=None, ge=0, le=MAX_LOW_STOCK_THRESHOLD)
     is_active: bool | None = None
     is_featured: bool | None = None
     is_new: bool | None = None
@@ -251,14 +264,6 @@ class ImageOrderRequest(ApiRequest):
     """
 
     image_ids: list[UUID] = Field(min_length=1, max_length=12)
-
-
-#: products.stock is an int4 column. A single manual adjustment of +-100 000 is far
-#: beyond anything real, and the bound keeps an absurd value (3 000 000 000) a 400
-#: instead of an int4 overflow 500. Zero is not rejected here: the service already
-#: answers it with the established 400 EMPTY_ADJUSTMENT. What this does not bound
-#: is the running total - repeated +100 000 adjustments are still limited only by int4.
-MAX_STOCK_ADJUSTMENT = 100_000
 
 
 class StockAdjustRequest(ApiRequest):

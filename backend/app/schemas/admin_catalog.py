@@ -23,6 +23,11 @@ FilterType = Literal["checkbox", "toggle", "swatch"]
 
 MAX_FILTERS_PER_CATEGORY = 20
 
+#: categories.position is an int4 column and only orders siblings; 10 000 is far
+#: beyond any real category count. The bound keeps 3 000 000 000 a 400 instead of
+#: an int4 overflow 500. Negative values stay rejected (`ge=0`).
+MAX_CATEGORY_POSITION = 10_000
+
 
 class CategoryFilter(ApiRequest):
     """One entry of `categories.filters`.
@@ -70,7 +75,7 @@ class CategoryCreate(ApiRequest):
     description: str = ""
     icon: str = Field(default="Package", max_length=50)
     parent_id: UUID | None = None
-    position: int = Field(default=0, ge=0)
+    position: int = Field(default=0, ge=0, le=MAX_CATEGORY_POSITION)
     image_url: str | None = None
     filters: Annotated[list[CategoryFilter], Field(max_length=MAX_FILTERS_PER_CATEGORY)] = Field(
         default_factory=list
@@ -88,7 +93,7 @@ class CategoryUpdate(ApiRequest):
     description: str | None = None
     icon: str | None = Field(default=None, max_length=50)
     parent_id: UUID | None = None
-    position: int | None = Field(default=None, ge=0)
+    position: int | None = Field(default=None, ge=0, le=MAX_CATEGORY_POSITION)
     image_url: str | None = None
     filters: Annotated[list[CategoryFilter], Field(max_length=MAX_FILTERS_PER_CATEGORY)] | None = (
         None
