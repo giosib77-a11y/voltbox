@@ -253,7 +253,22 @@ class ImageOrderRequest(ApiRequest):
     image_ids: list[UUID] = Field(min_length=1, max_length=12)
 
 
+#: products.stock is an int4 column. A single manual adjustment of +-100 000 is far
+#: beyond anything real, and the bound keeps an absurd value (3 000 000 000) a 400
+#: instead of an int4 overflow 500. Zero is not rejected here: the service already
+#: answers it with the established 400 EMPTY_ADJUSTMENT. What this does not bound
+#: is the running total - repeated +100 000 adjustments are still limited only by int4.
+MAX_STOCK_ADJUSTMENT = 100_000
+
+
 class StockAdjustRequest(ApiRequest):
-    change: Annotated[int, Field(description="Positive adds stock, negative removes it")]
+    change: Annotated[
+        int,
+        Field(
+            ge=-MAX_STOCK_ADJUSTMENT,
+            le=MAX_STOCK_ADJUSTMENT,
+            description="Positive adds stock, negative removes it",
+        ),
+    ]
     reason: str = Field(max_length=32)
     note: str | None = Field(default=None, max_length=500)
