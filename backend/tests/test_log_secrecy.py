@@ -16,16 +16,24 @@ repr by their type, which no formatter takes part in, and a repr reaches a
 traceback or a debugger without being a log line - test_settings_secrecy.py.
 """
 
+import hashlib
+import hmac
 import json
 import logging
 import re
+from collections.abc import Generator
 
+import httpx
 import pytest
+from app.core.config import settings
 from app.core.logging import JsonFormatter
 from app.db.session import engine
+from app.main import create_app
+from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 EMAIL = "nino@example.ge"
 PASSWORD_HASH = "$argon2id$v=19$m=65536,t=3,p=4$SECRETSALT$SECRETHASHVALUE"
@@ -98,6 +106,143 @@ class TestADatabaseErrorInTheLog:
 
         assert parsed["level"] == "ERROR"
         assert "exception" in parsed
+
+
+CLIENT_IP = "203.0.113.77"
+
+
+@pytest.fixture
+def access_lines() -> Generator[list[str]]:
+    """The `voltbox.access` lines as emitted - formatted by JsonFormatter, i.e.
+    the exact text a log collector receives."""
+    lines: list[str] = []
+
+    class Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            if record.name == "voltbox.access":
+                lines.append(self.format(record))
+
+    handler = Collector(level=logging.DEBUG)
+    handler.setFormatter(JsonFormatter())
+    root = logging.getLogger()
+    previous_level = root.level
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+    try:
+        yield lines
+    finally:
+        root.removeHandler(handler)
+        root.setLevel(previous_level)
+
+
+async def _health_from(address: str) -> None:
+    transport = httpx.ASGITransport(app=create_app(), client=(address, 5000))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        assert (await client.get("/api/v1/health/live")).status_code == 200
+
+
+async def _client_field(lines: list[str], address: str) -> str:
+    await _health_from(address)
+    return str(json.loads(lines[-1])["client"])
+
+
+class TestTheAccessLogsClientField:
+    """A-036: the limiter keys on `request.client.host`, and the log said nothing
+    about it, so a wrong FORWARDED_ALLOW_IPS (every shopper = the proxy, one
+    shared bucket) could not be seen. The raw address stays out of the log."""
+
+    async def test_it_is_twelve_hex_characters(self, access_lines: list[str]) -> None:
+        assert re.fullmatch(r"[0-9a-f]{12}", await _client_field(access_lines, CLIENT_IP))
+
+    async def test_the_raw_address_is_nowhere_in_the_line(self, access_lines: list[str]) -> None:
+        await _health_from(CLIENT_IP)
+
+        assert access_lines, "nothing was logged, so the test proves nothing"
+        assert all(CLIENT_IP not in line for line in access_lines)
+
+    async def test_the_same_address_gives_the_same_value(self, access_lines: list[str]) -> None:
+        first = await _client_field(access_lines, CLIENT_IP)
+        second = await _client_field(access_lines, CLIENT_IP)
+
+        assert first == second
+
+    async def test_different_addresses_give_different_values(self, access_lines: list[str]) -> None:
+        home = await _client_field(access_lines, CLIENT_IP)
+        mobile = await _client_field(access_lines, "198.51.100.9")
+
+        assert home != mobile
+
+    async def test_another_jwt_secret_gives_another_value(
+        self, access_lines: list[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        before = await _client_field(access_lines, CLIENT_IP)
+        monkeypatch.setattr(settings, "jwt_secret", SecretStr("another-secret-" + "x" * 32))
+
+        after = await _client_field(access_lines, CLIENT_IP)
+
+        assert before != after
+
+    async def test_it_is_not_a_plain_hash_of_the_address(self, access_lines: list[str]) -> None:
+        """sha256 of an IPv4 address is reversed by trying all 2**32 of them."""
+        value = await _client_field(access_lines, CLIENT_IP)
+
+        assert value != hashlib.sha256(CLIENT_IP.encode()).hexdigest()[:12]
+
+    async def test_the_key_is_derived_from_the_jwt_secret_not_the_secret_itself(
+        self, access_lines: list[str]
+    ) -> None:
+        value = await _client_field(access_lines, CLIENT_IP)
+        secret = settings.jwt_secret.get_secret_value().encode()
+        direct = hmac.new(secret, CLIENT_IP.encode(), hashlib.sha256).hexdigest()[:12]
+        key = hmac.new(secret, b"voltbox:access-log:client:v1", hashlib.sha256).digest()
+        derived = hmac.new(key, CLIENT_IP.encode(), hashlib.sha256).hexdigest()[:12]
+
+        assert value != direct, "the log pseudonym is keyed with the JWT key itself"
+        assert value == derived
+
+    async def test_it_is_the_address_the_rate_limiter_keys_on(
+        self, access_lines: list[str]
+    ) -> None:
+        """Same source as slowapi's key function, so the log shows what the
+        limiter sees: one value for all shoppers means one shared bucket."""
+        from app.core.logging import client_pseudonym
+        from slowapi.util import get_remote_address
+
+        request = Request({"type": "http", "client": (CLIENT_IP, 1), "headers": []})
+
+        assert await _client_field(access_lines, CLIENT_IP) == client_pseudonym(
+            get_remote_address(request)
+        )
+
+    def test_a_request_without_a_client_gets_a_fixed_marker(self) -> None:
+        from app.core.logging import NO_CLIENT, RequestContextMiddleware
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/x",
+            "query_string": b"",
+            "headers": [],
+        }
+        lines: list[logging.LogRecord] = []
+
+        class Collector(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                lines.append(record)
+
+        handler = Collector(level=logging.DEBUG)
+        access = logging.getLogger("voltbox.access")
+        access.addHandler(handler)
+        previous = access.level
+        access.setLevel(logging.INFO)
+        try:
+            RequestContextMiddleware._log(Request(scope), "rid", 200, 0.0)
+        finally:
+            access.removeHandler(handler)
+            access.setLevel(previous)
+
+        fields: dict[str, object] = getattr(lines[0], "extra_fields")  # noqa: B009
+        assert fields["client"] == NO_CLIENT
 
 
 class TestTheScrubberItself:

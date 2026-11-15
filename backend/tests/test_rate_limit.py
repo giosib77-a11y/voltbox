@@ -223,6 +223,14 @@ def test_a_production_server_refuses_to_start_without_a_named_proxy(
         conf.on_starting(None)
 
 
+def test_gunicorn_writes_no_access_log_of_its_own() -> None:
+    """A-036: under UvicornWorker gunicorn's access log is wired to
+    uvicorn.access, which prints `<client IP> - "GET ..."` as plain text. The
+    raw IP must not be in the logs; the access line comes from app/core/logging.py
+    with a keyed pseudonym instead."""
+    assert load_gunicorn_conf().accesslog is None
+
+
 def test_trusting_every_source_is_refused_outright(monkeypatch: pytest.MonkeyPatch) -> None:
     """`*` is worse than the default: it lets a caller pick their own IP."""
     conf = load_gunicorn_conf()

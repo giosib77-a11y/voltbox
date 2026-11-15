@@ -1,9 +1,12 @@
 """სტრუქტურირებული JSON-ლოგები და request_id-ის გავრცელება.
 
-თითო მოთხოვნა = ერთი ხაზი: method, path, status, ხანგრძლივობა, request_id.
+თითო მოთხოვნა = ერთი ხაზი: method, path, status, ხანგრძლივობა, request_id, client.
+`client` კლიენტის IP-ის ფსევდონიმია (HMAC), არა თვით IP — ნედლი IP ლოგში არსად ჩანს.
 ავტორიზაციის მარშრუტებზე სხეული არასდროს ილოგება.
 """
 
+import hashlib
+import hmac
 import json
 import logging
 import re
@@ -11,13 +14,59 @@ import sys
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from functools import lru_cache
 from typing import Any
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.core.config import settings
+
 REQUEST_ID_HEADER = "X-Request-ID"
+
+#: What the access line's `client` field says when the request has no client
+#: address at all (an ASGI server that did not report one). Not an empty string
+#: and not a hash of one: a fixed marker is visibly "unknown", and cannot be
+#: mistaken for a real, shared bucket.
+NO_CLIENT = "-"
+
+#: Purpose label of the log pseudonym's key. The key is HMAC(JWT_SECRET, label),
+#: so the value that keys the log is neither the JWT signing key nor reusable as
+#: one, and a second purpose would use a second label.
+CLIENT_LOG_KEY_LABEL = b"voltbox:access-log:client:v1"
+
+
+@lru_cache(maxsize=4)
+def _client_log_key(jwt_secret: str) -> bytes:
+    """The pseudonym key for one JWT_SECRET, derived once per distinct secret.
+
+    Keyed on the secret's value rather than computed at import: Settings may be
+    rebuilt (tests do, and a rotated secret is a restart), and the key then
+    follows it instead of going stale. Per request this is a cache lookup.
+    """
+    return hmac.new(jwt_secret.encode(), CLIENT_LOG_KEY_LABEL, hashlib.sha256).digest()
+
+
+def client_pseudonym(host: str | None) -> str:
+    """12 hex chars standing for a client address, stable across requests.
+
+    Why not the address: an IP is personal data and the log is read by more
+    people than the database. Why not a plain hash of it: an IPv4 address has
+    only 2**32 values, so sha256(ip) is reversed by trying all of them; the
+    keyed HMAC cannot be without the key. The 48 bits kept are plenty to tell
+    clients apart in a log and give no way back.
+
+    What still holds: the same address under the same JWT_SECRET always gives
+    the same value, so an operator can see whether the rate limiter - which keys
+    on this same `request.client.host` - is looking at many clients or one. A
+    rotated JWT_SECRET changes every value, which is acceptable for a log.
+    """
+    if host is None:
+        return NO_CLIENT
+    key = _client_log_key(settings.jwt_secret.get_secret_value())
+    return hmac.new(key, host.encode(), hashlib.sha256).hexdigest()[:12]
+
 
 #: Postgres names the offending value when a constraint is violated:
 #:
@@ -146,6 +195,9 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                     "request_id": request_id,
                     "method": request.method,
                     "path": request.url.path,
+                    # The very value the rate limiter keys on (slowapi's
+                    # get_remote_address), so this shows what the limiter sees.
+                    "client": client_pseudonym(request.client.host if request.client else None),
                     "query": "" if is_sensitive else str(request.url.query),
                     "status": status,
                     "duration_ms": round((time.perf_counter() - started) * 1000, 2),

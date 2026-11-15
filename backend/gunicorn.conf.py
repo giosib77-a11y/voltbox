@@ -27,7 +27,12 @@ worker_class = "uvicorn.workers.UvicornWorker"
 workers = int(os.environ.get("WEB_CONCURRENCY", "2"))
 bind = os.environ.get("BIND", "0.0.0.0:8000")
 
-accesslog = "-"
+# No gunicorn access log: under UvicornWorker it is wired to uvicorn.access,
+# which writes `<client IP> - "GET /path"` as plain text, and the raw client IP
+# must not be in the logs. app/core/logging.py writes the access line instead,
+# with a keyed pseudonym of the IP, and also disables uvicorn.access once the
+# app starts. What still holds: the error log below is unchanged.
+accesslog = None
 errorlog = "-"
 timeout = 60
 graceful_timeout = 30
