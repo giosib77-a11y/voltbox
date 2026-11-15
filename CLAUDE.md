@@ -51,7 +51,7 @@ frontend — `frontend/`-იდან.
 - lint: `cd frontend && npm run lint`
 - typecheck: `cd backend && .venv/Scripts/mypy.exe app scripts tests` (CI-ის ნაკრები; README-ის `mypy app scripts` ნაკლებია)
 - test: `cd frontend && npm test`
-- test: `cd backend && TEST_DATABASE_URL=postgresql://voltbox:voltbox@localhost:55432/voltbox_hook_test TEST_REDIS_URL=redis://127.0.0.1:56379/2 .venv/Scripts/pytest.exe -q` (Stop hook-ის ხაზი: საკუთარი ბაზა, აგენტის pytest-ს არ ეჯახება)
+- pytest (Stop hook-ში გამორთულია; /auto საბოლოო gate-ში უშვებს): `cd backend && TEST_DATABASE_URL=postgresql://voltbox:voltbox@localhost:55432/voltbox_hook_test TEST_REDIS_URL=redis://127.0.0.1:56379/2 .venv/Scripts/pytest.exe -q` (Stop hook-ის ხაზი: საკუთარი ბაზა, აგენტის pytest-ს არ ეჯახება)
 - test (agents): `cd backend && .venv/Scripts/pytest.exe -q` (აგენტები ამას უშვებენ, voltbox_test)
   backend-ის ტესტებს სჭირდება `docker compose up -d --wait db redis` და ერთხელ
   `docker compose exec db createdb -U voltbox voltbox_test`.
