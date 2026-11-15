@@ -351,6 +351,51 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-11-15 — The JPEG walker refuses a file past 65 536 markers (A-060)
+- Decision: `_strip_jpeg` counts every marker it consumes and answers `INVALID_IMAGE` past
+  `_MAX_JPEG_MARKERS = 65_536`; fill bytes are skipped with one regex match instead of a byte loop.
+- Reason (the owner left the number to us): measured, a legitimate file has a few dozen markers — 12 baseline,
+  27 for a 4000×3000 progressive JPEG with EXIF and ICC, 13 with a restart marker per block — because stuffed
+  bytes and restart markers inside a scan are copied in bulk and never turn the loop. 65 536 markers cost 27 ms;
+  the 5 MiB hostile files that took 1.1 s (`FF 01`) and 1.5 s (`FF FF 00` in a scan) now stop in 35 / 84 ms.
+  A lower cap (4 096) would save nothing worth having and leaves less room for unusual phone files.
+- What still holds: only Pillow-made files were measured, not phone files with MPO or extended XMP; the WEBP
+  stripper has no chunk cap (AUDIT.md A-075, unconfirmed).
+- How it changes: lower the constant if a measurement on the production image shows the cap costing more than
+  ~100 ms.
+
+### 2026-11-15 — Every address write queues on the owner's row; at most 20 addresses (A-041, A-071)
+- Decision: `address.create`, `update_one` and `remove` all take `_lock_default_writes` (FOR NO KEY UPDATE on the
+  owner's `users` row) first; `create` counts under it and refuses the 21st with 409 `ADDRESS_LIMIT_REACHED`.
+  `User.addresses` is `lazy="raise"` (+ `passive_deletes=True`), so `GET /auth/me` is one statement.
+- Reason: "count, then insert" lets two creates at 19 leave 21, and a delete outside the queue let an update
+  that had read the address hit `StaleDataError` (a 500, reproduced) and a create count a row being deleted
+  (a spurious 409). One queue for all of a user's address writes closes all three; only that user's own
+  address writes wait on each other. This supersedes "a plain address is created without waiting" in the
+  A-040 entry below.
+- What still holds: the A-040 lock level and `populate_existing` are unchanged; lock order is always users →
+  addresses. The races are tested at the service level, not over HTTP.
+
+### 2026-11-15 — Input bounds: page ≤ 10 000, a stock change within ±100 000, a search reads 8 tokens (A-038, A-007, A-045)
+- Decision: one `MAX_PAGE = 10_000` on every `page` input; `StockAdjustRequest.change` within
+  ±`MAX_STOCK_ADJUSTMENT` (100 000); a search query is read up to `MAX_QUERY_TOKENS = 8` (stopwords not
+  counted, the rest dropped silently). All owner-approved values; out-of-range is 400 `VALIDATION_ERROR`.
+- Zero stock change: the owner approved "zero forbidden". It already was — `adjust_stock` answers 400
+  `EMPTY_ADJUSTMENT`, which has ka/en text and a test — so it keeps that code instead of becoming
+  `VALIDATION_ERROR` (no API or i18n change).
+- What still holds: the stock total has no ceiling (A-072); three other admin ints are unbounded (A-073); the
+  search cap counts normalized tokens, so "100W" or "USB-C" count twice (A-074 — "8 words" instead is the
+  owner's call).
+
+### 2026-11-15 — A Postgres DETAIL value is cut to the end of its line (A-067)
+- Decision: `PG_DETAIL_VALUE` matches `Key (…)=(` and `Failing row contains (` and drops everything after them
+  on that line.
+- Reason: NOT NULL / CHECK violations quote the whole row (guest email, phone, password hash); stopping at the
+  next `)` leaks the rest of a value that contains one. The words after the value (`already exists.`) go too;
+  the constraint name on the line above still says what was violated. This closes the A-067 note in the A-034
+  entry below.
+- What still holds: later lines of a multi-line value (`notes`) are not scrubbed.
+
 ### 2026-11-14 — The server's own loggers write through our JSON handler (A-034)
 - Decision: `configure_logging()` (run from the lifespan) clears the handlers of `uvicorn`, `uvicorn.error`
   and `gunicorn.error` and lets them propagate to the root JSON handler; `JsonFormatter` scrubs the message

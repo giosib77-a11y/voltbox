@@ -107,7 +107,10 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
 | A-019 | A-028 | `frontend/src/pages/GuestCartQuote.test.jsx` | ორი ტესტი toast-ის არყოფნას პასუხის დამუშავებამდე ამოწმებს | frontend-dev |
 | A-020 | A-029 | `backend/tests/` | ერთი reset-link-ის ორჯერ ერთდროულ გამოყენებაზე ტესტი არ არის | backend-dev |
 
-ყველას status: open.
+ყველას status: open, გარდა: **A-007 — fixed (verified), `35e6fb0`** (2026-11-15, re-review: code-reviewer).
+`change` ±100 000-ის ფარგლებშია (`MAX_STOCK_ADJUSTMENT`), გარეთ → 400 `VALIDATION_ERROR`. ნული ისევ 400-ია, არსებული
+`EMPTY_ADJUSTMENT` კოდით (ka/en ტექსტი და ტესტი უკვე ჰქონდა). 4 ახალი ტესტი ძველ schema-ზე ვარდება: 3 000 000 000 → asyncpg
+`value out of int32 range` (500), 100 001 → 200. ნარჩენი: A-072, A-073.
 
 ### A-001-ის re-review-ის nit-ები (security-auditor, 2026-10-22)
 
@@ -273,6 +276,22 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   vitest 677 / 57 · build `http` ✅ · build `mock` ✅. არ გაშვებულა: რეალური gunicorn (Linux), e2e, frontend Node 22-ზე,
   `docker build` (Dockerfile და დამოკიდებულებები არ შეცვლილა).
 
+**`/fix A-067 A-038 A-007 A-041 A-071 A-045 A-060` 2026-11-15** (ბრენჩი `fix/a067-a038-a007-a041-a071-a045-a060`,
+`agent-system`-იდან, `b74e108`). ყოველ commit-ზე ორკესტრატორმა თავად გაუშვა ruff/format/mypy/სრული pytest მარტო და ძველ
+კოდზე ჩავარდნა `git stash`-ით (გამონაკლისები თითო finding-შია).
+- A-067 (+A-068) — fixed (verified), `0452669`; re-review: security-auditor — დახურულია.
+- A-038 — fixed (verified), `069f8b1`; re-review: code-reviewer — დახურულია.
+- A-007 — fixed (verified), `35e6fb0`; re-review: code-reviewer — დახურულია, ახალი nit A-073 (+ backend-dev-ის A-072).
+- A-041 — fixed (verified), `91420c3`; re-review: code-reviewer — დახურულია. frontend gate: eslint ✅ · vitest 677 / 57 · build ✅ ×2.
+- A-071 — **დადასტურდა** და fixed (verified), `50905ba`; re-review: code-reviewer — დახურულია.
+- A-045 — fixed (verified), `c4d2217`; re-review: code-reviewer — დახურულია, ახალი nit A-074.
+- A-060 — fixed (verified), `cc6abee`; re-review: security-auditor — დახურულია, დაუდასტურებელი A-075 (WEBP).
+- pytest: 1220 (baseline `b74e108`) → 1226 → 1251 → 1258 → 1268 → 1271 → 1285 → **1289**.
+- **სატესტო ბაზის შეჯახება ისევ:** ორკესტრატორის Stop hook-ის `pytest` ყოველ სვლის ბოლოს ეშვება და 6-ჯერ დაემთხვა
+  subagent-ის ან ორკესტრატორის `pytest`-ს (`relation "users"/"categories" does not exist`, ასობით error). ეს შედეგები
+  არ ჩაითვალა. ყველა ჩათვლილი გაშვება `tasklist`-ის guard-ით, მარტო იყო. ორჯერ hook-მა subagent-ის „ძველ კოდზე“ შემოწმების
+  მომენტი დაიჭირა (ახალი ტესტები მოსალოდნელად ჩავარდა).
+
 ### Should-fix
 
 #### A-030 · should-fix · refresh-ის 429 ან 5xx პასუხი მომხმარებელს სისტემიდან აგდებს
@@ -423,7 +442,11 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   `value out of int64 range` (OFFSET). იგივე `GET /admin/orders`-ზე.
 - **გამოსწორება:** `le=10_000` ყველა `page`-ზე → 400 `VALIDATION_ERROR`. ტესტი: 10 000 გადის, 10 001 → 400.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `069f8b1` (re-review: code-reviewer). საერთო `MAX_PAGE = 10_000` (`core/pagination.py`)
+  ექვსივე route-ზე, სადაც `page` შედის (საჯარო `/products`, admin products/orders/customers/inventory/movements), და
+  `PageParams`/`page_params`-ზეც. 25 ტესტიდან 18 ძველ route-ებზე ვარდება (10 001, 2⁶³−1, 2⁶³ × 6 route; ორკესტრატორმაც
+  გაუშვა `git stash`-ით). reviewer: მომხმარებლის input-იდან offset სხვაგან არ ითვლება; `/search`-ის offset-ს მომხმარებელი
+  ვერ აკონტროლებს.
 
 #### A-039 · nit · ერთი ელფოსტით ერთდროული რეგისტრაცია 409-ის ნაცვლად 500-ს აბრუნებს
 - **ფაილი:** `backend/app/services/auth.py:79-88` (ჯერ SELECT, მერე INSERT); შეამოწმე `:698`-ის მსგავსი გზაც
@@ -463,7 +486,15 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
      `selectinload`-ით. ჯერ `user.addresses`-ის ყველა გამოყენება მოიძებნოს.
   3. ტესტები: 20 გადის, 21-ე → 409; `GET /auth/me` ზუსტად 1 SQL-ს ასრულებს (`before_cursor_execute` listener).
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `91420c3` (re-review: code-reviewer). `MAX_ADDRESSES_PER_USER = 20`; `create` ყოველთვის
+  იღებს `_lock_default_writes`-ს და lock-ის შემდეგ ითვლის, ამიტომ ერთდროული create-ები ლიმიტს ვერ გადააჭარბებს (race-ტესტი
+  19-ზე და 5-იანი burst). `User.addresses` — `lazy="raise"`, `passive_deletes=True` (FK `ON DELETE CASCADE`); სხვაგან
+  `user.addresses` მხოლოდ `admin_customers`-შია, `selectinload`-ით. A-040-ის lock-ის დონე და `populate_existing` უცვლელია;
+  A-040-ის `_moving` helper-ი მისამართებს ახლა explicit-ად ტვირთავს, რომ მისი წინაპირობა შენარჩუნდეს. `GET /auth/me`:
+  ძველ მოდელზე 2 statement, ახალზე 1 (ორკესტრატორმა გაუშვა `git stash`-ით). ლიმიტის ტესტების ძველ კოდზე ჩავარდნა
+  (5 ტესტი) დეველოპერმა აჩვენა — HEAD-ის `address.py` + მხოლოდ კონსტანტა; ორკესტრატორს ეს ნაწილი არ გაუმეორებია.
+  storefront 409-ის ტექსტს `apiErrors.<code>`-ით აჩვენებს (`Addresses.jsx`-ის toast). ნარჩენი ზედმეტი 409 (უკომიტო delete-ის
+  დროს დათვლა) A-071-მა მოხსნა.
 
 #### A-042 · nit · იმავე Idempotency-Key-ით სხვა კალათა ჩუმად ძველ შეკვეთას აბრუნებს
 - **ფაილი:** `backend/app/services/order.py:50` (`uq_orders_idempotency_key`), `:131` (`IDEMPOTENCY_KEY_CONFLICT`)
@@ -502,7 +533,10 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   (61 პროდუქტზე). სხვაობა კატალოგთან ერთად იზრდება; endpoint საჯაროა.
 - **გამოსწორება:** მაქსიმუმ 8 token (stopword-ების შემდეგ), დანარჩენი ჩუმად იკვეთება. ტესტი.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `c4d2217` (re-review: code-reviewer). `MAX_QUERY_TOKENS = 8`, ერთი `_parse_query` ყველა
+  გზისთვის (`/search`-ის ყველა ეტაპი, typo-ს ეტაპი, layout candidate, `/products?q=`-ის count/list/facets). ლიმიტამდე
+  ნორმალიზებული ტექსტი იგივეა, რაც ადრე. 14 ახალი ტესტიდან 8 ძველ კოდზე ვარდება (მხოლოდ import-ის shim-ით): 30-სიტყვიანი
+  მოთხოვნა ბაზაში 26 განსხვავებულ სიტყვას აგზავნიდა. დრო ხელახლა არ გაზომილა. ნარჩენი: A-074.
 
 #### A-046 · nit · პასუხის header-ების წვრილმანები
 - **ფაილი:** `backend/app/core/logging.py:20`, `backend/app/core/errors.py:95`, `backend/gunicorn.conf.py`,
@@ -713,7 +747,12 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   Python iteration — შეფასებით რამდენიმე წამი CPU ერთ ატვირთვაზე (მხოლოდ ავტორიზებული ადმინი).
 - **გამოსწორება:** marker-ების ლიმიტი (მაგ. 65 536) → `INVALID_IMAGE`; გაზომვა.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `cc6abee` (re-review: security-auditor — დახურულია). `_MAX_JPEG_MARKERS = 65_536`
+  (რატომ — Decision Log 2026-11-15); fill-ბაიტები ერთი regex-ით გამოიტოვება. გაზომვა (5 MiB, best of 7): `FF 01` 1073 → 35 ms,
+  `FF FF 00` scan-ში 1532 → 84 ms, მხოლოდ `FF` 263 → 2.6 ms; ლეგიტიმურ ფაილში 12–27 marker-ია. ძველ walker-ზე (მხოლოდ
+  კონსტანტით) 2 ტესტი ქცევითად ვარდება: `DID NOT RAISE` — 65 536-ზე მეტ marker-იანი ფაილი მიიღებოდა (ორკესტრატორმა გაუშვა).
+  auditor: მრიცხველს ვერცერთი ტოტი ვერ უვლის, `_SCAN_END`-ის ძებნა კვადრატული არ არის, ლეგიტიმური ფაილის შედეგი უცვლელია.
+  ნარჩენი: A-075 (WEBP, დაუდასტურებელი).
 
 ### A-039/A-040/A-034-ის re-review (2026-11-14)
 
@@ -730,7 +769,12 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   ძალაში რჩება: მრავალხაზიანი მნიშვნელობის (`notes`) მომდევნო ხაზები. ტესტი: `uvicorn.error`-ზე
   `Failing row contains (…, x@y.com, …)` → გამოსავალში `x@y.com` არ არის.
 - **owner:** backend-dev
-- **status:** open — ამ `/fix`-ის ფარგლებს გარეთაა (მითითებული იყო მხოლოდ A-039, A-040, A-034)
+- **status:** fixed (verified) — `0452669` (re-review: security-auditor — დახურულია, ახალი პრობლემა არ არის). ზუსტად
+  შემოთავაზებული regex, ჩანაცვლება `\1…)`; მნიშვნელობა ხაზის ბოლომდე იჭრება, ამიტომ ` already exists.`-იც ქრება. 6 ახალი
+  ტესტი (`Failing row contains` `uvicorn.error`/`gunicorn.error`-ზე და `%s`-ში; `)`-იანი მნიშვნელობა; `lower(email::text)`)
+  ძველ `logging.py`-ზე ვარდება (ორკესტრატორმაც გაუშვა `git stash`-ით). auditor: regex-ს catastrophic backtracking არ აქვს;
+  `orders`-ში PII-იანი სვეტები `notes`-მდეა, ამიტომ მიღებული შეზღუდვა (მრავალხაზიანი მნიშვნელობის შემდეგი ხაზები) მხოლოდ
+  `notes`-ის დარჩენილ ტექსტს და მის შემდეგ სვეტებს (`idempotency_key`, დროები) ეხება.
 
 #### A-068 · nit · `)`-იანი მნიშვნელობა `Key (…)=(…)`-ში ნაწილობრივ ჟონავს
 - **ფაილი:** `backend/app/core/logging.py:30` (`[^)]*` პირველ `)`-ზე ჩერდება)
@@ -738,7 +782,7 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   მხოლოდ `users.email`-ია, email-ის ვალიდაცია კი `)`-ს არ უშვებს, ამიტომ დღეს რეალური გაჟონვა არ არის.
 - **გამოსწორება:** A-067-ის regex.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `0452669`, A-067-თან ერთად (ტესტი `Key (name)=(Foo) Bar)` ძველ კოდზე ` Bar`-ს ტოვებდა).
 
 #### A-069 · nit · `test_server_log_secrecy.py`-ის fixture root-ზე pytest-ის ძველ `LogCaptureHandler`-ს ტოვებს
 - **ფაილი:** `backend/tests/test_server_log_secrecy.py:34-46` (`restore_logging`)
@@ -764,5 +808,54 @@ PROJECT.md-ის Accepted Risks-ში და PROGRESS.md-ის Backlog-ში
   შეთანხმებული რჩება, რადგან T1 rollback-დება.
 - **გამოსწორება:** `remove`-მაც აიღოს `_lock_default_writes`, ან `update_one`-მა `StaleDataError` → 404 `ADDRESS_NOT_FOUND`.
   ტესტი: `_contend(remove, _moving)`.
+- **owner:** backend-dev
+- **status:** fixed (verified) — `50905ba` (re-review: code-reviewer). **დადასტურდა** ძველ კოდზე: `_contend(_removing, _moving)` →
+  `[('ok','committed'), ('error','StaleDataError')]` (500). `remove` ახლა პირველ რიგში `_lock_default_writes`-ს იღებს →
+  იგივე race 404 `ADDRESS_NOT_FOUND`-ია. ამავე ცვლილებით მოიხსნა A-041-ის ნარჩენი: create, რომელიც 20-ე მისამართის უკომიტო
+  delete-ის დროს ითვლიდა, ზედმეტ 409-ს იღებდა. 3 race-ტესტიდან 2 ძველ კოდზე ვარდება (ორკესტრატორმაც გაუშვა `git stash`-ით),
+  მესამე (update პირველი) ძველზეც გადიოდა და guard-ად რჩება. reviewer: lock-ის რიგი ყველგან users → addresses, deadlock
+  არ არის. race HTTP-ის დონეზე არ შემოწმებულა (service-ის დონეზე; 404 არსებული handler-იდან მოდის).
+
+### A-067/A-038/A-007/A-041/A-071/A-045/A-060-ის re-review (2026-11-15)
+
+#### A-072 · nit · `products.stock`-ის ჯამს ზედა ზღვარი არ აქვს
+- **ფაილი:** `backend/app/services/inventory.py` (`adjust_stock`: `previous + change`), `backend/app/db/models/catalog.py:142`
+  (მხოლოდ `stock >= 0` CHECK)
+- **სცენარი (კოდით, backend-dev):** A-007-ის შემდეგ ერთი ცვლილება ±100 000-ია, მაგრამ ~21 475 ცვლილება +100 000-ით (ან
+  2³¹-თან ახლოს მყოფ stock-ზე ნებისმიერი დამატება) int4-ს გადააჭარბებს → 500. რეალურად ნაკლებად სავარაუდოა; A-007-მდეც ასე იყო.
+- **გამოსწორება:** ზედა ზღვარი `adjust_stock`-ში (მაგ. 1 000 000) კოდით (`STOCK_LIMIT_EXCEEDED`, ka/en) + DB CHECK; ზღვრის
+  მნიშვნელობა მფლობელის გადაწყვეტილებაა.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-073 · nit · სამ სხვა admin int ველს ზედა ზღვარი არ აქვს → int4 overflow → 500
+- **ფაილი:** `backend/app/schemas/admin_product.py:108` (`ProductCreate.stock`, `ge=0`), `:105`/`:150`
+  (`low_stock_threshold` create/update), `backend/app/schemas/admin_catalog.py:73`/`:91` (`Category.position` create/update)
+- **სცენარი (კოდით, code-reviewer; ორკესტრატორმა კოდში გადაამოწმა):** admin პროდუქტს `"stock": 3000000000`-ით ქმნის → 500
+  (transaction rollback-დება, მონაცემი არ ფუჭდება). საწყისი `stock` A-007-ის ±100 000-ს გვერდს უვლის (2 000 000 000 მიიღება,
+  `REASON_INITIAL`-ის movement-ში შესაბამისი `change`-ით). იგივე `low_stock_threshold`-ზე და კატეგორიის `position`-ზე.
+- **გამოსწორება:** `le=MAX_STOCK_ADJUSTMENT` `stock`-ზე, გონივრული `le=` დანარჩენზე (მაგ. 100 000 და 10 000); out-of-range
+  ტესტები, როგორც `test_stock_adjust_bounds.py`-ში.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-074 · nit · ძებნის ლიმიტი ნორმალიზებულ token-ებს ითვლის, არა აკრეფილ სიტყვებს
+- **ფაილი:** `backend/app/services/search.py` (`_parse_query`)
+- **სცენარი (კოდით, code-reviewer):** `normalize` „100W“-ს, „2მ“-ს და „USB-C“-ს ორ-ორ token-ად ყოფს, გამეორებული token-ები
+  ცალ-ცალკე ითვლება. პროდუქტის სრული 8-სიტყვიანი სახელი („Baseus Flash Series USB-C — USB-C 100W კაბელი 2მ“) 12 token-ია, და
+  „w კაბელი 2 m“ იკვეთება. შედეგი ცარიელი არ ხდება, უფრო ფართოა: იმავე ხაზის სხვა სიგრძის/სიმძლავრის ვარიანტებიც ჩანს.
+- **გამოსწორება:** token-ების dedupe ლიმიტამდე (რიგის შენარჩუნებით) და `normalize`-ის მიერ გაყოფილი რიცხვი+ერთეული ერთ
+  სიტყვად ჩაითვალოს (ან ლიმიტი აკრეფილ, whitespace-ით გაყოფილ სიტყვებზე). მფლობელმა „8 token“ დაამტკიცა — „8 სიტყვაზე“
+  გადასვლა მისი გადაწყვეტილებაა. ტესტი: `_parse_query("Baseus Flash Series USB-C — USB-C 100W კაბელი 2მ")` ყველა token-ს ინახავს.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-075 · nit (დაუდასტურებელი) · WEBP-ის stripper-ს chunk-ების რაოდენობის ზღვარი არ აქვს
+- **ფაილი:** `backend/app/services/storage.py:541-556` (`_strip_webp`)
+- **სცენარი (კოდით, security-auditor, არ გაზომილა):** ვალიდური VP8X WebP, რომლის `riff_end`-მდე ნულოვანი სიგრძის უცნობი
+  chunk-ებია (8 ბაიტი თითო) → 5 MiB-ში ≈ 655 000 Python iteration; შეფასებით ასობით ms – ~1 წმ CPU (მხოლოდ ადმინი).
+  დაუდასტურებელია, მიიღებს თუ არა libwebp ასეთ ფაილს, და ხარჯის ზომა. PNG-ის მსგავს გზას Pillow-ის `verify()` თავადაც იხდის,
+  ამიტომ ის ცალკე პრობლემად არ ჩაითვალა.
+- **გამოსწორება (თუ დადასტურდება):** chunk-ების მრიცხველი → `INVALID_IMAGE`, როგორც A-060-ში.
 - **owner:** backend-dev
 - **status:** open
