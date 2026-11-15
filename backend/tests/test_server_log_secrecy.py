@@ -149,6 +149,40 @@ class TestTheServersOwnLoggers:
         assert EMAIL not in output.getvalue()
 
 
+class TestTheFailingRowIsNotWritten:
+    """A NOT NULL or CHECK violation quotes the whole row, not `Key (...)` (A-067)."""
+
+    @pytest.mark.parametrize("name", ["uvicorn.error", "gunicorn.error"])
+    def test_a_crash_on_the_server_logger(self, name: str, output: io.StringIO) -> None:
+        _wire_like_uvicorn_worker(name, output)
+        _configure(output)
+        try:
+            raise RuntimeError(
+                'new row for relation "orders" violates check constraint "ck"\n'
+                f"DETAIL:  Failing row contains (1, {EMAIL}, 555123456, null)."
+            )
+        except RuntimeError as exc:
+            logging.getLogger(name).error(
+                "Exception in ASGI application\n", exc_info=(type(exc), exc, exc.__traceback__)
+            )
+
+        written = output.getvalue()
+        assert written, "nothing was written at all, so the test proves nothing"
+        assert EMAIL not in written
+        assert "555123456" not in written
+        assert "Failing row contains (" in written
+
+    def test_a_value_in_the_message(self, output: io.StringIO) -> None:
+        _wire_like_uvicorn_worker("uvicorn.error", output)
+        _configure(output)
+
+        logging.getLogger("uvicorn.error").error(
+            "insert failed: %s", f"DETAIL:  Failing row contains (1, {EMAIL}, x)."
+        )
+
+        assert EMAIL not in output.getvalue()
+
+
 class TestTheRestOfTheLoggingSetupStays:
     def test_the_access_log_of_uvicorn_is_still_off(self, output: io.StringIO) -> None:
         _wire_like_uvicorn_worker("uvicorn.access", output)

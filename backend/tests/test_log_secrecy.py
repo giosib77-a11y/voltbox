@@ -122,6 +122,37 @@ class TestTheScrubberItself:
         assert kept in cleaned
         assert not re.search(r"=\((?!…)[^)]", cleaned), cleaned
 
+    @pytest.mark.parametrize(
+        ("detail", "secret", "kept"),
+        [
+            # A value containing `)` must not leave its tail behind (A-068).
+            ("DETAIL:  Key (name)=(Foo) Bar) already exists.", "Bar", "Key (name)=(…)"),
+            # A column expression contains `)` itself.
+            (
+                "DETAIL:  Key (lower(email::text))=(a@b.com) already exists.",
+                "a@b.com",
+                "Key (lower(email::text))=(…)",
+            ),
+            # NOT NULL / CHECK violations quote the whole row (A-067).
+            (
+                "DETAIL:  Failing row contains (1, x@y.com, 555123456, $argon2id$abc).",
+                "x@y.com",
+                "Failing row contains (…)",
+            ),
+        ],
+    )
+    def test_it_cuts_the_value_to_the_end_of_the_line(
+        self, detail: str, secret: str, kept: str
+    ) -> None:
+        from app.core.logging import scrub
+
+        cleaned = scrub(f"violates constraint\n{detail}\nSTATEMENT: INSERT")
+
+        assert secret not in cleaned
+        assert kept in cleaned
+        assert "violates constraint" in cleaned
+        assert "STATEMENT: INSERT" in cleaned, "only the DETAIL line is cut"
+
     def test_it_leaves_an_ordinary_message_alone(self) -> None:
         from app.core.logging import scrub
 

@@ -26,8 +26,19 @@ REQUEST_ID_HEADER = "X-Request-ID"
 #: That line is part of the database's own error message, so it survives
 #: SQLAlchemy's hide_parameters and lands in the traceback the error handler
 #: logs. The column is the half worth keeping; the value is a customer's email,
-#: phone or order number.
-PG_DETAIL_VALUE = re.compile(r"(Key \([^)]*\)=\()[^)]*\)")
+#: phone or order number. A NOT NULL or CHECK violation quotes the whole row
+#: instead: `DETAIL:  Failing row contains (<every column>)`.
+#:
+#: The value is cut to the END OF THE LINE, not to the next `)`: a value may
+#: contain `)` (`Key (name)=(Foo) Bar) already exists.`), and so does the column
+#: expression (`Key (lower(email))=(a@b.com)`), and stopping at the first `)`
+#: would leave the rest of the value in the log. The price is that the words
+#: after the value (`already exists.`) go too; the constraint name in the line
+#: above still says what kind of violation it was.
+#: What still holds: only the line the DETAIL starts on is cut. A value with a
+#: newline in it (a free-text `notes` column in a failing row) continues on the
+#: following lines, and those are not scrubbed.
+PG_DETAIL_VALUE = re.compile(r"(Key \(.*?\)=\(|Failing row contains \()[^\n]*")
 
 
 def scrub(text: str) -> str:
