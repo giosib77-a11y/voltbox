@@ -21,7 +21,7 @@ import hmac
 import json
 import logging
 import re
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
 
 import httpx
 import pytest
@@ -243,6 +243,200 @@ class TestTheAccessLogsClientField:
 
         fields: dict[str, object] = getattr(lines[0], "extra_fields")  # noqa: B009
         assert fields["client"] == NO_CLIENT
+
+
+@pytest.fixture
+def every_line() -> Generator[list[str]]:
+    """Everything the root handler would emit, formatted as a collector sees it,
+    with logging configured as the lifespan does (`configure_logging`).
+
+    `configure_logging` rewires process-wide state, so what it touches is put back:
+    root's handlers and level, the server loggers, and slowapi's filters.
+    """
+    from app.core.logging import SERVER_LOGGERS, configure_logging
+
+    lines: list[str] = []
+
+    class Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            lines.append(self.format(record))
+
+    root = logging.getLogger()
+    slowapi_logger = logging.getLogger("slowapi")
+    access = logging.getLogger("uvicorn.access")
+    servers = [logging.getLogger(name) for name in SERVER_LOGGERS]
+    saved_root = (list(root.handlers), root.level)
+    saved_filters = list(slowapi_logger.filters)
+    saved_servers = [(item, list(item.handlers), item.propagate) for item in servers]
+    saved_access_disabled = access.disabled
+    try:
+        configure_logging()
+        collector = Collector(level=logging.DEBUG)
+        collector.setFormatter(JsonFormatter())
+        root.handlers[:] = [collector]
+        yield lines
+    finally:
+        root.handlers[:] = saved_root[0]
+        root.setLevel(saved_root[1])
+        slowapi_logger.filters[:] = saved_filters
+        for item, handlers, propagate in saved_servers:
+            item.handlers[:] = handlers
+            item.propagate = propagate
+        access.disabled = saved_access_disabled
+
+
+async def _refused_login_from(address: str, db: AsyncSession) -> int:
+    """POST /auth/login from `address` on the real app until the limiter refuses;
+    returns the number of attempts it took."""
+    from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
+    from app.db.session import get_db
+
+    async def override_get_db() -> AsyncGenerator[AsyncSession]:
+        yield db
+
+    application = create_app()
+    application.dependency_overrides[get_db] = override_get_db
+    transport = httpx.ASGITransport(app=application, client=(address, 5000))
+    limit = int(AUTH_RATE_LIMIT.split("/")[0])
+    limiter.enabled = True
+    limiter.reset()
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            for attempt in range(1, limit + 2):
+                response = await client.post(
+                    "/api/v1/auth/login", json={"email": "nobody@example.ge", "password": "x" * 12}
+                )
+                if response.status_code == 429:
+                    return attempt
+    finally:
+        limiter.reset()
+        limiter.enabled = False
+    raise AssertionError("the limiter never refused, so the test proves nothing")
+
+
+def _exceeded_warnings(lines: list[str]) -> list[str]:
+    """Messages of slowapi's "ratelimit ... exceeded" warnings. Not every slowapi
+    line: `limiter.reset()` logs through the same logger."""
+    entries = (json.loads(line) for line in lines)
+    return [
+        str(entry["message"])
+        for entry in entries
+        if entry["logger"] == "slowapi" and entry["level"] == "WARNING"
+    ]
+
+
+class TestTheRateLimitWarningDoesNotNameTheClient:
+    """A-036 follow-up: slowapi logs `ratelimit 5 per 1 minute (<key>) exceeded`,
+    and the key is the raw client address - the one thing the access line's
+    `client` pseudonym keeps out of the log."""
+
+    async def test_the_raw_address_is_in_no_line_of_a_refused_request(
+        self, every_line: list[str], db: AsyncSession
+    ) -> None:
+        await _refused_login_from(CLIENT_IP, db)
+
+        assert _exceeded_warnings(every_line), "no warning was logged"
+        assert [line for line in every_line if CLIENT_IP in line] == []
+
+    async def test_the_warning_carries_the_pseudonym_of_the_access_lines(
+        self, every_line: list[str], db: AsyncSession
+    ) -> None:
+        from app.core.logging import client_pseudonym
+
+        await _refused_login_from(CLIENT_IP, db)
+
+        warning = _exceeded_warnings(every_line)[0]
+        access = [json.loads(line) for line in every_line if '"logger": "voltbox.access"' in line]
+        assert access, "no access line was logged"
+        assert {entry["client"] for entry in access} == {client_pseudonym(CLIENT_IP)}
+        assert f"({client_pseudonym(CLIENT_IP)})" in warning
+
+    async def test_the_warning_still_says_which_limit_and_which_endpoint(
+        self, every_line: list[str], db: AsyncSession
+    ) -> None:
+        await _refused_login_from(CLIENT_IP, db)
+
+        message = _exceeded_warnings(every_line)[0]
+        assert message.startswith("ratelimit 5 per 1 minute (")
+        assert message.endswith("exceeded at endpoint: /api/v1/auth/login")
+
+    def test_configuring_twice_does_not_stack_a_second_filter(self) -> None:
+        from app.core.logging import PseudonymiseRateLimitKey, configure_logging
+
+        slowapi_logger = logging.getLogger("slowapi")
+        saved = list(slowapi_logger.filters)
+        root = logging.getLogger()
+        saved_root = (list(root.handlers), root.level)
+        try:
+            configure_logging()
+            configure_logging()
+            ours = [f for f in slowapi_logger.filters if isinstance(f, PseudonymiseRateLimitKey)]
+        finally:
+            root.handlers[:] = saved_root[0]
+            root.setLevel(saved_root[1])
+            slowapi_logger.filters[:] = saved
+        assert len(ours) == 1
+
+
+class TestThePseudonymiseFilterItself:
+    @staticmethod
+    def _record(msg: str, args: object) -> logging.LogRecord:
+        return logging.LogRecord("slowapi", logging.WARNING, __file__, 1, msg, args, None)  # type: ignore[arg-type]
+
+    def test_it_replaces_only_the_key(self) -> None:
+        from app.core.logging import (
+            SLOWAPI_EXCEEDED_FORMAT,
+            PseudonymiseRateLimitKey,
+            client_pseudonym,
+        )
+
+        record = self._record(SLOWAPI_EXCEEDED_FORMAT, ("5 per 1 minute", CLIENT_IP, "/x"))
+
+        assert PseudonymiseRateLimitKey().filter(record) is True
+        assert record.getMessage() == (
+            f"ratelimit 5 per 1 minute ({client_pseudonym(CLIENT_IP)}) exceeded at endpoint: /x"
+        )
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            None,
+            (),
+            ("only one",),
+            ("a", "b"),
+            ("a", "b", "c", "d"),
+            ("a", None, "c"),
+            (object(), 12345, ["list"]),
+            {"limit": "x", "key": "y"},
+        ],
+    )
+    def test_odd_arguments_never_raise_and_never_drop_the_record(self, args: object) -> None:
+        from app.core.logging import SLOWAPI_EXCEEDED_FORMAT, PseudonymiseRateLimitKey
+
+        record = self._record(SLOWAPI_EXCEEDED_FORMAT, args)
+
+        assert PseudonymiseRateLimitKey().filter(record) is True
+        assert CLIENT_IP not in str(record.args)
+
+    def test_a_key_that_cannot_be_turned_into_text_does_not_leak_or_raise(self) -> None:
+        from app.core.logging import SLOWAPI_EXCEEDED_FORMAT, PseudonymiseRateLimitKey
+
+        class Hostile:
+            def __str__(self) -> str:
+                raise RuntimeError("no text for you")
+
+        record = self._record(SLOWAPI_EXCEEDED_FORMAT, ("5 per 1 minute", Hostile(), "/x"))
+
+        assert PseudonymiseRateLimitKey().filter(record) is True
+        assert "Hostile" not in record.getMessage()
+
+    def test_other_slowapi_messages_pass_untouched(self) -> None:
+        from app.core.logging import PseudonymiseRateLimitKey
+
+        record = self._record("Rate limit storage unreachable - falling back", ())
+
+        assert PseudonymiseRateLimitKey().filter(record) is True
+        assert record.getMessage() == "Rate limit storage unreachable - falling back"
 
 
 class TestTheScrubberItself:

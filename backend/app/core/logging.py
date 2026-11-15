@@ -151,6 +151,48 @@ class JsonFormatter(logging.Formatter):
 SERVER_LOGGERS = ("uvicorn", "uvicorn.error", "gunicorn.error")
 
 
+#: The format string slowapi logs a refused request with
+#: (`Limiter.__evaluate_limits`): limit, the limiter's KEY, endpoint. The key is
+#: what `key_func` returned, i.e. the raw client address
+#: (`get_remote_address`), so the line would carry the one value the access
+#: line's `client` pseudonym exists to keep out of the log.
+SLOWAPI_EXCEEDED_FORMAT = "ratelimit %s (%s) exceeded at endpoint: %s"
+
+
+class PseudonymiseRateLimitKey(logging.Filter):
+    """Replaces the key in slowapi's "ratelimit ... exceeded" warning with the
+    access line's `client` pseudonym, so the line still says which limit and
+    endpoint and an operator can match it to the access lines of that client.
+
+    What still holds: only this one message is rewritten. The other messages
+    slowapi logs carry no key (storage unreachable/recovered, a limit that
+    failed to parse) and pass untouched. `hit_per_address` counts directly in
+    the limiter's store and never reaches this warning; its key is a hash of
+    the email already. Never raises and never drops a record: a failing filter
+    would break the logging call of whoever logged.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            args = record.args
+            if record.msg == SLOWAPI_EXCEEDED_FORMAT and isinstance(args, tuple) and len(args) == 3:
+                key = args[1]
+                record.args = (
+                    args[0],
+                    client_pseudonym(None if key is None else str(key)),
+                    args[2],
+                )
+        except Exception:  # see the docstring: a filter must not break the log call
+            record.args = None
+            record.msg = "ratelimit exceeded (key withheld)"
+        return True
+
+
+#: One instance, so calling `configure_logging` again does not stack a second
+#: filter (`Logger.addFilter` ignores an instance it already holds).
+_rate_limit_key_filter = PseudonymiseRateLimitKey()
+
+
 def configure_logging(level: str = "INFO") -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
@@ -171,6 +213,8 @@ def configure_logging(level: str = "INFO") -> None:
         server_logger.propagate = True
     # uvicorn-ის საკუთარი access-ლოგი ჩვენსას დუბლირებს
     logging.getLogger("uvicorn.access").disabled = True
+    # On the logger, not the handler: the record is rewritten once wherever it goes.
+    logging.getLogger("slowapi").addFilter(_rate_limit_key_filter)
 
 
 access_logger = logging.getLogger("voltbox.access")
