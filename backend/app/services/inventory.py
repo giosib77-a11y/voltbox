@@ -1,8 +1,8 @@
 """Stock changes - the single write path for products.stock.
 
-What it does: `adjust_stock` locks a product row, refuses a result below zero,
-writes the new value and records one inventory_movements row, all inside the
-caller's transaction.
+What it does: `adjust_stock` locks a product row, refuses a result below zero or
+an increase past MAX_STOCK, writes the new value and records one
+inventory_movements row, all inside the caller's transaction.
 Where it fits: checkout, admin adjustments and order cancellations all call it.
 Nothing else may write products.stock.
 
@@ -26,6 +26,12 @@ from app.db.models import (
     InventoryMovement,
     Product,
 )
+
+# The most units one product can hold in total. `products.stock` is an int4, so
+# without a ceiling repeated +100 000 adjustments (or one addition near 2^31)
+# overflow it into a 500. `adjust_stock` is the single write path for stock and
+# enforces this on every increase; there is deliberately no database CHECK.
+MAX_STOCK = 1_000_000
 
 
 async def adjust_stock(
@@ -62,6 +68,24 @@ async def adjust_stock(
         )
 
     new_stock = previous + change
+    # Every increase is held to the ceiling, whatever its reason - an order
+    # cancellation's restock included. What still holds: a decrease is never
+    # refused for the ceiling, so a row already above it (written before the
+    # limit existed) can still be sold down; and an order cancellation, at most
+    # 20 x 10 units, is refused only if an admin has restocked the product to
+    # within that of the ceiling while the order was open - the admin then lowers
+    # the stock and cancels again, nothing is half-applied (one transaction).
+    if change > 0 and new_stock > MAX_STOCK:
+        raise ValidationError(
+            f"Stock cannot exceed {MAX_STOCK} units",
+            code="STOCK_LIMIT_EXCEEDED",
+            details={
+                "productId": str(product_id),
+                "limit": MAX_STOCK,
+                "current": previous,
+                "room": max(MAX_STOCK - previous, 0),
+            },
+        )
     if new_stock < 0:
         raise ConflictError(
             "Not enough stock",
