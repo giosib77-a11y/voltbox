@@ -240,8 +240,14 @@ async def test_stopwords_only_query_returns_nothing(
 #  A query is read up to MAX_QUERY_TOKENS words                                #
 # --------------------------------------------------------------------------- #
 
-# Eight real words, all found in "Samsung Galaxy S24 256GB" (name, spec values).
+# Real words, all found in "Samsung Galaxy S24 256GB" (name, spec values); repeats
+# count separately, so twice the eight words is exactly MAX_QUERY_TOKENS tokens.
 EIGHT_WORDS = "samsung galaxy s24 5g 8 gb 256 gb"
+CAP_WORDS = f"{EIGHT_WORDS} {EIGHT_WORDS}"
+# Stopwords slipped between the words; they are kept in the normalized text but not counted.
+CAP_WORDS_WITH_STOPWORDS = (
+    "samsung and galaxy the s24 for 5g with 8 or gb 256 and gb samsung galaxy s24 5g 8 gb 256 gb"
+)
 
 
 async def _found(client: httpx.AsyncClient, route: str, query: str) -> list[str]:
@@ -269,53 +275,65 @@ def statements() -> Iterator[list[tuple[str, str]]]:
 
 
 def test_a_query_within_the_cap_is_read_whole() -> None:
-    assert len(EIGHT_WORDS.split()) == MAX_QUERY_TOKENS
-    tokens, normalized = _parse_query(EIGHT_WORDS)
+    assert len(CAP_WORDS.split()) == MAX_QUERY_TOKENS
+    tokens, normalized = _parse_query(CAP_WORDS)
 
-    assert tokens == EIGHT_WORDS.split()
-    assert normalized == normalize(EIGHT_WORDS)
+    assert tokens == CAP_WORDS.split()
+    assert normalized == normalize(CAP_WORDS)
 
 
-def test_a_longer_query_is_cut_after_its_eighth_word() -> None:
-    tokens, normalized = _parse_query(f"{EIGHT_WORDS} zzzz yyyy")
+def test_a_full_product_name_is_read_whole() -> None:
+    # A-074: 8 typed words, 12 tokens once "100W", "2მ" and "USB-C" are split; the old
+    # cap of 8 cut it after "usb c usb c 100 w", so "w კაბელი 2 m" never reached the DB.
+    name = "Baseus Flash Series USB-C — USB-C 100W კაბელი 2მ"
+    words = normalize(name).split()
+    tokens, normalized = _parse_query(name)
 
-    assert tokens == EIGHT_WORDS.split()
-    assert normalized == EIGHT_WORDS
+    assert len(words) == 12
+    assert tokens == words
+    assert normalized == normalize(name)
+    assert tokens[-4:] == ["w", "კაბელი", "2", "m"]
+
+
+def test_a_longer_query_is_cut_after_its_sixteenth_token() -> None:
+    tokens, normalized = _parse_query(f"{CAP_WORDS} zzzz yyyy")
+
+    assert tokens == CAP_WORDS.split()
+    assert normalized == CAP_WORDS
 
 
 def test_stopwords_do_not_count_toward_the_cap() -> None:
-    query = "samsung and galaxy the s24 for 5g with 8 or gb 256 and gb zzzz"
-    tokens, normalized = _parse_query(query)
+    tokens, normalized = _parse_query(f"{CAP_WORDS_WITH_STOPWORDS} zzzz")
 
-    assert tokens == EIGHT_WORDS.split()
+    assert tokens == CAP_WORDS.split()
     assert "zzzz" not in normalized
-    assert "and" in normalized  # kept: the query is cut at the ninth real word, not earlier
+    assert "and" in normalized  # kept: the query is cut at the 17th real word, not earlier
 
 
 @pytest.mark.parametrize("route", ["search", "products"])
-async def test_a_query_of_eight_words_still_finds_the_product(
+async def test_a_query_of_sixteen_tokens_still_finds_the_product(
     client: httpx.AsyncClient, searchable: None, route: str
 ) -> None:
-    assert await _found(client, route, EIGHT_WORDS) == ["Samsung Galaxy S24 256GB"]
+    assert await _found(client, route, CAP_WORDS) == ["Samsung Galaxy S24 256GB"]
 
 
 @pytest.mark.parametrize("route", ["search", "products"])
-async def test_words_past_the_eighth_are_ignored(
+async def test_words_past_the_sixteenth_are_ignored(
     client: httpx.AsyncClient, searchable: None, route: str
 ) -> None:
     junk = " ".join(f"junk{n}" for n in range(20))
 
-    assert await _found(client, route, f"{EIGHT_WORDS} {junk}") == await _found(
-        client, route, EIGHT_WORDS
+    assert await _found(client, route, f"{CAP_WORDS} {junk}") == await _found(
+        client, route, CAP_WORDS
     )
-    assert await _found(client, route, f"{EIGHT_WORDS} {junk}") == ["Samsung Galaxy S24 256GB"]
+    assert await _found(client, route, f"{CAP_WORDS} {junk}") == ["Samsung Galaxy S24 256GB"]
 
 
 @pytest.mark.parametrize("route", ["search", "products"])
 async def test_stopwords_between_the_words_do_not_use_up_the_cap(
     client: httpx.AsyncClient, searchable: None, route: str
 ) -> None:
-    query = "samsung and galaxy the s24 for 5g with 8 or gb 256 and gb zzzz"
+    query = f"{CAP_WORDS_WITH_STOPWORDS} zzzz"
 
     assert await _found(client, route, query) == ["Samsung Galaxy S24 256GB"]
 
@@ -331,16 +349,17 @@ async def test_a_hundred_one_letter_words_is_a_normal_request(
 
 
 @pytest.mark.parametrize("route", ["search", "products"])
-async def test_the_sql_of_a_long_query_has_at_most_eight_word_conditions(
+async def test_the_sql_of_a_long_query_has_at_most_max_query_tokens_word_conditions(
     client: httpx.AsyncClient, searchable: None, statements: list[tuple[str, str]], route: str
 ) -> None:
-    words = [f"zq{chr(97 + n)}x" for n in range(30)]  # 30 distinct words nothing matches
+    # 30 distinct letter-only words nothing matches
+    words = [f"zq{chr(97 + n // 26)}{chr(97 + n % 26)}x" for n in range(30)]
     statements.clear()
 
     await _found(client, route, " ".join(words))
 
     # Words that reach the database in each statement: the products query, its count
-    # and the facets (which repeat the condition) all carry the same eight at most.
+    # and the facets (which repeat the condition) all carry the same cap at most.
     sent = [{word for word in words if word in params} for _, params in statements]
     assert max(len(found) for found in sent) == MAX_QUERY_TOKENS
     assert not any(word in params for _, params in statements for word in words[MAX_QUERY_TOKENS:])
@@ -349,13 +368,14 @@ async def test_the_sql_of_a_long_query_has_at_most_eight_word_conditions(
 async def test_the_typo_stage_does_not_receive_the_whole_query(
     client: httpx.AsyncClient, searchable: None, statements: list[tuple[str, str]]
 ) -> None:
-    junk = [f"junk{n}" for n in range(20)]
+    junk = [f"junk{n}" for n in range(MAX_QUERY_TOKENS + 4)]
     statements.clear()
 
     await _found(client, "search", " ".join(["samsnug", *junk]))
 
     assert any("word_similarity" in sql for sql, _ in statements)
-    assert not any(junk[MAX_QUERY_TOKENS] in params for _, params in statements)
+    # "samsnug" is the first token, so junk[MAX_QUERY_TOKENS - 1] is the first one cut.
+    assert not any(junk[MAX_QUERY_TOKENS - 1] in params for _, params in statements)
 
 
 async def test_suggestion_payload_is_lightweight(

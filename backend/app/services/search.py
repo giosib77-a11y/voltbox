@@ -40,10 +40,16 @@ MIN_SUBSTRING_LEN = 3
 # გაზომვით: ბეჭდვითი შეცდომა ("samsnug") → 0.5, შემთხვევითი სიტყვა → ≤0.15
 WORD_SIMILARITY_THRESHOLD = 0.4
 
-# A query is read up to this many words (stopwords not counted); the rest are
-# dropped silently. Every word adds an AND condition per form, and the endpoint is
+# A query is read up to this many tokens (stopwords not counted); the rest are
+# dropped silently. Every token adds an AND condition per form, and the endpoint is
 # public, so the cost of one request must not grow with the length of the query.
-MAX_QUERY_TOKENS = 8
+# Why 16: tokens are counted after `normalize`, which splits "100W", "2მ" and "USB-C"
+# into two each and counts repeats separately, so a full product name of about eight
+# typed words ("Baseus Flash Series USB-C — USB-C 100W კაბელი 2მ") is 12 tokens; 8 cut
+# such a query short and returned the broader result of the line (A-074). What still
+# holds: the cap is still on normalized tokens, so a query of more than 16 of them
+# is still cut silently, and the cost of one request stays bounded (A-045).
+MAX_QUERY_TOKENS = 16
 
 # ხმაურის სიტყვები — მარტო მათგან შემდგარი მოთხოვნა ცარიელ შედეგს აბრუნებს
 STOPWORDS = frozenset({"და", "the", "for", "with", "ის", "თუ", "ან", "or", "and"})

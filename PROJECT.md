@@ -390,16 +390,27 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 - What still holds: the A-040 lock level and `populate_existing` are unchanged; lock order is always users →
   addresses. The races are tested at the service level, not over HTTP.
 
-### 2026-11-15 — Input bounds: page ≤ 10 000, a stock change within ±100 000, a search reads 8 tokens (A-038, A-007, A-045)
+### 2026-11-15 — Input bounds: page ≤ 10 000, a stock change within ±100 000, a search reads 16 tokens (A-038, A-007, A-045, A-072, A-073, A-074)
 - Decision: one `MAX_PAGE = 10_000` on every `page` input; `StockAdjustRequest.change` within
-  ±`MAX_STOCK_ADJUSTMENT` (100 000); a search query is read up to `MAX_QUERY_TOKENS = 8` (stopwords not
+  ±`MAX_STOCK_ADJUSTMENT` (100 000); a search query is read up to `MAX_QUERY_TOKENS = 16` (stopwords not
   counted, the rest dropped silently). All owner-approved values; out-of-range is 400 `VALIDATION_ERROR`.
+- Update 2026-11-15 (A-074): the search cap went from 8 to 16 tokens (owner-approved). It still counts
+  normalized tokens — `normalize` splits "100W", "2მ", "USB-C" in two and repeats count — so a full product name
+  of ~8 typed words is ~12 tokens; 8 cut such a name short. No dedupe, no change to counting.
+- Update 2026-11-15 (A-072, A-073): a product's stock total is held to `inventory.MAX_STOCK = 1_000_000` in
+  `adjust_stock` (400 `STOCK_LIMIT_EXCEEDED`, every increase, a cancellation's restock included; a decrease is
+  never refused); initial stock ≤ `MAX_STOCK_ADJUSTMENT`, `low_stock_threshold` ≤ 100 000, category `position`
+  ≤ 10 000 (400 `VALIDATION_ERROR`). All owner-approved. No database CHECK and no migration for the stock total
+  (orchestrator's call: the owner approved only 0017's `request_hash`, and `adjust_stock` is the only writer).
+  What still holds: `scripts/import_products.py` does not pre-check these bounds in `validate()`/`--dry-run`
+  (A-078); the admin forms resend `position`/`lowStockThreshold` on every save, so a live row already above a
+  bound is not saveable from the panel until that value is lowered (PROGRESS.md Blockers has the check).
 - Zero stock change: the owner approved "zero forbidden". It already was — `adjust_stock` answers 400
   `EMPTY_ADJUSTMENT`, which has ka/en text and a test — so it keeps that code instead of becoming
   `VALIDATION_ERROR` (no API or i18n change).
-- What still holds: the stock total has no ceiling (A-072); three other admin ints are unbounded (A-073); the
-  search cap counts normalized tokens, so "100W" or "USB-C" count twice (A-074 — "8 words" instead is the
-  owner's call).
+- What still holds: the search cap counts normalized tokens, so "100W" or "USB-C" count twice (A-074 raised the
+  cap rather than changing the count). (The stock-total and admin-int gaps once listed here are closed by
+  A-072/A-073 above.)
 
 ### 2026-11-15 — A Postgres DETAIL value is cut to the end of its line (A-067)
 - Decision: `PG_DETAIL_VALUE` matches `Key (…)=(` and `Failing row contains (` and drops everything after them
