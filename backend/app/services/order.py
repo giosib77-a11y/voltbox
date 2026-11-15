@@ -17,6 +17,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import UUID
@@ -39,7 +41,7 @@ from app.db.models import (
     User,
 )
 from app.services import delivery, order_status
-from app.services.contact import contact_matches
+from app.services.contact import contact_matches, normalize_email, normalize_phone
 from app.services.inventory import adjust_stock
 
 MAX_QUANTITY = MAX_LINE_QUANTITY
@@ -122,14 +124,69 @@ def owns_order(order: Order, *, user_id: UUID | None, customer: dict[str, Any]) 
     ) or contact_matches(customer.get("phone"), email=order.guest_email, phone=order.guest_phone)
 
 
-def _replay(order: Order, *, user_id: UUID | None, customer: dict[str, Any]) -> Order:
-    """Return the stored order to its owner, or refuse without describing it."""
-    if owns_order(order, user_id=user_id, customer=customer):
-        return order
-    raise ConflictError(
-        "This idempotency key belongs to a different order",
-        code="IDEMPOTENCY_KEY_CONFLICT",
-    )
+def _merge_lines(items: list[tuple[UUID, int]]) -> dict[UUID, int]:
+    """One quantity per product: a product sent on two lines is one line of the sum."""
+    quantities: dict[UUID, int] = {}
+    for product_id, qty in items:
+        quantities[product_id] = quantities.get(product_id, 0) + qty
+    return quantities
+
+
+def request_hash(quantities: dict[UUID, int], customer: dict[str, Any], payment_method: str) -> str:
+    """SHA-256 (hex) of the checkout as the shopper asked for it.
+
+    Covers what makes one checkout a different purchase from another: the
+    products and their quantities, the customer's details and the payment
+    method. It does not cover the account (`owns_order` answers who is asking),
+    the Idempotency-Key itself, or anything the server computes (prices, totals).
+
+    Deterministic: the same logical request always gives the same hash.
+      - items are the merged quantities, ordered by product id, so line order
+        and a product split over two lines make no difference;
+      - the customer is taken as the schema validated it (whitespace already
+        trimmed), except that the email and the phone are normalised the way
+        `owns_order` compares them - `Giorgi@Example.GE` and `giorgi@example.ge`
+        are one person and a retry that differs only so still replays.
+        Absent and empty email are the same (`exclude_none` drops the former,
+        the blank-email validator turns the latter into None).
+
+    What still holds: any other change to the customer - name, address, city,
+    comment - is a different request. Orders placed before migration 0017 carry
+    no hash and are compared on the key alone.
+    """
+    contact = {
+        **customer,
+        "email": normalize_email(customer.get("email")),
+        "phone": normalize_phone(customer.get("phone")),
+    }
+    canonical = {
+        "items": [[str(product_id), quantities[product_id]] for product_id in sorted(quantities)],
+        "customer": {key: value for key, value in contact.items() if value is not None},
+        "paymentMethod": payment_method,
+    }
+    encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _replay(order: Order, *, user_id: UUID | None, customer: dict[str, Any], digest: str) -> Order:
+    """Return the stored order to its owner, or refuse without describing it.
+
+    The owner check comes first: a requester who does not own the order is told
+    only that the key is taken, whatever they sent, so a different hash cannot
+    be used to probe what the stored order contained.
+    """
+    if not owns_order(order, user_id=user_id, customer=customer):
+        raise ConflictError(
+            "This idempotency key belongs to a different order",
+            code="IDEMPOTENCY_KEY_CONFLICT",
+        )
+    # NULL: placed before migration 0017, nothing to compare - replay as before.
+    if order.request_hash is not None and order.request_hash != digest:
+        raise ConflictError(
+            "This idempotency key was already used for a different request",
+            code="IDEMPOTENCY_KEY_REUSED",
+        )
+    return order
 
 
 async def _claim_key(
@@ -139,6 +196,7 @@ async def _claim_key(
     customer: dict[str, Any],
     payment_method: str,
     user: User | None,
+    digest: str,
 ) -> Order:
     """Insert the order row, taking the key before anything else can fail.
 
@@ -175,6 +233,7 @@ async def _claim_key(
         payment_method=payment_method,
         notes=customer.get("comment") or None,
         idempotency_key=idempotency_key,
+        request_hash=digest,
     )
     db.add(order)
     await db.flush()
@@ -235,6 +294,11 @@ async def place_order(
     # - from async code that is MissingGreenlet, a 500 for an order that exists.
     user_id = user.id if user is not None else None
 
+    # ერთი პროდუქტი ორჯერ: რაოდენობებს ვაჯამებთ, თორემ FOR UPDATE-ის შემდეგ
+    # ორივე ხაზი ერთსა და იმავე მარაგს დაუპირისპირდებოდა
+    quantities = _merge_lines(items)
+    digest = request_hash(quantities, customer, payment_method)
+
     if idempotency_key:
         # Deliberately not filtered by `deleted_at`: an order in the admin trash
         # still holds its key, and a retry of its checkout has to be answered
@@ -246,13 +310,7 @@ async def place_order(
             # ორმაგად გაგზავნილი checkout — იმავე შეკვეთას ვაბრუნებთ და მეორეს
             # არ ვქმნით. მფლობელობა აუცილებლად მოწმდება: გასაღები კლიენტის
             # არჩეულია და გამოცნობილით სხვისი შეკვეთა იკითხებოდა.
-            return _replay(existing, user_id=user_id, customer=customer), False
-
-    # ერთი პროდუქტი ორჯერ: რაოდენობებს ვაჯამებთ, თორემ FOR UPDATE-ის შემდეგ
-    # ორივე ხაზი ერთსა და იმავე მარაგს დაუპირისპირდებოდა
-    quantities: dict[UUID, int] = {}
-    for product_id, qty in items:
-        quantities[product_id] = quantities.get(product_id, 0) + qty
+            return _replay(existing, user_id=user_id, customer=customer, digest=digest), False
 
     for product_id, qty in quantities.items():
         if qty > MAX_QUANTITY:
@@ -276,6 +334,7 @@ async def place_order(
             customer=customer,
             payment_method=payment_method,
             user=user,
+            digest=digest,
         )
     except IntegrityError as error:
         if not _is_idempotency_clash(error):
@@ -288,7 +347,7 @@ async def place_order(
         existing = await db.scalar(select(Order).where(Order.idempotency_key == idempotency_key))
         if existing is None:  # pragma: no cover - the violation proves it exists
             raise
-        return _replay(existing, user_id=user_id, customer=customer), False
+        return _replay(existing, user_id=user_id, customer=customer, digest=digest), False
 
     products = await _lock_products(db, sorted(quantities))
 

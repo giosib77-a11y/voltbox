@@ -188,8 +188,9 @@ Deployment state, as far as the repository shows (2026-10-10):
     `public/favicon.svg` is the logo's favicon variant from `DESIGN.md`.
 
 ## Data
-PostgreSQL, Alembic migrations `backend/alembic/versions/0001`–`0016` (`0016` = Stage 2,
-`orders.deleted_at`; live is at `0015` until the owner runs the 0016 SQL).
+PostgreSQL, Alembic migrations `backend/alembic/versions/0001`–`0017` (`0016` = Stage 2,
+`orders.deleted_at`, live since 2026-11-14; `0017` = A-042, `orders.request_hash`; live is at `0016`
+until the owner runs `docs/migrations/0017_orders_request_hash.sql`, which has to precede the deploy).
 - Catalogue: `categories` (tree, `filters` config), `brands`, `products`
   (price, old price, stock, specs JSONB, `search_text`, `name_en`,
   `archived_at`), `product_images`.
@@ -350,6 +351,19 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
+
+### 2026-11-15 — A repeated Idempotency-Key is compared on the request too (A-042)
+- Decision: `orders.request_hash` (migration 0017, nullable `VARCHAR(64)`, no index) holds the SHA-256 of the
+  canonical request: merged quantities ordered by product id, the validated customer with email and phone
+  normalised the way `owns_order` compares them, and the payment method. A repeat of the key by its owner with
+  a different hash is 409 `IDEMPOTENCY_KEY_REUSED`; on both replay paths (the pre-check and the unique-index
+  clash). Owner-approved.
+- Reason: the key alone answered "qty 5" with the stored "qty 1" order under a 201. Email/phone are normalised
+  so a retry that differs only in case (`Giorgi@Example.GE`) still replays, as it did before.
+- What still holds: the owner check runs first, so a stranger still gets `IDEMPOTENCY_KEY_CONFLICT` and learns
+  nothing; any other change to name, address, city or comment counts as a different request; orders placed
+  before 0017 carry NULL and are compared on the key alone. The storefront issues a new key whenever its
+  checkout signature (items, contact, payment) changes, so a normal checkout never meets the new 409.
 
 ### 2026-11-15 — The JPEG walker refuses a file past 65 536 markers (A-060)
 - Decision: `_strip_jpeg` counts every marker it consumes and answers `INVALID_IMAGE` past

@@ -726,6 +726,19 @@ Unverified (check before acting):
   were stored byte for byte and may still carry GPS/device EXIF at their public URLs. Decide: re-process in place, or
   re-upload from the panel.
 - (2026-10-21: the 390/360 card CTA overflow, left here after Stage 3's fix rounds, was fixed on the owner's request — see Last Session.)
+- **2026-11-15, owner — run migration 0017 on live BEFORE deploying `fix/a042-a074` (AUDIT.md A-042).** The new code
+  writes and reads `orders.request_hash`; deployed without the column, every checkout fails. In the Supabase SQL Editor,
+  with the live head at `0016` (`select version_num from public.alembic_version;`), paste
+  `docs/migrations/0017_orders_request_hash.sql` — from `alembic upgrade 0016:0017 --sql`, `alembic_version` qualified
+  with `public.`, 2 statements between BEGIN and COMMIT:
+  ```sql
+  BEGIN;
+  ALTER TABLE public.orders ADD COLUMN request_hash VARCHAR(64);
+  UPDATE public.alembic_version SET version_num='0017' WHERE version_num = '0016';
+  COMMIT;
+  ```
+  The UPDATE must show `UPDATE 1` (0 → the head was not 0016; stop). After: `select version_num from public.alembic_version;`
+  → `0017`. Nullable, no default, no backfill: existing orders are untouched. No new table, so no RLS to enable.
 
 ## Run State
 - Stage: Stage 3 — Storefront redesign

@@ -57,6 +57,12 @@ class Order(UUIDPrimaryKey, Timestamps, Base):
     # ორმაგი გაგზავნისგან დაცვა: იგივე გასაღები → იგივე შეკვეთა და არა მეორე
     idempotency_key: Mapped[str | None] = mapped_column(String(128), unique=True)
 
+    # SHA-256 (hex) of the canonical request this order was placed with - see
+    # services/order.py `request_hash`. A repeat of the idempotency key with a
+    # different hash is refused instead of answered with this order. NULL on
+    # orders placed before migration 0017, which are compared on the key alone.
+    request_hash: Mapped[str | None] = mapped_column(String(64))
+
     # SHA-256 of the token a guest reads this order with (POST /orders/lookup).
     # NULL on a signed-in customer's order, which is read through the account,
     # and on guest orders placed before migration 0013.
