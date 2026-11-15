@@ -9,6 +9,10 @@ Disallow: /admin
 Disallow: /checkout
 Disallow: /account
 Disallow: /cart
+# The English storefront lives under /en, so its private pages need their own lines.
+Disallow: /en/checkout
+Disallow: /en/account
+Disallow: /en/cart
 
 # Search results are endless combinations of the same products. Letting them be
 # indexed splits a product's ranking across pages that all say the same thing.
