@@ -48,8 +48,24 @@ services:
       ALLOW_NON_PRODUCTION_SERVER: "1"
       # ორი worker-ის მთვლელები საერთო უნდა იყოს, თორემ ლიმიტი ორმაგდება
       REDIS_URL: redis://redis:6379/0
-    env_file:
-      - .env
+      # `env_file: .env` აქ განზრახ არ არის: backend/.env ჩვეულებრივ ლაივ
+      # Supabase-ზე მიუთითებს, და container-ში მისი ცვლადები ლაივ bucket-ში
+      # ატვირთვას, ნამდვილ Telegram-ს და ნამდვილ ელფოსტას ჩართავდა. ლოკალურ
+      # API-ს მხოლოდ ქვემოთ ჩამოთვლილი მნიშვნელობები აქვს; `.env` container-ში
+      # არასდროს ხვდება.
+      # ცხადი ლოკალური მნიშვნელობა, არა საიდუმლო (Settings მინიმუმ 32 სიმბოლოს ითხოვს).
+      JWT_SECRET: local-compose-only-not-a-secret-0000000000
+      # ბაზა `db` host-ზეა და requires_ssl მას არა-ლოკალურად ჩათვლის, ამიტომ
+      # ნაგულისხმევი `require` TLS-ს მოითხოვდა, რომელსაც ლოკალური Postgres არ აქვს.
+      DB_SSL_MODE: disable
+      # გარე სერვისები გამორთულია: ცარიელი მნიშვნელობა = ფუნქცია გამორთულია
+      # (სურათები მეხსიერებაში, Telegram და ელფოსტა არ იგზავნება).
+      SUPABASE_PROJECT_REF: ""
+      SUPABASE_SERVICE_ROLE_KEY: ""
+      TELEGRAM_BOT_TOKEN: ""
+      TELEGRAM_CHAT_ID: ""
+      RESEND_API_KEY: ""
+      EMAIL_FROM: ""
     ports:
       - "8000:8000"
     profiles: ["full"]   # `docker compose up` ნაგულისხმევად მხოლოდ ბაზას უშვებს
