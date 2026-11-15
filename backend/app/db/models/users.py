@@ -64,8 +64,21 @@ class User(UUIDPrimaryKey, Timestamps, Base):
     #: out of an attacker's reach.
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    #: lazy="raise": `get_current_user` loads this row on every authenticated
+    #: request, and an eager load put every address of the account (up to 20,
+    #: each with long text fields) in memory and a second SQL statement on each
+    #: one (A-041). A caller that needs them says so with `selectinload`, as
+    #: `admin_customers` does; a stray `user.addresses` fails loudly instead of
+    #: silently querying.
+    #:
+    #: passive_deletes: with "raise", an ORM `delete(user)` would try to load the
+    #: addresses to cascade to them and raise. `addresses.user_id` is
+    #: `ON DELETE CASCADE` (0001_initial_schema), so the database does it.
     addresses: Mapped[list["Address"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="raise",
+        passive_deletes=True,
     )
 
     @property

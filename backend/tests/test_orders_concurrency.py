@@ -39,6 +39,7 @@ from app.services import order as order_service
 from sqlalchemy import Row, delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from tests.factories import make_user
 
@@ -684,11 +685,13 @@ async def _defaults(owner_id: uuid.UUID) -> list[str]:
         )
 
 
-def _creating(owner_id: uuid.UUID, label: str) -> Callable[[AsyncSession], Awaitable[object]]:
-    """A new default address, for `_write_address` or `_contend`."""
+def _creating(
+    owner_id: uuid.UUID, label: str, *, default: bool = True
+) -> Callable[[AsyncSession], Awaitable[object]]:
+    """A new address (a default one unless told otherwise), for `_write_address` or `_contend`."""
 
     async def run(session: AsyncSession) -> object:
-        return await address_service.create(session, owner_id, _address(label, default=True))
+        return await address_service.create(session, owner_id, _address(label, default=default))
 
     return run
 
@@ -699,14 +702,18 @@ def _moving(
     """An existing address made the default, as the route reaches it.
 
     `get_current_user` loads the account on the request's own session, and
-    `User.addresses` is selectin-loaded, so every address of the account is in
-    the session before `update_one` starts. Loading it here does the same.
+    `User.addresses` was once selectin-loaded, so every address of the account
+    was in the session before `update_one` started. It no longer is (A-041), so
+    the addresses are loaded explicitly here: `populate_existing` in the service
+    still has to beat stale copies, and these tests are what prove it.
     """
 
     async def run(session: AsyncSession) -> object:
         # Held to the end, as the route holds `user`: the identity map is weak,
         # so a discarded account would take its addresses with it.
-        user = await session.scalar(select(User).where(User.id == owner_id))
+        user = await session.scalar(
+            select(User).options(selectinload(User.addresses)).where(User.id == owner_id)
+        )
         moved = await address_service.update_one(
             session, owner_id, address_id, _address(label, default=True)
         )
@@ -815,6 +822,45 @@ async def test_a_default_moved_while_another_move_waits_is_not_lost(
 
     assert results == [("ok", "committed"), ("ok", "committed")], results
     assert await _defaults(address_owner) == ["old"]
+
+
+async def _address_count(owner_id: uuid.UUID) -> int:
+    async with SessionLocal() as check:
+        held = await check.scalar(
+            select(func.count()).select_from(Address).where(Address.user_id == owner_id)
+        )
+    return held or 0
+
+
+@pytest.mark.parametrize("default", [False, True])
+async def test_two_creates_one_short_of_the_limit_make_exactly_the_limit(
+    address_owner: uuid.UUID, default: bool
+) -> None:
+    """Both count 19 unless the second waits for the first: that made 21."""
+    await _plain_addresses(
+        address_owner, *(f"a{n}" for n in range(address_service.MAX_ADDRESSES_PER_USER - 1))
+    )
+
+    results = await _contend(
+        _creating(address_owner, "first", default=default),
+        _creating(address_owner, "second", default=default),
+    )
+
+    assert results == [("ok", "committed"), ("conflict", "ADDRESS_LIMIT_REACHED")], results
+    assert await _address_count(address_owner) == address_service.MAX_ADDRESSES_PER_USER
+
+
+async def test_a_burst_of_creates_cannot_pass_the_limit(address_owner: uuid.UUID) -> None:
+    """Five at once with room for three: three win, two are refused, none dies."""
+    limit = address_service.MAX_ADDRESSES_PER_USER
+    await _plain_addresses(address_owner, *(f"a{n}" for n in range(limit - 3)))
+
+    results = await asyncio.gather(
+        *(_write_address(_creating(address_owner, f"b{n}", default=False)) for n in range(5))
+    )
+
+    assert Counter(results) == {("ok", "committed"): 3, ("error", "ConflictError"): 2}, results
+    assert await _address_count(address_owner) == limit
 
 
 def test_only_the_email_constraint_reads_as_an_email_clash() -> None:

@@ -473,6 +473,7 @@
     "TOO_MANY_RESET_REQUESTS": "Too many requests for this address. Try again in an hour.",
     "PASSWORD_RESET_UNAVAILABLE": "Password reset is unavailable right now. Please contact us by phone.",
     "ADDRESS_NOT_FOUND": "This address can no longer be found.",
+    "ADDRESS_LIMIT_REACHED": "You can save up to 20 addresses. Delete one to add another.",
     "CART_TOO_LARGE": "Your cart has too many products. Remove a few and try again.",
     "INTERNAL_ERROR": "An unexpected server error occurred. Please try again shortly.",
     "VALIDATION_ERROR": "Some of the details are invalid. Please check the fields.",

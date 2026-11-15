@@ -10,11 +10,17 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import NotFoundError
+from app.core.errors import ConflictError, NotFoundError
 from app.db.models import Address, User
+
+#: The owner's cap on saved addresses per account (A-041). Without one a single
+#: account could hold thousands of 500-character rows, and the list endpoint
+#: returns all of them in one response. Twenty is far more than a household
+#: needs; past it the shopper deletes one, and the 409 says so.
+MAX_ADDRESSES_PER_USER = 20
 
 
 class AddressData(Protocol):
@@ -46,13 +52,14 @@ async def list_for_user(db: AsyncSession, user_id: UUID) -> list[Address]:
 
 
 async def _get_owned(db: AsyncSession, user_id: UUID, address_id: UUID) -> Address:
-    # populate_existing: on the real route `get_current_user` has already loaded
-    # the user on this session, and `User.addresses` is lazy="selectin", so every
-    # address is in the identity map from before the lock was taken. A plain
-    # SELECT returns those objects with their old attributes, and the ORM writes
-    # only what differs from them: an address that looked like the default would
-    # never be written back as one. Re-reading it after the lock makes the row
-    # the authority.
+    # populate_existing: this runs after the lock, and anything this session
+    # loaded before it is a copy from before another transaction committed. A
+    # plain SELECT returns such an object with its old attributes, and the ORM
+    # writes only what differs from them: an address that looked like the default
+    # would never be written back as one. Re-reading it after the lock makes the
+    # row the authority. `get_current_user` no longer loads the addresses (A-041),
+    # so on the route nothing is stale today; the option keeps it that way if
+    # an address is ever loaded earlier on the session.
     address = await db.scalar(
         select(Address)
         .where(Address.id == address_id, Address.user_id == user_id)
@@ -65,14 +72,25 @@ async def _get_owned(db: AsyncSession, user_id: UUID, address_id: UUID) -> Addre
 
 
 async def _lock_default_writes(db: AsyncSession, user_id: UUID) -> None:
-    """Serialize the transactions that may move one user's default address.
+    """Serialize one user's address writes that could break an invariant.
 
-    "Clear the old default, then write the new one" is two statements, and under
-    READ COMMITTED a second transaction's clear cannot see the first one's
-    uncommitted default: both clear nothing, both write a default, and the later
-    one dies on `uq_addresses_one_default_per_user` (a 500 for the shopper).
-    Queueing on the owner's row makes the second transaction's clear run after
-    the first has committed, so it finds and clears that default.
+    Two invariants hang on this: one default per user, and at most
+    `MAX_ADDRESSES_PER_USER` addresses (`create` counts, then inserts). Both are
+    "read, then write", which two concurrent transactions would each pass.
+
+    The default: "clear the old default, then write the new one" is two
+    statements, and under READ COMMITTED a second transaction's clear cannot see
+    the first one's uncommitted default: both clear nothing, both write a
+    default, and the later one dies on `uq_addresses_one_default_per_user` (a
+    500 for the shopper). Queueing on the owner's row makes the second
+    transaction's clear run after the first has committed, so it finds and
+    clears that default.
+
+    The limit: two creates at 19 would both count 19 and leave 21. Queued, the
+    second counts after the first has committed.
+
+    A plain create (no default) queues here too, but only behind the same
+    user's other address writes - one account's creates never wait on another's.
 
     FOR NO KEY UPDATE, the level `auth.py` takes on the same row: it conflicts
     with itself (that is the queue) but not with the FOR KEY SHARE that any
@@ -98,9 +116,23 @@ async def _clear_other_defaults(db: AsyncSession, user_id: UUID, keep_id: UUID |
 
 
 async def create(db: AsyncSession, user_id: UUID, payload: AddressData) -> list[Address]:
+    # Always, not only for a new default: the limit below is "count, then insert",
+    # and two creates at 19 that both counted 19 would leave the account with 21.
+    # Queueing on the owner's row makes the second count run after the first has
+    # committed. The cost: a plain create now waits for this user's own other
+    # address writes - nobody else's.
+    await _lock_default_writes(db, user_id)
+    held = await db.scalar(
+        select(func.count()).select_from(Address).where(Address.user_id == user_id)
+    )
+    if (held or 0) >= MAX_ADDRESSES_PER_USER:
+        raise ConflictError(
+            f"An account can hold at most {MAX_ADDRESSES_PER_USER} addresses",
+            code="ADDRESS_LIMIT_REACHED",
+            details={"limit": MAX_ADDRESSES_PER_USER},
+        )
+
     if payload.is_default:
-        # Only a new default can clash on the index; a plain address never waits.
-        await _lock_default_writes(db, user_id)
         await _clear_other_defaults(db, user_id, keep_id=None)
 
     address = Address(
