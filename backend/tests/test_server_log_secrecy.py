@@ -17,11 +17,12 @@ record would propagate to the root handler and be scrubbed on the old code too.
 import io
 import json
 import logging
-import logging.config
 from collections.abc import Callable, Generator
+from pathlib import Path
 
 import pytest
 import uvicorn.config
+import uvicorn.logging
 from app.core.logging import JsonFormatter, configure_logging
 
 EMAIL = "x@y.com"
@@ -63,13 +64,38 @@ def _wire_like_uvicorn_worker(name: str, output: io.StringIO) -> None:
 
 
 def _wire_like_uvicorn_dev(output: io.StringIO) -> None:
-    """`uvicorn app.main:app`: uvicorn's dictConfig, its handlers pointed at
-    `output` instead of the real stderr/stdout."""
-    logging.config.dictConfig(uvicorn.config.LOGGING_CONFIG)
-    for name in ("uvicorn", "uvicorn.error"):
-        for handler in logging.getLogger(name).handlers:
-            assert isinstance(handler, logging.StreamHandler)
-            handler.setStream(output)
+    """`uvicorn app.main:app`: what uvicorn's LOGGING_CONFIG does to `uvicorn`
+    and `uvicorn.error`, built by hand with the handler pointed at `output`.
+
+    Not `dictConfig(LOGGING_CONFIG)`: a non-incremental dictConfig closes every
+    handler in the process (`logging.shutdown` on `_handlerList`), and pytest's
+    `--log-file` handler, a FileHandler in mode 'w', then drops records silently
+    (A-070). Values are read from LOGGING_CONFIG so they cannot drift from it.
+    `uvicorn.access` is left out: no test here relies on its dev wiring (the
+    access-log test uses the worker wiring and `configure_logging` disables it).
+    """
+    config = uvicorn.config.LOGGING_CONFIG
+    formatter_config = config["formatters"]["default"]
+    loggers = config["loggers"]
+    assert loggers["uvicorn"]["handlers"] == ["default"], "uvicorn's wiring changed"
+    assert "handlers" not in loggers["uvicorn.error"], "uvicorn's wiring changed"
+
+    handler = logging.StreamHandler(output)
+    handler.setFormatter(
+        uvicorn.logging.DefaultFormatter(
+            fmt=formatter_config["fmt"], use_colors=formatter_config["use_colors"]
+        )
+    )
+    parent = logging.getLogger("uvicorn")
+    parent.handlers = [handler]
+    parent.setLevel(loggers["uvicorn"]["level"])
+    parent.propagate = loggers["uvicorn"]["propagate"]
+
+    # No handler of its own: its records propagate to `uvicorn`.
+    child = logging.getLogger("uvicorn.error")
+    child.handlers = []
+    child.setLevel(loggers["uvicorn.error"]["level"])
+    child.propagate = True
 
 
 def _configure(output: io.StringIO) -> None:
@@ -181,6 +207,28 @@ class TestTheFailingRowIsNotWritten:
         )
 
         assert EMAIL not in output.getvalue()
+
+
+class TestTheDevWiringLeavesOtherHandlersAlone:
+    def test_a_file_handler_on_root_is_not_closed(
+        self, tmp_path: Path, output: io.StringIO
+    ) -> None:
+        """A-070: dictConfig closed every handler in the process, and a closed
+        FileHandler in mode 'w' (pytest's `--log-file`) silently drops records."""
+        log_file = tmp_path / "x.log"
+        file_handler = logging.FileHandler(log_file, mode="w")
+        root = logging.getLogger()
+        root.addHandler(file_handler)
+        try:
+            _wire_like_uvicorn_dev(output)
+            root.error("after the wiring")
+            file_handler.flush()
+
+            assert file_handler.stream is not None, "the wiring closed the handler"
+            assert "after the wiring" in log_file.read_text()
+        finally:
+            root.removeHandler(file_handler)
+            file_handler.close()
 
 
 class TestTheRestOfTheLoggingSetupStays:
