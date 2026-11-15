@@ -73,9 +73,18 @@ async def _next_order_number(db: AsyncSession) -> str:
     number already issued that day; `uq_orders_order_number` refused it, and
     since `_is_idempotency_clash` rightly lets that violation through, checkout
     answered 500. What still holds: the same happens at the 100,001st.
+
+    The date is the Tbilisi calendar day, not the database session's: the
+    database runs in UTC, so a bare `now()` stamped an order placed between
+    00:00 and 04:00 Tbilisi time with the previous day. What still holds: the
+    sequence is global and never reset, so the suffix does not restart at 00001
+    on a new day.
     """
     row = await db.execute(
-        text("SELECT to_char(now(), 'YYYYMMDD') AS day, nextval('order_number_seq') AS seq")
+        text(
+            "SELECT to_char(now() AT TIME ZONE 'Asia/Tbilisi', 'YYYYMMDD') AS day, "
+            "nextval('order_number_seq') AS seq"
+        )
     )
     day, seq = row.one()
     return f"VB-{day}-{int(seq) % 100000:05d}"
