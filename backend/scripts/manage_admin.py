@@ -18,6 +18,7 @@ import sys
 from getpass import getpass
 from pathlib import Path
 
+from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,6 +51,22 @@ def _read_password() -> str:
     return password
 
 
+_EMAIL = TypeAdapter(EmailStr)
+
+
+def _checked_email(email: str) -> str:
+    """The email as /auth/login will see it, or SystemExit if login would refuse it.
+
+    The login schema types the field `EmailStr` and ApiRequest strips whitespace
+    first; the same two steps here, so the script cannot create an account whose
+    address /auth/login answers with 400 (the `.test` domain, for one).
+    """
+    try:
+        return str(_EMAIL.validate_python(email.strip()))
+    except ValidationError:
+        raise SystemExit(f"{email} არავალიდური ელფოსტაა — /auth/login მას არ მიიღებს.") from None
+
+
 async def _find(db: AsyncSession, email: str) -> User | None:
     # Assigned first: returned directly, mypy types this call as Any; assigned,
     # as User | None. Measured - the value is the same either way.
@@ -58,6 +75,9 @@ async def _find(db: AsyncSession, email: str) -> User | None:
 
 
 async def create_admin(email: str, first_name: str, last_name: str) -> None:
+    # Before the password prompt and before the database: a bad address should
+    # not cost the operator a password first.
+    email = _checked_email(email)
     password = _read_password()
     async with SessionLocal() as db:
         if await _find(db, email) is not None:
@@ -77,6 +97,7 @@ async def create_admin(email: str, first_name: str, last_name: str) -> None:
 
 
 async def promote_user(email: str) -> None:
+    email = _checked_email(email)
     async with SessionLocal() as db:
         user = await _find(db, email)
         if user is None:
@@ -90,6 +111,10 @@ async def promote_user(email: str) -> None:
 
 
 async def demote_user(email: str) -> None:
+    # Deliberately no _checked_email: taking the role away must work on any
+    # existing row, including an admin created before that check existed with an
+    # address /auth/login refuses. An address that matches no row still exits
+    # with "not found" below.
     async with SessionLocal() as db:
         user = await _find(db, email)
         if user is None:
