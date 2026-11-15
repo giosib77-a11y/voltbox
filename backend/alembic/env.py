@@ -30,7 +30,15 @@ if config.config_file_name is not None:
     # before serving.
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
-config.set_main_option("sqlalchemy.url", settings.database_url.get_secret_value())
+# Config values go through ConfigParser interpolation, where a bare `%` (the
+# percent-encoding of a password, `%40` for `@`) is a syntax error whose message
+# quotes the whole value - password included - in the traceback. Doubling it here
+# is undone by get_main_option / get_section, so the A-061 guard below and the
+# engine still see the URL exactly as configured. Offline mode does not read this
+# option back; it uses `settings` directly.
+config.set_main_option(
+    "sqlalchemy.url", settings.database_url.get_secret_value().replace("%", "%%")
+)
 target_metadata = Base.metadata
 
 

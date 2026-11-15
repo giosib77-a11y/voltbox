@@ -14,10 +14,13 @@ fails its own test instead of the whole file at import.
 import os
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 from alembic import command
+from alembic.config import Config
+from alembic.util import CommandError
 from app.core.config import get_settings, settings
 from app.db.local_url import (
     ALLOW_REMOTE_MIGRATION,
@@ -257,6 +260,106 @@ def test_online_alembic_refuses_a_remote_host_and_says_why() -> None:
     assert ALLOW_REMOTE_MIGRATION in result.stderr
     assert "--sql" in result.stderr
     assert "hunter2-password" not in result.stdout + result.stderr
+
+
+# --- a percent-encoded password (A-065) -----------------------------------------
+# alembic stores the URL in a ConfigParser, where a bare `%` is an interpolation
+# syntax error whose message quotes the whole value. The password is made up.
+
+PERCENT_PASSWORD = "p%40ss-w0rd"
+PERCENT_LOCAL = f"postgresql+asyncpg://voltbox:{PERCENT_PASSWORD}@localhost:55432/voltbox_test"
+PERCENT_REMOTE = f"postgresql+asyncpg://u:{PERCENT_PASSWORD}@db.invalid.example/voltbox"
+
+
+class _EngineReachedError(Exception):
+    """Raised by the stand-in engine factory, so no connection is ever opened."""
+
+
+def test_offline_alembic_accepts_a_percent_encoded_password() -> None:
+    result = _alembic("upgrade", "head", "--sql", url=PERCENT_REMOTE)
+
+    assert result.returncode == 0, result.stderr
+    assert "CREATE TABLE" in result.stdout
+    assert PERCENT_PASSWORD not in result.stdout + result.stderr
+    assert "interpolation" not in result.stderr
+
+
+def test_online_alembic_refusal_with_a_percent_password_does_not_print_it() -> None:
+    result = _alembic("upgrade", "head", url=PERCENT_REMOTE)
+
+    assert result.returncode != 0
+    assert ALLOW_REMOTE_MIGRATION in result.stderr
+    assert "interpolation" not in result.stderr
+    assert PERCENT_PASSWORD not in result.stdout + result.stderr
+    assert "p%40ss" not in result.stdout + result.stderr
+
+
+def _run_env_online(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> tuple[list[str], list[dict[str, str]]]:
+    """Run alembic/env.py online in this process with `url`, up to the engine.
+
+    Returns the URLs the guard was asked about and the config sections the engine
+    factory received. The factory raises, so nothing connects.
+    """
+    import sqlalchemy.ext.asyncio as sa_asyncio
+    from app.db import local_url
+
+    guarded: list[str] = []
+    sections: list[dict[str, str]] = []
+    real_refusal = local_url.migration_refusal
+
+    def spy_refusal(candidate: str, environ: Mapping[str, str]) -> str | None:
+        guarded.append(candidate)
+        return real_refusal(candidate, environ)
+
+    def stand_in_engine(section: dict[str, str], **_: object) -> object:
+        sections.append(dict(section))
+        raise _EngineReachedError
+
+    monkeypatch.delenv(ALLOW_REMOTE_MIGRATION, raising=False)
+    monkeypatch.setattr(settings, "database_url", SecretStr(url))
+    monkeypatch.setattr(local_url, "migration_refusal", spy_refusal)
+    monkeypatch.setattr(sa_asyncio, "async_engine_from_config", stand_in_engine)
+
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    with pytest.raises(_EngineReachedError):
+        command.upgrade(config, "head")
+    return guarded, sections
+
+
+def test_the_guard_and_the_engine_see_the_percent_password_unescaped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guarded, sections = _run_env_online(monkeypatch, PERCENT_LOCAL)
+
+    assert guarded == [PERCENT_LOCAL]
+    assert [section["sqlalchemy.url"] for section in sections] == [PERCENT_LOCAL]
+    assert "%%" not in guarded[0]
+
+
+def test_the_guard_refuses_a_remote_host_that_has_a_percent_password(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sqlalchemy.ext.asyncio as sa_asyncio
+
+    # env.py refuses before it builds the engine, so `_run_env_online`, which
+    # expects the engine factory to be reached, does not apply: drive it directly.
+    def never(*_: object, **__: object) -> object:
+        raise AssertionError("the engine was built for a refused target")
+
+    monkeypatch.delenv(ALLOW_REMOTE_MIGRATION, raising=False)
+    monkeypatch.setattr(settings, "database_url", SecretStr(PERCENT_REMOTE))
+    monkeypatch.setattr(sa_asyncio, "async_engine_from_config", never)
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+
+    with pytest.raises(CommandError) as excinfo:
+        command.upgrade(config, "head")
+
+    assert ALLOW_REMOTE_MIGRATION in str(excinfo.value)
+    assert PERCENT_PASSWORD not in str(excinfo.value)
 
 
 def test_offline_alembic_is_unchanged_for_a_remote_host() -> None:
