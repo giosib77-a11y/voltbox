@@ -1,12 +1,15 @@
 """Phase 0 — ჩონჩხის ტესტები: health, შეცდომის კონვერტი, request-id."""
 
 import inspect
-from collections.abc import AsyncGenerator
+import logging
+import re
+from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
 
 import httpx
 import pytest
 from app.core.config import Settings
+from app.core.logging import request_id_from
 from app.db.session import engine, get_db
 from app.main import app, create_app
 from httpx import ASGITransport
@@ -21,6 +24,17 @@ async def test_health_reports_ok_and_database_up(client: httpx.AsyncClient) -> N
     assert body["status"] == "ok"
     assert body["database"] == "up"
     assert body["version"]
+
+
+async def test_health_does_not_name_the_environment(client: httpx.AsyncClient) -> None:
+    """A-046: an unauthenticated endpoint has no business saying production or staging.
+
+    What it still says is what an uptime monitor reads: status, version, database.
+    """
+    response = await client.get("/api/v1/health")
+
+    assert response.status_code == 200
+    assert set(response.json()) == {"status", "version", "database"}
 
 
 @pytest.fixture
@@ -55,6 +69,7 @@ async def test_health_is_503_when_the_database_is_down(
     body = response.json()
     assert body["status"] == "degraded"
     assert body["database"] == "down"
+    assert set(body) == {"status", "version", "database"}  # no environment (A-046)
 
 
 async def test_liveness_stays_200_when_the_database_is_down(
@@ -84,6 +99,104 @@ async def test_incoming_request_id_is_preserved(client: httpx.AsyncClient) -> No
     response = await client.get("/api/v1/health", headers={"X-Request-ID": "trace-me-123"})
 
     assert response.headers["X-Request-ID"] == "trace-me-123"
+
+
+@pytest.fixture
+def access_lines() -> Generator[list[logging.LogRecord]]:
+    """The records of the access logger, which is where the request id is written."""
+    records: list[logging.LogRecord] = []
+
+    class Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            if record.name == "voltbox.access":
+                records.append(record)
+
+    handler = Collector(level=logging.INFO)
+    root = logging.getLogger()
+    previous = root.level
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+    try:
+        yield records
+    finally:
+        root.removeHandler(handler)
+        root.setLevel(previous)
+
+
+def _logged_request_ids(records: list[logging.LogRecord]) -> list[object]:
+    return [getattr(r, "extra_fields", {}).get("request_id") for r in records]
+
+
+GENERATED_ID = re.compile(r"[0-9a-f]{16}")
+
+#: Just inside and just outside the accepted shape, and the kinds of value a
+#: caller controls that a log line should not carry (A-046).
+OK_IDS = [
+    "abcdefgh",  # 8, the shortest
+    "Ab-" * 21 + "z",  # 64, the longest
+    "123e4567-e89b-12d3-a456-426614174000",  # a UUID
+    "0123456789abcdef",  # what this API generates itself
+]
+BAD_IDS = [
+    "abcdefg",  # 7, one short
+    "a" * 65,  # 65, one long
+    "x" * 300 + "<script>",  # the auditor's 308 characters
+    "abc<script>def",
+    "has space 12345678",
+    "under_score_12345",
+    "dots.are.not.ok.1",
+    "line-one-12345678%0a",
+]
+
+
+@pytest.mark.parametrize("sent", OK_IDS)
+async def test_a_well_formed_request_id_is_kept(
+    client: httpx.AsyncClient, access_lines: list[logging.LogRecord], sent: str
+) -> None:
+    response = await client.get("/api/v1/health", headers={"X-Request-ID": sent})
+
+    assert response.headers["X-Request-ID"] == sent
+    assert _logged_request_ids(access_lines) == [sent]
+
+
+@pytest.mark.parametrize("sent", BAD_IDS)
+async def test_a_malformed_request_id_is_replaced_in_the_header_and_the_log(
+    client: httpx.AsyncClient, access_lines: list[logging.LogRecord], sent: str
+) -> None:
+    """The value came from outside and is echoed and logged, so a bad one is not."""
+    response = await client.get("/api/v1/health", headers={"X-Request-ID": sent})
+
+    returned = response.headers["X-Request-ID"]
+    assert returned != sent
+    assert GENERATED_ID.fullmatch(returned)
+    assert _logged_request_ids(access_lines) == [returned]
+    assert sent not in repr([getattr(r, "extra_fields", {}) for r in access_lines])
+
+
+@pytest.mark.parametrize("header", [None, ""])
+async def test_a_missing_or_empty_request_id_gets_a_generated_one(
+    client: httpx.AsyncClient, header: str | None
+) -> None:
+    headers = {} if header is None else {"X-Request-ID": header}
+
+    response = await client.get("/api/v1/health", headers=headers)
+
+    assert GENERATED_ID.fullmatch(response.headers["X-Request-ID"])
+
+
+@pytest.mark.parametrize("sent", ["abcdefgh\n", "abcdefgh\r\n", "\nabcdefgh", "abcdefgh "])
+def test_a_trailing_newline_does_not_pass_the_pattern(sent: str) -> None:
+    """`$` matches before a final newline; the pattern is a full match instead."""
+    assert request_id_from(sent) != sent
+    assert GENERATED_ID.fullmatch(request_id_from(sent))
+
+
+async def test_an_error_response_carries_the_replacement_too(client: httpx.AsyncClient) -> None:
+    """The 404 goes through errors.py's `_finish`, which copies request.state."""
+    response = await client.get("/api/v1/nope", headers={"X-Request-ID": "x" * 300})
+
+    assert response.status_code == 404
+    assert GENERATED_ID.fullmatch(response.headers["X-Request-ID"])
 
 
 async def test_unknown_route_uses_error_envelope(client: httpx.AsyncClient) -> None:

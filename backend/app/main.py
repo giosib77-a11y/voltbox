@@ -1,7 +1,9 @@
 """FastAPI-ს app factory — middleware, შეცდომების დამმუშავებლები, მარშრუტები."""
 
+import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from math import ceil
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,6 +61,49 @@ def _body_limit_for(scope: Scope) -> BodyLimit:
     return BodyLimit(settings.max_request_body_bytes)
 
 
+def _retry_after_seconds(request: Request, exc: RateLimitExceeded) -> int:
+    """Whole seconds until the limit that refused this request lets it through.
+
+    Read the way slowapi's own `_inject_headers` does: the failed limit and its
+    key are in `request.state.view_rate_limit`, and the limiter's store says
+    when that window resets. slowapi does not do this for us because its
+    `headers_enabled` is off, and turning it on would also add the three
+    X-RateLimit-* headers to every response, which nobody asked for.
+
+    If the store cannot answer (Redis went away between the hit and this
+    lookup), fall back to the length of the limit's whole window. That is the
+    longest the caller can have to wait, so it may be too long but never too
+    short; what still holds is that the header is always present and >= 1.
+    """
+    # slowapi always attaches the limit it refused on; the 60 is only there to
+    # keep the type honest (`limit = None` on the class) and is the length of
+    # the shortest window this API configures.
+    window = max(1, int(exc.limit.limit.get_expiry())) if exc.limit is not None else 60
+    try:
+        item, key_parts = request.state.view_rate_limit
+        reset_at = float(request.app.state.limiter.limiter.get_window_stats(item, *key_parts)[0])
+        return max(1, min(window, ceil(reset_at - time.time())))
+    except Exception:
+        return window
+
+
+def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    """429 in the API's error envelope, with Retry-After.
+
+    A plain `def` on purpose. SlowAPIMiddleware checks the default limit from a
+    synchronous helper and, when the registered handler is a coroutine function,
+    silently swaps it for slowapi's own (`{"error": "Rate limit exceeded: ..."}`,
+    no error code). A sync handler is the one that is used on both paths: the
+    default limit in the middleware and a route's own `@limiter.limit`, where
+    Starlette runs it in a worker thread.
+    """
+    return JSONResponse(
+        status_code=429,
+        content=error_body("RATE_LIMITED", "Too many requests. Please try again later."),
+        headers={"Retry-After": str(_retry_after_seconds(request, exc))},
+    )
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
@@ -74,12 +119,7 @@ def create_app() -> FastAPI:
 
     app.state.limiter = limiter
 
-    @app.exception_handler(RateLimitExceeded)
-    async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
-        return JSONResponse(
-            status_code=429,
-            content=error_body("RATE_LIMITED", "Too many requests. Please try again later."),
-        )
+    app.exception_handler(RateLimitExceeded)(rate_limit_handler)
 
     # middleware-ის რიგი მნიშვნელოვანია: request_id ყველაზე გარეთ უნდა იყოს,
     # რომ CORS-ისა და შეცდომების პასუხებსაც მოხვდეს
@@ -107,7 +147,9 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-Request-ID", "Idempotency-Key"],
-        expose_headers=["X-Request-ID"],
+        # Retry-After too: a browser script cannot read it from a cross-origin
+        # response otherwise, and the 429 is the response that carries it.
+        expose_headers=["X-Request-ID", "Retry-After"],
     )
     # Per entry: Starlette reads a `*` anywhere in the list as "accept any Host",
     # so `voltbox.ge,*` would install the check and check nothing. `*` alone is

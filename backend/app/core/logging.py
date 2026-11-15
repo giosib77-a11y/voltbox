@@ -25,6 +25,24 @@ from app.core.config import settings
 
 REQUEST_ID_HEADER = "X-Request-ID"
 
+#: What an incoming X-Request-ID may look like to be kept. The value is echoed in
+#: a response header and written into every log line of the request, so it is
+#: input from outside going into the log: a 300-character value, markup, or a
+#: control character has no business there. Anything else is replaced with a
+#: generated id (16 hex chars), and the request goes on as normal.
+#: What still holds: a caller's own trace id (a UUID, a hex id, a `trace-123`
+#: style id) fits and is carried through, so tracing from the browser to the log
+#: keeps working. Matched with `fullmatch`: a trailing newline would pass `$`.
+REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9-]{8,64}")
+
+
+def request_id_from(header_value: str | None) -> str:
+    """The incoming id if it is a well-formed one, else a fresh one."""
+    if header_value is not None and REQUEST_ID_PATTERN.fullmatch(header_value):
+        return header_value
+    return uuid.uuid4().hex[:16]
+
+
 #: What the access line's `client` field says when the request has no client
 #: address at all (an ASGI server that did not report one). Not an empty string
 #: and not a hash of one: a fixed marker is visibly "unknown", and cannot be
@@ -164,7 +182,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        request_id = request.headers.get(REQUEST_ID_HEADER) or uuid.uuid4().hex[:16]
+        request_id = request_id_from(request.headers.get(REQUEST_ID_HEADER))
         request.state.request_id = request_id
 
         started = time.perf_counter()

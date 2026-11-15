@@ -17,7 +17,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import __version__
-from app.core.config import settings
 from app.db.session import get_db
 from app.schemas.base import ApiModel
 
@@ -34,7 +33,6 @@ class LivenessResponse(ApiModel):
 class HealthResponse(ApiModel):
     status: Literal["ok", "degraded"]
     version: str
-    environment: str
     database: Literal["up", "down"]
 
 
@@ -67,6 +65,5 @@ async def health(
     return HealthResponse(
         status="ok" if database == "up" else "degraded",
         version=__version__,
-        environment=settings.app_env,
         database=database,
     )

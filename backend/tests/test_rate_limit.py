@@ -19,18 +19,26 @@ Needs the Redis from docker-compose (`docker compose up -d redis`). The
 cross-worker assertion is not provable without it, which is the point.
 """
 
+import ast
+import importlib
 import importlib.util
 import os
+import re
 import sys
-from collections.abc import AsyncIterator
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
+from typing import Any
 
 import httpx
 import pytest
 import redis
+from app import main
 from app.core import rate_limit
+from app.core.config import settings
 from app.core.rate_limit import MEMORY_STORAGE, build_limiter, hit_per_address, storage_uri_for
+from app.core.rate_limit import limiter as app_limiter
 from fastapi import FastAPI, Request
 from httpx import ASGITransport
 from limits.storage import MemoryStorage
@@ -765,3 +773,225 @@ def test_a_local_run_is_not_asked_for_a_site(monkeypatch: pytest.MonkeyPatch) ->
     conf = load_gunicorn_conf()
 
     conf.on_starting(None)
+
+
+# ── Retry-After on a 429 (A-046) ─────────────────────────────────────────────
+#
+# These go through the application's own app and limiter, which the test
+# environment leaves off, so each test switches it on and clears the counters
+# either side, as the limit tests in test_auth.py do.
+
+LOGIN = "/api/v1/auth/login"
+LOGIN_WINDOW_SECONDS = 60
+
+
+@pytest.fixture
+def app_limiter_on() -> Iterator[None]:
+    app_limiter.enabled = True
+    app_limiter.reset()
+    try:
+        yield
+    finally:
+        app_limiter.reset()
+        app_limiter.enabled = False
+
+
+async def _until_refused(send: Callable[[], Awaitable[httpx.Response]]) -> httpx.Response:
+    """Send until the first 429 and return it, failing if it never comes."""
+    for _ in range(200):
+        response = await send()
+        if response.status_code == 429:
+            return response
+    raise AssertionError("no request was refused")
+
+
+async def _refused_login(client: httpx.AsyncClient) -> httpx.Response:
+    body = {"email": "nobody@example.ge", "password": "does-not-matter-1"}
+    return await _until_refused(lambda: client.post(LOGIN, json=body))
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_a_route_limit_429_says_when_to_retry(client: httpx.AsyncClient) -> None:
+    """A limit on the route itself (@limiter.limit): the seconds are the real
+    time left in the window, a whole number of at least one."""
+    refused = await _refused_login(client)
+
+    retry_after = refused.headers["Retry-After"]
+    assert re.fullmatch(r"[1-9][0-9]*", retry_after), retry_after
+    assert 1 <= int(retry_after) <= LOGIN_WINDOW_SECONDS
+    assert refused.json()["error"]["code"] == "RATE_LIMITED"
+
+
+async def test_a_middleware_checked_default_limit_429_has_the_envelope_and_retry_after() -> None:
+    """The limit on a route with no decorator is checked by SlowAPIMiddleware,
+    which swaps an `async def` handler for slowapi's own: no error code, no
+    Retry-After. Built on a bare app because the application's own routes are not
+    found by that middleware under this FastAPI (see the report on A-046)."""
+    app = FastAPI()
+    app.state.limiter = build_limiter(enabled=True, storage_uri=MEMORY_STORAGE)
+    app.exception_handler(RateLimitExceeded)(main.rate_limit_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
+    @app.get("/plain")
+    async def plain() -> PlainTextResponse:
+        return PlainTextResponse("ok")
+
+    async with client_from(app, "203.0.113.9") as client:
+        refused = await _until_refused(lambda: client.get("/plain"))
+
+    assert 1 <= int(refused.headers["Retry-After"]) <= LOGIN_WINDOW_SECONDS
+    assert refused.json() == {
+        "error": {
+            "code": "RATE_LIMITED",
+            "message": "Too many requests. Please try again later.",
+            "details": None,
+        }
+    }
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_the_429_keeps_its_request_id_and_security_headers(
+    client: httpx.AsyncClient,
+) -> None:
+    body = {"email": "nobody@example.ge", "password": "does-not-matter-1"}
+    traced = {"X-Request-ID": "trace-429-abc"}
+
+    refused = await _until_refused(lambda: client.post(LOGIN, json=body, headers=traced))
+
+    assert refused.headers["X-Request-ID"] == "trace-429-abc"
+    assert refused.headers["X-Content-Type-Options"] == "nosniff"
+    assert "Retry-After" in refused.headers
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_retry_after_follows_the_window_not_its_length(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Thirty seconds into the minute the answer is about thirty, not sixty."""
+    refused = await _refused_login(client)
+    full = int(refused.headers["Retry-After"])
+    assert full > 40, "a window that has only just opened has most of its minute left"
+
+    later = time.time() + 30
+    monkeypatch.setattr(main, "time", SimpleNamespace(time=lambda: later))
+    body = {"email": "nobody@example.ge", "password": "does-not-matter-1"}
+    again = await client.post(LOGIN, json=body)
+
+    assert again.status_code == 429
+    assert 25 <= int(again.headers["Retry-After"]) <= 31
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_when_the_store_cannot_answer_it_falls_back_to_the_window_length(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Never absent and never zero: the whole window is the longest anyone waits."""
+
+    def unreachable(*args: object) -> None:
+        raise ConnectionError("the store went away")
+
+    monkeypatch.setattr(app_limiter.limiter, "get_window_stats", unreachable)
+
+    refused = await _refused_login(client)
+
+    assert refused.headers["Retry-After"] == str(LOGIN_WINDOW_SECONDS)
+
+
+async def test_the_browser_may_read_retry_after(client: httpx.AsyncClient) -> None:
+    """Cross-origin, a script sees only the headers the CORS layer exposes."""
+    origin = settings.cors_origin_list[0]
+
+    response = await client.get("/api/v1/health/live", headers={"Origin": origin})
+
+    exposed = response.headers["Access-Control-Expose-Headers"].split(", ")
+    assert "Retry-After" in exposed
+    assert "X-Request-ID" in exposed
+
+
+# ── no `Server: uvicorn` in production (A-046) ───────────────────────────────
+#
+# The test client talks to the ASGI app directly, so the header - added by
+# uvicorn's protocol layer - never appears there. What can be proved is that the
+# worker gunicorn is told to run turns it off, and that uvicorn honours the key.
+
+WORKER_MODULE = "app.core.uvicorn_worker"
+WORKER_CLASS = "NoServerHeaderWorker"
+
+
+def _worker_config_kwargs() -> dict[str, object]:
+    """CONFIG_KWARGS of the worker class, read from its source.
+
+    Not imported: the module imports uvicorn.workers, which imports gunicorn,
+    and gunicorn is not installed on Windows (requirements.txt marks it
+    `sys_platform != 'win32'`). Evaluated with ast so this runs everywhere.
+    """
+    source = (Path(__file__).resolve().parents[1] / "app/core/uvicorn_worker.py").read_text(
+        encoding="utf-8"
+    )
+    cls = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.ClassDef) and node.name == WORKER_CLASS
+    )
+    assign = next(
+        node
+        for node in cls.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "CONFIG_KWARGS" for t in node.targets)
+    )
+    assert isinstance(assign.value, ast.Dict)
+    return {
+        ast.literal_eval(key): ast.literal_eval(value)
+        for key, value in zip(assign.value.keys, assign.value.values, strict=True)
+        if key is not None and isinstance(value, ast.Constant)
+    }
+
+
+def test_gunicorn_runs_the_worker_that_drops_the_server_header() -> None:
+    conf = load_gunicorn_conf()
+
+    assert conf.worker_class == f"{WORKER_MODULE}.{WORKER_CLASS}"
+    assert _worker_config_kwargs()["server_header"] is False
+
+
+def test_the_worker_module_ships_in_the_image() -> None:
+    """The Dockerfile copies `app` whole, so a module under it is in the image.
+    Guards the moving of the file out from under `worker_class`."""
+    backend = Path(__file__).resolve().parents[1]
+    assert (backend / "app" / "core" / "uvicorn_worker.py").is_file()
+    assert "COPY app ./app" in (backend / "Dockerfile").read_text(encoding="utf-8")
+
+
+def test_uvicorn_leaves_the_server_header_out_when_asked() -> None:
+    """The key the worker passes is one uvicorn's Config reads - and without it
+    the header is there, so this is not passing on an empty check."""
+    import uvicorn
+
+    server_header = _worker_config_kwargs()["server_header"]
+    assert isinstance(server_header, bool)
+
+    async def asgi_app(scope: Any, receive: Any, send: Any) -> None:
+        raise NotImplementedError
+
+    # Headers are assembled in load(), which also wraps the app: a bare callable
+    # is enough and nothing is imported or started.
+    default = uvicorn.Config(asgi_app)
+    quiet = uvicorn.Config(asgi_app, server_header=server_header)
+    default.load()
+    quiet.load()
+
+    assert (b"server", b"uvicorn") in default.encoded_headers
+    assert (b"server", b"uvicorn") not in quiet.encoded_headers
+
+
+def test_the_real_worker_class_keeps_uvicorns_own_settings() -> None:
+    """Only on a platform that has gunicorn (the Linux image and CI)."""
+    pytest.importorskip("gunicorn", reason="gunicorn is not installed on Windows")
+    from uvicorn.workers import UvicornWorker
+
+    # gunicorn ships no type stubs; the module is looked up by name.
+    load_class = importlib.import_module("gunicorn.util").load_class
+    worker = load_class(load_gunicorn_conf().worker_class)
+
+    assert issubclass(worker, UvicornWorker)
+    assert worker.CONFIG_KWARGS == {**UvicornWorker.CONFIG_KWARGS, "server_header": False}

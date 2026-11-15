@@ -23,7 +23,9 @@ import os
 from urllib.parse import SplitResult, urlsplit
 
 wsgi_app = "app.main:app"
-worker_class = "uvicorn.workers.UvicornWorker"
+# UvicornWorker with `Server: uvicorn` switched off; see app/core/uvicorn_worker.py.
+# Local runs with plain `uvicorn app.main:app` can pass `--no-server-header`.
+worker_class = "app.core.uvicorn_worker.NoServerHeaderWorker"
 workers = int(os.environ.get("WEB_CONCURRENCY", "2"))
 bind = os.environ.get("BIND", "0.0.0.0:8000")
 
