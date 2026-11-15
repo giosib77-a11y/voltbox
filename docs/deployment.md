@@ -621,10 +621,36 @@ alembic upgrade <ძველი>:<ახალი> --sql > migration.sql
 ```
 
 ონლაინ რეჟიმში `alembic` (`upgrade`, `downgrade`, `stamp`, `check`) უარს ამბობს
-არალოკალურ ჰოსტზე, თუ `VOLTBOX_ALLOW_REMOTE_MIGRATION=1` არ არის დაყენებული;
-`--sql` ამას არ ეხება.
+არალოკალურ ჰოსტზე (`localhost`, `127.0.0.1`, `::1`; URL-ის query-ში `host`/`hostaddr`
+ჰოსტს არალოკალურად აქცევს), თუ `VOLTBOX_ALLOW_REMOTE_MIGRATION=1` არ არის
+დაყენებული; `--sql` ამას არ ეხება (`backend/alembic/env.py`,
+`backend/app/db/local_url.py`).
 
-ამჟამად ბაზა `0011`-ზეა და `alembic check` სუფთაა.
+### `alembic check` production-ზე (მხოლოდ წასაკითხი)
+
+ის ბაზას არ ცვლის, მაგრამ ონლაინ რეჟიმია, ამიტომ override სჭირდება. გაუშვით
+**ერთ ბრძანებად, ცვლადი იმავე ხაზზე პრეფიქსად** (Git Bash / Linux):
+
+```bash
+cd backend
+VOLTBOX_ALLOW_REMOTE_MIGRATION=1 DATABASE_URL='<production URL>' alembic check
+```
+
+⚠️ **`export VOLTBOX_ALLOW_REMOTE_MIGRATION=1` არასდროს.** დარჩენილი ცვლადი ამ
+shell-ის შემდეგ `alembic upgrade`/`downgrade`/`stamp`-საც ხსნის production-ზე —
+იმ დაცვას აუქმებს, რისთვისაც ის დაემატა. PowerShell-ს ბრძანებაზე პრეფიქსი არ
+აქვს; გამოიყენეთ Git Bash, ან ახალი ფანჯარა, რომელსაც `check`-ის შემდეგ
+მაშინვე დახურავთ. `upgrade`/`downgrade`/`stamp` production-ზე ამ გზით არ
+გაუშვათ — მიგრაცია ბაზაში მხოლოდ ზემოთა `--sql` გზით, SQL Editor-იდან მიდის.
+
+ნომრები, რომ ეს სექცია არ დაძველდეს, აქ არ ინახება; წაიკითხეთ:
+
+- production-ის რევიზია — SQL Editor-ში: `select version_num from public.alembic_version;`
+- კოდის უკანასკნელი რევიზია — `alembic heads` (`backend/`-იდან; ბაზას არ უკავშირდება)
+
+ორი ნომერი ერთი უნდა იყოს, და მხოლოდ მაშინ არის `alembic check`-ის „სუფთა"
+პასუხი სანდო. წერის დროისთვის: production `0016`, კოდი `0017` — `0017`
+მფლობელის გასაშვებია (`PROGRESS.md`, Blockers).
 
 ---
 

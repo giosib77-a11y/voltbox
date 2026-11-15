@@ -70,7 +70,7 @@ token families          → როტაცია ოჯახს ინარ�
 - [x] Category მონაცემები სწორად ინახება — self-FK SET NULL, unique slug
 - [x] User მონაცემები სწორად ინახება — `citext` email, unique
 - [x] Order მონაცემები სწორად ინახება — 3 CHECK, unique order_number + idempotency_key
-- [ ] Cart მონაცემები სწორად ინახება — `carts` ცხრილი არსებობს (მიგრაცია `0009`) და ლოკალურ Postgres-ზე დამტკიცებულია (pytest, e2e ბრაუზერით, §8). **Supabase-ზე `0009`-ის გაშვება აქ არ გადამოწმებულა** — ✅ მხოლოდ მაშინ, როცა `alembic check` production-ზე სუფთაა
+- [ ] Cart მონაცემები სწორად ინახება — `carts` ცხრილი არსებობს (მიგრაცია `0009`) და ლოკალურ Postgres-ზე დამტკიცებულია (pytest, e2e ბრაუზერით, §8). **Supabase-ზე `0009`-ის გაშვება აქ არ გადამოწმებულა** — ✅ მხოლოდ მაშინ, როცა `alembic check` production-ზე სუფთაა (გაშვების წესი — ერთ ბრძანებად, `VOLTBOX_ALLOW_REMOTE_MIGRATION=1` პრეფიქსით და `export`-ის გარეშე: `docs/deployment.md` §5)
 - [x] Stock მონაცემები სწორად ცვლილდება — `inventory_movements` ledger, 3 CHECK
 - [x] concurrent order / stock შემცირება ტესტირებულია — 8 ტესტი რეალურ Postgres-ზე
 - [x] transaction boundaries შემოწმებულია — თითო მოთხოვნა ერთი სესია, შეცდომაზე rollback
@@ -1333,7 +1333,7 @@ ruff / mypy / eslint — სუფთა
 ## 20. Logging / Monitoring — ✅ დახურულია (2026-09-13)
 
 - [x] სტრუქტურირებული JSON-ლოგი — Grafana/Loki-ს პარსებადი
-- [x] თითო მოთხოვნა ერთი ხაზი: method, path, status, ხანგრძლივობა, `request_id`
+- [x] თითო მოთხოვნა ერთი ხაზი: method, path, status, ხანგრძლივობა, `request_id` და `client` (კლიენტის IP-ის 12-სიმბოლოიანი HMAC-ფსევდონიმი; თავად IP არ იწერება — A-036, `docs/deployment.md` §10; ეს ველი 2026-09-13-ის დახურვის შემდეგ დაემატა)
 - [x] `request_id` პასუხის header-შიც — მყიდველი მას გეტყვით
 - [x] 500-ის traceback ლოგში — §13
 - [x] ჩავარდნილი მოთხოვნა access-ლოგშიც — §13
