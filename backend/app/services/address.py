@@ -72,11 +72,13 @@ async def _get_owned(db: AsyncSession, user_id: UUID, address_id: UUID) -> Addre
 
 
 async def _lock_default_writes(db: AsyncSession, user_id: UUID) -> None:
-    """Serialize one user's address writes that could break an invariant.
+    """Serialize one user's address writes - create, update and delete alike.
 
     Two invariants hang on this: one default per user, and at most
     `MAX_ADDRESSES_PER_USER` addresses (`create` counts, then inserts). Both are
-    "read, then write", which two concurrent transactions would each pass.
+    "read, then write", which two concurrent transactions would each pass. A
+    third thing is the same shape: `update_one` reads an address, then writes it,
+    and a delete that commits in between leaves it writing a row that is gone.
 
     The default: "clear the old default, then write the new one" is two
     statements, and under READ COMMITTED a second transaction's clear cannot see
@@ -95,9 +97,10 @@ async def _lock_default_writes(db: AsyncSession, user_id: UUID) -> None:
     FOR NO KEY UPDATE, the level `auth.py` takes on the same row: it conflicts
     with itself (that is the queue) but not with the FOR KEY SHARE that any
     insert referencing the user takes (orders, tokens, addresses), so nothing
-    else waits on this. No deadlock: a transaction that holds this lock goes on
-    to touch only `addresses` rows, and nothing that locks an address row first
-    ever asks for the user's row afterwards.
+    else waits on this. No deadlock: every address write takes this lock before
+    it touches any `addresses` row (`create`, `update_one` and `remove` all call
+    it first), so a transaction holding an address row already holds the user's
+    row, and nothing locks an address row and asks for the user's row afterwards.
     """
     await db.execute(select(User.id).where(User.id == user_id).with_for_update(key_share=True))
 
@@ -177,6 +180,13 @@ async def update_one(
 
 
 async def remove(db: AsyncSession, user_id: UUID, address_id: UUID) -> list[Address]:
+    # Behind the same queue as the other writes, for two reasons (A-071). An
+    # update that read the address while this delete was uncommitted would wait on
+    # the row, then match nothing once the delete committed (`StaleDataError`, a
+    # 500): queued, it reads after the commit and answers 404. And a create
+    # counting while the delete of the 20th address is uncommitted would count 20
+    # and refuse; queued, it counts after.
+    await _lock_default_writes(db, user_id)
     await _get_owned(db, user_id, address_id)
     await db.execute(delete(Address).where(Address.id == address_id))
     return await list_for_user(db, user_id)

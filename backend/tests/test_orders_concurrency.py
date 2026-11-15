@@ -863,6 +863,72 @@ async def test_a_burst_of_creates_cannot_pass_the_limit(address_owner: uuid.UUID
     assert await _address_count(address_owner) == limit
 
 
+def _removing(
+    owner_id: uuid.UUID, address_id: uuid.UUID
+) -> Callable[[AsyncSession], Awaitable[object]]:
+    """An existing address deleted."""
+
+    async def run(session: AsyncSession) -> object:
+        return await address_service.remove(session, owner_id, address_id)
+
+    return run
+
+
+async def test_an_update_queued_behind_a_delete_of_the_address_is_a_404_not_a_500(
+    address_owner: uuid.UUID,
+) -> None:
+    """A-071: the update reads the address while the delete is uncommitted.
+
+    The delete's row is still visible to the update's read, so the update
+    passes `_get_owned`, and its UPDATE then waits on the row the delete holds.
+    When the delete commits that UPDATE matches nothing and the ORM raises
+    `StaleDataError`: a 500 for a request that only lost a race. It must read
+    the address after the delete, find it gone and answer 404.
+    """
+    ids = await _plain_addresses(address_owner, "doomed")
+
+    results = await _contend(
+        _removing(address_owner, ids["doomed"]), _moving(address_owner, ids["doomed"], "doomed")
+    )
+
+    assert results == [("ok", "committed"), ("error", "NotFoundError")], results
+    assert await _address_count(address_owner) == 0
+
+
+async def test_a_delete_queued_behind_an_update_of_the_address_succeeds(
+    address_owner: uuid.UUID,
+) -> None:
+    """The other order: the delete waits for the update and then removes the new row."""
+    ids = await _plain_addresses(address_owner, "doomed")
+
+    results = await _contend(
+        _moving(address_owner, ids["doomed"], "doomed"), _removing(address_owner, ids["doomed"])
+    )
+
+    assert results == [("ok", "committed"), ("ok", "committed")], results
+    assert await _address_count(address_owner) == 0
+
+
+async def test_a_create_behind_the_delete_of_the_last_free_slot_is_not_refused(
+    address_owner: uuid.UUID,
+) -> None:
+    """The delete of the 20th address is uncommitted: the create must count after it.
+
+    Counted before, it sees twenty and answers 409 for an account that has
+    nineteen a moment later.
+    """
+    ids = await _plain_addresses(
+        address_owner, *(f"a{n}" for n in range(address_service.MAX_ADDRESSES_PER_USER))
+    )
+
+    results = await _contend(
+        _removing(address_owner, ids["a0"]), _creating(address_owner, "new", default=False)
+    )
+
+    assert results == [("ok", "committed"), ("ok", "committed")], results
+    assert await _address_count(address_owner) == address_service.MAX_ADDRESSES_PER_USER
+
+
 def test_only_the_email_constraint_reads_as_an_email_clash() -> None:
     """Any other integrity fault has to keep propagating as the 500 it is."""
 
