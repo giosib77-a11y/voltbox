@@ -173,7 +173,7 @@ group-ში `sync: false` გაჩნდება, ან თუ ფაილ�
 | `WEB_CONCURRENCY` | 2 | ↓ იხ. კავშირებისა და მეხსიერების ბიუჯეტი — ორივეს ამრავლებს |
 | `MAX_IMAGE_DECODE_BYTES` | `104857600` (100 MiB) | ერთ სურათის ატვირთვის მეხსიერების ჭერი. ↓ იხ. მეხსიერების ბიუჯეტი |
 | `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | 5 / 5 | **სერვერი არ აიწევს**, თუ `worker × (pool+overflow)` ბიუჯეტს გადააჭარბებს |
-| `DB_SSL_MODE` / `DB_SSL_ROOT_CERT` | გაშვებამდე: `verify-full` / `/etc/secrets/supabase-ca.crt`. `backend/render.yaml`-ში არ წერია, ამიტომ დაუყენებლად მუშაობს `require` | `require` ბაზასთან ტრაფიკს შიფრავს, მაგრამ სერვერს **არ ამოწმებს** — MITM-ისგან არ იცავს; დეპლოიზე გაშვებისას ლოგში WARNING ჩნდება. `verify-full` + ცუდი CA ან hostname — **სერვერი არ აიწევს**. ↓ იხ. ბაზასთან TLS |
+| `DB_SSL_MODE` / `DB_SSL_ROOT_CERT` | გაშვებამდე: `verify-full` / `/etc/secrets/supabase-ca.crt`. `backend/render.yaml`-ში არ წერია, ამიტომ დაუყენებლად მუშაობს `require` | `require` ბაზასთან ტრაფიკს შიფრავს, მაგრამ სერვერს **არ ამოწმებს** — MITM-ისგან არ იცავს; დეპლოიზე გაშვებისას ლოგში WARNING ჩნდება. `verify-full`-ზე: წაუკითხავი ან არა-PEM CA ფაილი — **სერვერი არ აიწევს**; ვალიდური PEM, რომელიც Supabase-ის სერტიფიკატს ან hostname-ს არ ემთხვევა — სერვისი აიწევს (health check `/health/live` ბაზას არ ეხება), მაგრამ ბაზის ყოველი მოთხოვნა ჩავარდება და `/api/v1/health` აჩვენებს `"database": "down"` — სანამ ცვლადები არ დაბრუნდება. ↓ იხ. ბაზასთან TLS |
 
 ### ⚠️ TRUSTED_HOSTS — API-ს host-ი, არა storefront-ის
 
@@ -244,9 +244,13 @@ Supabase-ის საკუთარ სერვისებს უჭირ�
 გზაზე ჩადგომილი მხარე თავს Supabase-ად გაასაღებს და ვერ შევამჩნევთ.
 Supabase-ის სერტიფიკატს საკუთარი CA აწერს ხელს და ის საჯარო trust store-ში არ
 არის, ამიტომ `verify-full`-ს CA-ს ფაილი სჭირდება. დეპლოიზე (`APP_ENV` =
-`production`/`staging`) `require`-ზე გაშვებისას ლოგში ერთხელ იწერება WARNING
-(`voltbox.db`): „encrypted but the server is not authenticated“. სერვისი ამით
-არ ჩერდება — გაშვებამდე ის უნდა გაქრეს.
+`production`/`staging`) `require`-ზე გაშვებისას ლოგში იწერება WARNING
+(logger `voltbox.db`): „encrypted but the server is not authenticated“. ის იწერება
+`app/db/session.py`-ის import-ისას, ანუ ყოველ worker-პროცესზე ცალკე (2 worker — 2
+ხაზი), და აპის JSON-ლოგირების გამართვამდე (`configure_logging` lifespan-შია,
+`app/main.py`) — ამიტომ ხაზი შეიძლება JSON-ის გარეშე, უბრალო ტექსტად გამოჩნდეს.
+შემოწმება ამიტომ ასეა: ლოგში ჩანს ხაზი, რომელიც შეიცავს `not authenticated`-ს, /
+აღარ ჩანს. სერვისი ამით არ ჩერდება — გაშვებამდე ის უნდა გაქრეს.
 
 გადართვა (მფლობელის ხელით, Render-ის პანელში; `render.yaml` არ იცვლება):
 
@@ -266,11 +270,14 @@ Supabase-ის სერტიფიკატს საკუთარი CA �
 4. **შემოწმება deploy-ის შემდეგ:**
    - სერვისი აიწია (Events → Deploy live);
    - `curl https://<api-host>/api/v1/health` პასუხში `"database": "up"`;
-   - ლოგში „not authenticated“ WARNING აღარ არის.
+   - ახალი deploy-ის ლოგში `not authenticated`-ის შემცველი ხაზი აღარ არის.
 
-**თუ ეს არ გამოვა** (სერვისი არ აიწევს და ლოგში `DB_SSL_ROOT_CERT … cannot be
-used as a CA bundle`, ან certificate/hostname-ის შეცდომაა; ან `health` აბრუნებს
-`"database": "down"`): ორივე ცვლადი წაშალეთ (`DB_SSL_MODE`, `DB_SSL_ROOT_CERT`) —
+**თუ ეს არ გამოვა** — ორი სახის ჩავარდნაა: (ა) CA ფაილი წაუკითხავია ან PEM არ არის —
+სერვისი არ აიწევს და ლოგში `DB_SSL_ROOT_CERT … cannot be used as a CA bundle`;
+(ბ) PEM ვალიდურია, მაგრამ Supabase-ის სერტიფიკატს ან `DATABASE_URL`-ის hostname-ს არ
+ემთხვევა — სერვისი **აიწევს** (health check `/api/v1/health/live` ბაზას არ ეხება),
+ბაზის ყოველი მოთხოვნა ჩავარდება პირველივე კავშირზე და `/api/v1/health` აბრუნებს
+`"database": "down"`. ორივე შემთხვევაში: ორივე ცვლადი წაშალეთ (`DB_SSL_MODE`, `DB_SSL_ROOT_CERT`) —
 სისტემა ისევ `require`-ზე დადგება და ძველებურად იმუშავებს — და შედეგი
 დააფიქსირეთ. ყველაზე სავარაუდო მიზეზი: `DATABASE_URL`-ის hostname-ს სერტიფიკატი
 არ ფარავს. პირდაპირი `db.<ref>.supabase.co` და pooler-ი (`*.pooler.supabase.com`)
@@ -616,15 +623,26 @@ rule-ი `frontend/render.yaml`-შია:
 
 ```bash
 cd backend
-alembic upgrade <ძველი>:<ახალი> --sql > migration.sql
+VOLTBOX_NO_DOTENV=1 JWT_SECRET='<ნებისმიერი 32+ სიმბოლო>' DATABASE_URL='<ბაზის URL>' \
+  alembic upgrade <ძველი>:<ახალი> --sql > migration.sql
 # ხელით დაამატეთ public. ყველა ცხრილის სახელს, მერე SQL Editor-ში
 ```
 
-ონლაინ რეჟიმში `alembic` (`upgrade`, `downgrade`, `stamp`, `check`) უარს ამბობს
-არალოკალურ ჰოსტზე (`localhost`, `127.0.0.1`, `::1`; URL-ის query-ში `host`/`hostaddr`
-ჰოსტს არალოკალურად აქცევს), თუ `VOLTBOX_ALLOW_REMOTE_MIGRATION=1` არ არის
-დაყენებული; `--sql` ამას არ ეხება (`backend/alembic/env.py`,
+ონლაინ რეჟიმში `alembic` (ყველა ბრძანება, რომელიც ბაზას უკავშირდება: `upgrade`,
+`downgrade`, `stamp`, `check`, `current`) უარს ამბობს არალოკალურ ჰოსტზე, თუ
+`VOLTBOX_ALLOW_REMOTE_MIGRATION=1` არ არის დაყენებული. ლოკალურად მხოლოდ
+`localhost`, `127.0.0.1` და `::1` ითვლება; URL ჰოსტის გარეშე, ან `host`/`hostaddr`-ით
+URL-ის query-ში, არალოკალურია. `--sql` ამას არ ეხება (`backend/alembic/env.py`,
 `backend/app/db/local_url.py`).
+
+`backend/.env` ამ repo-ში აღარ არის, ამიტომ `alembic`-ის ნებისმიერ გაშვებას
+(`--sql`-საც) გარემო თვითონ უნდა მიაწოდოთ: `Settings` ორ ცვლადს მოითხოვს —
+`DATABASE_URL` და `JWT_SECRET` (მინიმუმ 32 სიმბოლო; migration-ს მისი მნიშვნელობა
+არ სჭირდება, ნებისმიერი გრძელი ტექსტი გამოდგება) — და `.env`-ს მუშა საქაღალდიდან
+კითხულობს, თუ `VOLTBOX_NO_DOTENV=1` არ არის (`backend/app/core/config.py`).
+ამიტომ ორივე ბრძანებაში (ზემოთ და `check`-ისაში) `VOLTBOX_NO_DOTENV=1`,
+`JWT_SECRET` და `DATABASE_URL` ერთ ბრძანებაზეა პრეფიქსად. `--sql` ბაზას არ
+უკავშირდება, ამიტომ `DATABASE_URL` მისთვის მხოლოდ SQL-ის დიალექტს განსაზღვრავს.
 
 ### `alembic check` production-ზე (მხოლოდ წასაკითხი)
 
@@ -633,7 +651,7 @@ alembic upgrade <ძველი>:<ახალი> --sql > migration.sql
 
 ```bash
 cd backend
-VOLTBOX_ALLOW_REMOTE_MIGRATION=1 DATABASE_URL='<production URL>' alembic check
+VOLTBOX_ALLOW_REMOTE_MIGRATION=1 VOLTBOX_NO_DOTENV=1 JWT_SECRET='<ნებისმიერი 32+ სიმბოლო>' DATABASE_URL='<production URL>' alembic check
 ```
 
 ⚠️ **`export VOLTBOX_ALLOW_REMOTE_MIGRATION=1` არასდროს.** დარჩენილი ცვლადი ამ
@@ -648,9 +666,12 @@ shell-ის შემდეგ `alembic upgrade`/`downgrade`/`stamp`-საც 
 - production-ის რევიზია — SQL Editor-ში: `select version_num from public.alembic_version;`
 - კოდის უკანასკნელი რევიზია — `alembic heads` (`backend/`-იდან; ბაზას არ უკავშირდება)
 
-ორი ნომერი ერთი უნდა იყოს, და მხოლოდ მაშინ არის `alembic check`-ის „სუფთა"
-პასუხი სანდო. წერის დროისთვის: production `0016`, კოდი `0017` — `0017`
-მფლობელის გასაშვებია (`PROGRESS.md`, Blockers).
+თუ production კოდზე უკან არის, `alembic check` არაფერს შეადარებს და ჩერდება
+შეტყობინებით `CommandError: Target database is not up to date.`
+(`alembic/autogenerate/api.py`: ბაზის რევიზია უნდა იყოს კოდის head). ეს ჩავარდნა
+არ არის სქემის განსხვავება — ჯერ გაუშვით გადაუსვლელი მიგრაცია `--sql` გზით
+(რომელი — `PROGRESS.md`-ის Blockers-ში; 2026-11-15-ზე ეს `0017`-ია), მერე გაიმეორეთ `check`. „სუფთა" პასუხი
+სანდოა მხოლოდ მას შემდეგ, რაც ორი ნომერი ერთი გახდება.
 
 ---
 
@@ -671,12 +692,18 @@ VOLTBOX_ADMIN_PASSWORD='...' python scripts/manage_admin.py create-admin \
 
 ## 7. HTTPS
 
-ჰოსტის საქმეა (Render-ს ავტომატური სერტიფიკატი აქვს). აპლიკაცია HSTS-ს
-თვითონ აგზავნის, როცა `APP_ENV` = `production` ან `staging`:
+ჰოსტის საქმეა (Render-ს ავტომატური სერტიფიკატი აქვს). API HSTS-ს
+თვითონ აგზავნის, როცა `APP_ENV` = `production` ან `staging`
+(`backend/app/core/headers.py`):
 
 ```
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 ```
+
+storefront-იც აგზავნის HSTS-ს (`frontend/render.yaml`), მაგრამ ჯერ მხოლოდ
+`Strict-Transport-Security: max-age=300` — `includeSubDomains`-ისა და `preload`-ის
+გარეშე, სანამ საიტი onrender.com-ზეა; `voltbox.ge`-ზე გასვლისას იქ მნიშვნელობა
+`31536000`-მდე უნდა გაიზარდოს (`frontend/render.yaml`-ის კომენტარი).
 
 `preload` განზრახ არაა — ის დომენის მთელი ხის გადაწყვეტილებაა და პრაქტიკულად
 შეუქცევადი.
@@ -730,7 +757,9 @@ Render-ისთვის ჯანმრთელია და ტრაფი�
 curl -s -o /dev/null -w '%{http_code}\n' https://voltbox.ge/product/<slug>
 
 # storefront-ის header-ები — ღრმა ბმულზე, rewrite-ით გაცემულ პასუხზე
-curl -sI https://voltbox.ge/product/<slug> | grep -iE 'content-security|x-frame|x-content-type|referrer-policy'
+curl -sI https://voltbox.ge/product/<slug> | grep -iE 'content-security|x-frame|x-content-type|referrer-policy|strict-transport'
+# strict-transport-security: max-age=300 — ასე უნდა იყოს, სანამ საიტი onrender.com-ზეა (§7);
+# voltbox.ge-ზე გასვლის შემდეგ მნიშვნელობა 31536000-მდე იზრდება
 
 # sitemap საკუთარ დომენზე — XML, არა index.html
 curl -sI https://voltbox.ge/sitemap.xml | grep -i content-type
@@ -772,7 +801,12 @@ curl -s https://api.voltbox.ge/api/v1/health/live
 Render-ის Logs-ში იპოვეთ ორი `voltbox.access` ხაზი `"path": "/api/v1/health/live"`-ით
 (Render-ის საკუთარ health check-ს თავისი `client` აქვს — გამოტოვეთ).
 
-- **ორი `client` განსხვავებულია** — IP სწორად გადადის.
+- **ორი `client` განსხვავებულია** — IP სწორად გადადის, თუ დამატებით: ერთი და იმავე
+  ქსელიდან რამდენიმე მოთხოვნა **ერთსა და იმავე** მნიშვნელობას იძლევა, და არც ერთი ამ
+  ორი მნიშვნელობიდან არ ჩანს (თითქმის) ყველა სხვა მომხმარებლის ხაზზე. არასწორი
+  `FORWARDED_ALLOW_IPS`-ის დროს `client` Render-ის შიდა proxy-ის მისამართის
+  ფსევდონიმია, და სხვადასხვა proxy-ინსტანსმა ორ მოთხოვნაზე სხვადასხვა მნიშვნელობა
+  შეიძლება მოგცეთ — ამიტომ „ორი განსხვავებული" ცალკე არ კმარა.
 - **ორივე ერთნაირია** (ან ყველა მომხმარებელს ერთი და იგივე აქვს) —
   `FORWARDED_ALLOW_IPS` არასწორია და ყველა კლიენტი ერთ ლიმიტს იზიარებს.
   შეამოწმეთ API სერვისზე `FORWARDED_ALLOW_IPS` env ცვლადი: ის უნდა იყოს
