@@ -1137,6 +1137,64 @@ class TestWhatAPhotoKnowsDoesNotReachThePublicBucket:
 
         assert refused.value.code == "INVALID_IMAGE"
 
+    def test_a_jpeg_of_standalone_markers_is_refused_by_count_not_walked_to_the_end(self) -> None:
+        """JPEG `verify()` checks nothing after SOS, so 5 MiB of `FF 01` is a valid
+        upload to everything but the walk: 2.5 M iterations (measured 1.0 s) without
+        a cap on the markers."""
+        limit = storage_module._MAX_JPEG_MARKERS
+        clean = encode(patterned((64, 48)), "JPEG")
+        walk = storage_module._STRIP_METADATA["JPEG"]
+
+        too_many = clean[:2] + b"\xff\x01" * limit + clean[2:]
+        outside_scan = b"\xff\xd8" + b"\xff\x01" * (settings.max_image_bytes // 2)
+        stuffed_in_scan = clean[:-2] + b"\xff\xff\x00" * limit + clean[-2:]
+        for hostile in (too_many, outside_scan, stuffed_in_scan):
+            with pytest.raises(ValidationError) as refused:
+                walk(hostile)
+            assert refused.value.code == "INVALID_IMAGE"
+
+        # A file just under the cap is a file like any other; the markers are kept.
+        room = limit - len(jpeg_markers(clean)) - 1
+        assert walk(clean[:2] + b"\xff\x01" * room + clean[2:]) == (
+            clean[:2] + b"\xff\x01" * room + clean[2:]
+        )
+
+    def test_the_marker_cap_counts_every_marker_and_not_one_too_many(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The EOI is a marker too: a file with exactly `n` of them passes at `n`
+        and is refused at `n - 1`, so a legitimate file has nothing to fear from
+        an off-by-one."""
+        clean = encode(patterned((64, 48)), "JPEG")
+        count = len(jpeg_markers(clean)) + 1  # header segments up to SOS, then EOI
+        walk = storage_module._STRIP_METADATA["JPEG"]
+
+        monkeypatch.setattr(storage_module, "_MAX_JPEG_MARKERS", count)
+        assert walk(clean) == clean
+
+        monkeypatch.setattr(storage_module, "_MAX_JPEG_MARKERS", count - 1)
+        with pytest.raises(ValidationError) as refused:
+            walk(clean)
+        assert refused.value.code == "INVALID_IMAGE"
+
+    def test_restart_markers_in_a_scan_do_not_count_against_the_cap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A photo with a restart marker per block has thousands of RSTn; they are
+        entropy data to the walk, not segments."""
+        restarts = encode(patterned((400, 300)), "JPEG", restart_marker_blocks=1)
+        # RSTn cycles through D0..D7, so all eight codes are counted.
+        assert sum(restarts.count(bytes((0xFF, code))) for code in range(0xD0, 0xD8)) > 100
+        monkeypatch.setattr(storage_module, "_MAX_JPEG_MARKERS", len(jpeg_markers(restarts)) + 1)
+
+        assert storage_module._STRIP_METADATA["JPEG"](restarts) == restarts
+
+    def test_a_long_run_of_fill_bytes_before_a_marker_is_skipped(self) -> None:
+        clean = encode(patterned((64, 48)), "JPEG")
+        padded = clean[:2] + b"\xff" * 100_000 + clean[2:]
+
+        assert storage_module._STRIP_METADATA["JPEG"](padded) == clean
+
     def test_a_small_jpeg_with_no_eoi_is_refused_not_decoded(self) -> None:
         """At or below the edge a decode would be unbudgeted, so there is no
         fallback to one."""

@@ -379,6 +379,22 @@ def _unreadable() -> ValidationError:
 #: first thing in entropy-coded data that can end it.
 _SCAN_END = re.compile(rb"\xff(?!\x00|[\xd0-\xd7])")
 
+#: A run of 0xFF fill bytes in front of a marker's code.
+_FILL = re.compile(rb"\xff+")
+
+#: The most markers one walk consumes before the file is refused. Inside a scan the
+#: stuffed bytes and restart markers are copied in bulk by `_SCAN_END`, so the loop
+#: turns only for real markers, and a legitimate JPEG has a few dozen: measured, a
+#: 4000x3000 progressive file with EXIF and ICC has 27, a baseline one 12, one
+#: with a restart marker after every block 13. But JPEG `verify()` checks nothing
+#: after SOS, so a 5 MiB file of `FF 01` (a standalone marker, two bytes) or
+#: `FF FF 00` (three) would otherwise cost 2.5 M iterations - measured 1.1 s and
+#: 1.5 s of CPU per upload. At this cap the walk is bounded whatever the file size:
+#: measured 35 ms for 5 MiB of `FF 01` and 84 ms for 5 MiB of `FF FF 00` (each
+#: iteration there also searches for the end of the scan), with 65 536 markers
+#: costing 27 ms - three orders of magnitude above what any real file needs.
+_MAX_JPEG_MARKERS = 65_536
+
 
 def _strip_jpeg(data: bytes) -> bytes:
     """A JPEG without EXIF, XMP, IPTC, comments or anything after the image.
@@ -403,6 +419,7 @@ def _strip_jpeg(data: bytes) -> bytes:
     pos = 2
     in_scan = False
     seen_scan = False
+    markers = 0
     while pos < size:
         if in_scan:
             # Entropy-coded bytes up to the next marker, copied in one piece
@@ -418,13 +435,21 @@ def _strip_jpeg(data: bytes) -> bytes:
             pos = data.find(b"\xff", pos)
             if pos < 0:
                 raise _unreadable()
-        # Any number of 0xFF fill bytes may precede a marker's code.
-        while pos < size and data[pos] == 0xFF:
-            pos += 1
+        # Any number of 0xFF fill bytes may precede a marker's code (skipped in C,
+        # not a byte at a time: a file of nothing but 0xFF is 5 M iterations).
+        pos += 1  # data[pos] is the 0xFF that starts the marker
+        if pos < size and data[pos] == 0xFF:  # the rare case: more fill bytes
+            fill = _FILL.match(data, pos)
+            if fill is None:  # cannot happen, data[pos] is 0xFF
+                raise _unreadable()
+            pos = fill.end()
         if pos >= size:
             raise _unreadable()
         marker = data[pos]
         pos += 1
+        markers += 1
+        if markers > _MAX_JPEG_MARKERS:
+            raise _unreadable()
         if in_scan and (marker == 0x00 or 0xD0 <= marker <= 0xD7):
             out += bytes((0xFF, marker))  # a stuffed 0xFF, or a restart marker
             continue
