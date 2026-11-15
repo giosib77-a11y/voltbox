@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.core.config import settings
 from app.core.deps import AdminUser, Db
+from app.core.pagination import MAX_PAGE
 from app.schemas.admin_product import (
     ProductAdminOut,
     ProductCreate,
@@ -36,7 +37,7 @@ def _client_ip(request: Request) -> str | None:
 @router.get("", summary="List products", response_model=ProductPage)
 async def list_products(
     db: Db,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
     limit: Annotated[int, Query(ge=1, le=settings.max_page_size)] = settings.default_page_size,
     sort: str = admin_product.DEFAULT_SORT,
     q: str | None = None,

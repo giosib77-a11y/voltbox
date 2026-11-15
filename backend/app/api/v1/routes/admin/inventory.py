@@ -18,6 +18,7 @@ from sqlalchemy import ColumnElement, func, or_, select
 from app.core.config import settings
 from app.core.deps import AdminUser, Db
 from app.core.errors import NotFoundError
+from app.core.pagination import MAX_PAGE
 from app.db.models import Product
 from app.schemas.admin_orders import InventoryPage, InventoryRow, MovementPage
 from app.schemas.admin_product import StockAdjustRequest
@@ -44,7 +45,7 @@ def _row(product: Product) -> InventoryRow:
 @router.get("", summary="Stock overview", response_model=InventoryPage)
 async def list_inventory(
     db: Db,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
     limit: Annotated[int, Query(ge=1, le=settings.max_page_size)] = settings.default_page_size,
     q: str | None = None,
     only: Annotated[str | None, Query(description="low | out")] = None,
@@ -121,7 +122,7 @@ async def adjust(
 async def movements(
     db: Db,
     product_id: UUID,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
     limit: Annotated[int, Query(ge=1, le=settings.max_page_size)] = settings.default_page_size,
 ) -> MovementPage:
     rows, total = await inventory.movement_history(

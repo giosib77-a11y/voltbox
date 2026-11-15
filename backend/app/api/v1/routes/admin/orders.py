@@ -21,6 +21,7 @@ from fastapi import APIRouter, Query, Request, Response
 
 from app.core.config import settings
 from app.core.deps import AdminUser, Db
+from app.core.pagination import MAX_PAGE
 from app.schemas.admin_orders import (
     OrderDetailOut,
     OrderPage,
@@ -47,7 +48,7 @@ async def _detail(db: Db, order_id: UUID) -> OrderDetailOut:
 @router.get("", summary="List orders", response_model=OrderPage)
 async def list_orders(
     db: Db,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
     limit: Annotated[int, Query(ge=1, le=settings.max_page_size)] = settings.default_page_size,
     q: str | None = None,
     status: str | None = None,

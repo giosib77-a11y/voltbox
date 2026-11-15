@@ -12,6 +12,12 @@ from pydantic import BaseModel, Field
 from app.core.config import settings
 from app.schemas.base import ApiModel
 
+# Upper bound of every `page` input. Without one, `page=9223372036854775807` makes
+# OFFSET (page - 1) * limit overflow int64 and asyncpg answers 500. 10 000 is far
+# beyond any real page count at this catalogue size, and 10 000 * max_page_size
+# stays inside int64 by a wide margin. Past it the answer is a 400, not a clamp.
+MAX_PAGE = 10_000
+
 
 class PageParams(BaseModel):
     """`limit`-ის ზედა ზღვარს განზრახ არ ვჭრით ჩუმად — 400-ს ვაბრუნებთ.
@@ -19,7 +25,7 @@ class PageParams(BaseModel):
     ჩუმი clamp კლიენტს აფიქრებინებს, რომ 500 ჩანაწერი მიიღო, სინამდვილეში კი 100.
     """
 
-    page: int = Field(default=1, ge=1)
+    page: int = Field(default=1, ge=1, le=MAX_PAGE)
     limit: int = Field(default=settings.default_page_size, ge=1, le=settings.max_page_size)
 
     @property
@@ -28,7 +34,7 @@ class PageParams(BaseModel):
 
 
 def page_params(
-    page: Annotated[int, Query(ge=1, description="1-based page number")] = 1,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE, description="1-based page number")] = 1,
     limit: Annotated[
         int,
         Query(ge=1, le=settings.max_page_size, description="Items per page"),

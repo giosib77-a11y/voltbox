@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.errors import NotFoundError
 from app.core.language import DEFAULT_LANGUAGE, LanguageQuery
-from app.core.pagination import total_pages
+from app.core.pagination import MAX_PAGE, total_pages
 from app.db.session import get_db
 from app.schemas.catalog import ProductListOut, ProductOut
 from app.schemas.mappers import product_to_out
@@ -44,7 +44,7 @@ def _filter_params(request: Request) -> dict[str, str]:
 async def list_products(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
     limit: Annotated[int, Query(ge=1, le=settings.max_page_size)] = settings.default_page_size,
     sort: Annotated[str, Query()] = catalog.DEFAULT_SORT,
     q: Annotated[str, Query(max_length=200)] = "",
