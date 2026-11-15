@@ -73,6 +73,19 @@ services:
     # /*: an asset carrying a policy it has no use for costs nothing, a pattern
     # that misses the HTML costs all of it.
     headers:
+      # The API sends this too (backend/app/core/headers.py). Without it, every
+      # visit that starts at http:// (a typed address, an old link) can be
+      # intercepted before the redirect to https://; with it, a browser that
+      # has seen the site once goes straight to https:// for max-age seconds.
+      # 300 s, without includeSubDomains or preload, for now: the
+      # site runs on a temporary onrender.com address (see the markers below),
+      # and a short max-age keeps a mistake cheap to undo. Once voltbox.ge is
+      # live this goes to max-age=31536000; includeSubDomains and preload are
+      # decided then, only after every subdomain serves HTTPS - preload is hard
+      # to undo.
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=300
       # A script or stylesheet served with the wrong type stays unexecuted
       # instead of being guessed at.
       - path: /*
