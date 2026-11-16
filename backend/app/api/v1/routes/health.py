@@ -3,20 +3,26 @@
 `/health/live` — "პროცესი ცოცხალია?" ბაზას არ ეხება. მას Render-ის Health Check
 Path და Dockerfile-ის HEALTHCHECK იყენებს: ჩავარდნაზე ორივე instance-ს
 რესტარტავს (Render deploy-საც აუქმებს), ბაზის გათიშვას კი რესტარტი ვერ უშველის
-— მხოლოდ ცოცხალ instance-ებს დაარტყამდა მარყუჟში.
+— მხოლოდ ცოცხალ instance-ებს დაარტყამდა მარყუჟში. ლიმიტი არც ერთ ზღვარზე არ
+აქვს და არასოდეს ითვლება (`rate_limit.LIVENESS_PATH`): 429 აქ instance-ის
+რესტარტი იქნებოდა.
 
 `/health` — "კლიენტს მოემსახურება?" ბაზის გათიშვისას 503-ს აბრუნებს, რადგან
 uptime-მონიტორი მხოლოდ სტატუს-კოდს უყურებს; 200 + "degraded" მისთვის ცოცხალია.
+ყოველი გამოძახება ბაზის კავშირს იღებს, ამიტომ მას საკუთარი ლიმიტი აქვს
+(`HEALTH_RATE_LIMIT`, წუთში 30 ერთ კლიენტზე; 429 ჩვეულებრივი `RATE_LIMITED`
+კონვერტითაა) და ნაგულისხმევ 300-იან ვედროს არ ხარჯავს.
 """
 
 import logging
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import __version__
+from app.core.rate_limit import HEALTH_RATE_LIMIT, limiter
 from app.db.session import get_db
 from app.schemas.base import ApiModel
 
@@ -47,9 +53,11 @@ async def health_live() -> LivenessResponse:
     response_model=HealthResponse,
     responses={status.HTTP_503_SERVICE_UNAVAILABLE: {"model": HealthResponse}},
 )
+@limiter.limit(HEALTH_RATE_LIMIT)
 async def health(
-    db: Annotated[AsyncSession, Depends(get_db)], response: Response
+    request: Request, db: Annotated[AsyncSession, Depends(get_db)], response: Response
 ) -> HealthResponse:
+    # `request` is what slowapi reads the client address from.
     # ბაზის ცოცხლობას რეალური query-ით ვამოწმებთ და არა pool-ის სტატუსით —
     # pool-ს შეიძლება კავშირი "ჰქონდეს", როცა სერვერი უკვე გაითიშა.
     try:

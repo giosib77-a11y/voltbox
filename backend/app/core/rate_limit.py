@@ -25,7 +25,9 @@ Two kinds of limit exist. A route with its own `@limiter.limit` is checked by
 the decorator, inside the route, and only against that limit. Every other route
 is checked against DEFAULT_LIMIT (300/minute per client) by the
 `enforce_default_limit` dependency, which `create_app` installs on the whole
-application; /health and /health/live are exempt. slowapi's own
+application. Of those, only /health/live (Render's health check) is exempt from
+all limits; /health, which queries the database, has its own HEALTH_RATE_LIMIT.
+slowapi's own
 `SlowAPIMiddleware` is not used for this: it finds the route handler by walking
 `app.routes` for objects with an `.endpoint`, and under FastAPI 0.141 that list
 holds `_IncludedRouter` objects without one, so the middleware silently skipped
@@ -125,13 +127,20 @@ CART_QUOTE_RATE_LIMIT = "30/minute"
 #: not counted here (see `enforce_default_limit`).
 DEFAULT_LIMIT = "300/minute"
 
-#: Never counted against DEFAULT_LIMIT: Render's health check and the
-#: Dockerfile's HEALTHCHECK poll these from one address every few seconds, and a
-#: 429 there is read as "the instance is dead" and restarts it. Exact paths, so
-#: no other route can ride on the exemption.
-HEALTH_PATHS = frozenset(
-    {f"{settings.api_v1_prefix}/health", f"{settings.api_v1_prefix}/health/live"}
-)
+#: `GET /health`, the one that asks the database (`SELECT 1`, a pool connection
+#: per call). What polls it is an uptime monitor, once a minute or less; thirty
+#: a minute leaves room for a person refreshing it by hand and still caps a
+#: script that would otherwise take a connection from the pool on every request,
+#: unthrottled. Its own limit, not DEFAULT_LIMIT: like any decorated route it is
+#: counted here only. Render and the Dockerfile do not use it (see LIVENESS_PATH).
+HEALTH_RATE_LIMIT = "30/minute"
+
+#: Never counted, against any limit: Render's Health Check Path and the
+#: Dockerfile's HEALTHCHECK poll it from one address every few seconds, and a
+#: 429 there is read as "the instance is dead" and restarts it. It touches no
+#: database and does no work, so there is nothing for a limit to protect. One
+#: exact path, so no other route can ride on the exemption.
+LIVENESS_PATH = f"{settings.api_v1_prefix}/health/live"
 
 #: What slowapi gets when no Redis is configured: counters in this process only.
 MEMORY_STORAGE = "memory://"
@@ -194,7 +203,9 @@ async def enforce_default_limit(request: Request) -> None:
     route too, so `_should_exempt` - the middleware's own test - skips routes
     with `@limiter.limit`: they are counted against their own limit only.
 
-    What is not counted: HEALTH_PATHS; a CORS preflight, which CORSMiddleware
+    What is not counted: LIVENESS_PATH (`/health/live`) - `/health` is not
+    exempt, it has its own HEALTH_RATE_LIMIT decorator and so skips this bucket
+    like any decorated route; a CORS preflight, which CORSMiddleware
     answers before the router and never reaches here; and a path that matches no
     route (404), which costs one dictionary lookup and no database work. Nor is
     a body FastAPI cannot parse (malformed JSON or multipart, 400; an oversized
@@ -203,7 +214,7 @@ async def enforce_default_limit(request: Request) -> None:
     but fails schema validation (400) is counted, since the schema is checked
     while the dependencies are solved.
     """
-    if not limiter.enabled or request.scope["path"] in HEALTH_PATHS:
+    if not limiter.enabled or request.scope["path"] == LIVENESS_PATH:
         return
     endpoint = request.scope["route"].endpoint
     if _should_exempt(limiter, endpoint):

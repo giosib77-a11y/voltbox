@@ -903,16 +903,74 @@ def _default_limits_of(limit: str) -> Any:
     return Limiter(key_func=get_remote_address, application_limits=[limit])._application_limits
 
 
-@pytest.mark.usefixtures("app_limiter_on")
-async def test_the_health_checks_are_never_counted(client: httpx.AsyncClient) -> None:
-    """Render polls /health/live and a 429 there restarts the instance. Past the
-    limit, both still answer, and they leave the bucket of the other routes as
-    it was."""
-    for path in ("/api/v1/health/live", "/api/v1/health"):
-        for _ in range(DEFAULT_PER_MINUTE + 5):
-            assert (await client.get(path)).status_code == 200
+LIVE = "/api/v1/health/live"
+HEALTH = "/api/v1/health"
+HEALTH_PER_MINUTE = int(rate_limit.HEALTH_RATE_LIMIT.split("/")[0])
 
-    assert (await client.get(CATEGORIES)).status_code == 200
+
+def test_health_is_thirty_a_minute() -> None:
+    assert rate_limit.HEALTH_RATE_LIMIT == "30/minute"
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_the_liveness_check_is_never_counted(client: httpx.AsyncClient) -> None:
+    """Render polls /health/live and a 429 there restarts the instance. Far past
+    both /health's thirty and the default three hundred, it still answers, and
+    it leaves the bucket of the other routes as it was."""
+    for _ in range(DEFAULT_PER_MINUTE + 50):
+        assert (await client.get(LIVE)).status_code == 200
+
+    statuses = [(await client.get(CATEGORIES)).status_code for _ in range(DEFAULT_PER_MINUTE)]
+    assert statuses == [200] * DEFAULT_PER_MINUTE
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_the_31st_health_request_a_minute_is_refused(client: httpx.AsyncClient) -> None:
+    """/health takes a database connection per call, so it has a limit of its own,
+    answered with the same envelope and Retry-After as every other."""
+    statuses = [(await client.get(HEALTH)).status_code for _ in range(HEALTH_PER_MINUTE)]
+    assert statuses == [200] * HEALTH_PER_MINUTE
+
+    refused = await client.get(HEALTH)
+
+    assert refused.status_code == 429
+    assert refused.json() == RATE_LIMITED_BODY
+    retry_after = refused.headers["Retry-After"]
+    assert re.fullmatch(r"[1-9][0-9]*", retry_after), retry_after
+    # The rest of a one-minute window, not merely "some number up to 60".
+    assert 50 <= int(retry_after) <= LOGIN_WINDOW_SECONDS
+    assert refused.headers["X-Request-ID"]
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_health_has_a_bucket_per_client(client: httpx.AsyncClient) -> None:
+    for _ in range(HEALTH_PER_MINUTE + 1):
+        await client.get(HEALTH)
+
+    async with client_from(main.app, "203.0.113.40") as other:
+        assert (await other.get(HEALTH)).status_code == 200
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_health_does_not_spend_the_default_bucket(client: httpx.AsyncClient) -> None:
+    """Counted against its own limit only, like any decorated route: after /health
+    has been used up and refused, the other routes still have all three hundred."""
+    for _ in range(HEALTH_PER_MINUTE + 5):
+        await client.get(HEALTH)
+
+    statuses = [(await client.get(CATEGORIES)).status_code for _ in range(DEFAULT_PER_MINUTE)]
+    assert statuses == [200] * DEFAULT_PER_MINUTE
+    assert (await client.get(CATEGORIES)).status_code == 429
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_the_other_routes_do_not_spend_the_health_bucket(
+    client: httpx.AsyncClient,
+) -> None:
+    for _ in range(DEFAULT_PER_MINUTE):
+        await client.get(CATEGORIES)
+
+    assert (await client.get(HEALTH)).status_code == 200
 
 
 @pytest.mark.usefixtures("app_limiter_on")
@@ -984,7 +1042,7 @@ async def test_a_default_limit_429_has_the_same_envelope_as_a_route_limit(
     monkeypatch.setattr(app_limiter, "_application_limits", _default_limits_of("1/minute"))
     try:
         async with client_from(main.app, "203.0.113.30") as client:
-            await client.get("/api/v1/health/live")  # exempt: spends nothing
+            await client.get(LIVE)  # exempt: spends nothing
             await client.get(CATEGORIES)
             refused = await client.get(CATEGORIES)
             later = time.time() + 30

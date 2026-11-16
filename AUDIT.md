@@ -1281,7 +1281,10 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   კავშირით. Render და Docker `HEALTHCHECK` მხოლოდ `/health/live`-ს იყენებენ (Dockerfile:73). მფლობელმა ორივე გამოიყვანა
   ლიმიტიდან — თუ `/health` მხოლოდ ხელით შემოწმებისთვისაა, მისი ლიმიტში დაბრუნება მარტივია.
 - **owner:** backend-dev
-- **status:** open — owner decision
+- **status:** fixed (verified) — მფლობელის გადაწყვეტილებით `/health` → `@limiter.limit("30/minute")` (429 `RATE_LIMITED`
+  + `Retry-After`, 300-იან ვედროს არ ხარჯავს); `/health/live` (`LIVENESS_PATH`) — ლიმიტის გარეშე, 350 მოთხოვნა → 200.
+  31-ე მოთხოვნის ტესტი ძველ კოდზე ვარდება (`200 == 429`; `git stash`-ით კოლექცია `HEALTH_RATE_LIMIT`-ზე ჩერდება).
+  render.yaml / Dockerfile უცვლელია. შესამოწმებელი (Redis socket timeout) — ღიაა, უცვლელი; `/health`-იც ახლა Redis-ს ეხება.
 - **შესამოწმებელი (A-080-თან):** ახლა decorator-ის გარეშე ყოველი მოთხოვნა Redis-ის სინქრონულ hit-ს აკეთებს event loop-ზე;
   თუ Redis-მდე პაკეტები ჩუმად იკარგება, redis-py-ის socket timeout-ის გარეშე loop შეიძლება დიდხანს დაიბლოკოს (ადრეც ასე
   იყო decorator-იან route-ებზე). Render Redis-ზე არ შემოწმებულა.

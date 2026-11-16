@@ -391,6 +391,17 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
     row neighbours with a touching key between). Ours: kept to touching keys on purpose, because a false
     refusal costs more than a missed walk. Measured on SystemRandom passwords (200 000 per cell): 8 characters
     are refused 1.1–2.3% of the time (0.35–0.74% before), 12 characters under 0.04%, 16 characters ~0.
+  - **`/api/v1/health` is limited to 30/min per client; `/api/v1/health/live` stays unlimited** (A-094, owner's
+    decision). `/health` runs `SELECT 1` on a pool connection per call, and one address could poll it without
+    limit. It now carries its own `@limiter.limit(HEALTH_RATE_LIMIT)` (`"30/minute"`): over it, the same 429
+    `RATE_LIMITED` with `Retry-After`; as a decorated route it does not spend the 300/min default bucket
+    (tested). `HEALTH_PATHS` is replaced by one exact path, `LIVENESS_PATH` — the only route never counted.
+    Why 30: an uptime monitor polls once a minute or less, and a person checking by hand fits beside it.
+- What still holds (A-094): Render's Health Check Path and the Dockerfile `HEALTHCHECK` use `/health/live`, which
+  is never counted and never answers 429, so a restart can never come from this limit; `backend/render.yaml` and
+  the Dockerfile are unchanged. Every other limit is unchanged. Not changed, still open (AUDIT.md A-094's
+  "შესამოწმებელი"): slowapi's synchronous Redis hit has no socket timeout set by us; `/health` now makes that hit
+  too, while `/health/live` still makes none.
 - What still holds (A-088): the rule is checked only when a password is set (register, change-password, reset,
   `manage_admin.py create-admin`), never at sign-in — a stored `1q2w3e4r!` still signs in (tested, customer and
   admin). The refusal is the same 400 `VALIDATION_ERROR`, no new code. Still not caught: word repetition
@@ -492,7 +503,7 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 - Decision (owner-approved: 300/min, health exempt, same 429): every route without its own `@limiter.limit` is
   counted against `DEFAULT_LIMIT = "300/minute"` in one bucket per client address shared by all of them (slowapi's
   *application* limit), by `enforce_default_limit`, a FastAPI dependency on the whole app. `/api/v1/health` and
-  `/api/v1/health/live` are exempt by exact path; `/sitemap.xml` is counted; a CORS preflight, a path with no
+  `/api/v1/health/live` are exempt by exact path (since A-094 only `/health/live`; `/health` has its own 30/min); `/sitemap.xml` is counted; a CORS preflight, a path with no
   route (404/405) and a body FastAPI cannot parse (malformed JSON or multipart → 400, oversized → 413; the
   dependency runs after the body is read) are not — none of them reaches the database. A schema-validation 400
   is counted. A decorated route is counted only against its own limit. The 429 is the same
