@@ -575,6 +575,72 @@ async def test_a_webp_with_damaged_image_data_is_a_400_not_a_500(
     )
 
 
+# --- A header that contradicts itself is a 400 as well ------------------------
+#
+# Two files that Pillow opens and then trips over with an IndexError of its own,
+# inside `validate_image` and after `_open` (which only converts it there).
+
+
+def jpeg_with_component_specs(jpeg: bytes, declared: int, listed: int) -> bytes:
+    """`jpeg` whose SOF0 declares `declared` components and describes `listed`.
+
+    Pillow fills its per-component table from the length of the segment, not from
+    the declared count, and `_open` does not compare the two.
+    """
+    pos = 2
+    while jpeg[pos + 1] != 0xC0:
+        pos += 2 + int.from_bytes(jpeg[pos + 2 : pos + 4], "big")
+    end = pos + 2 + int.from_bytes(jpeg[pos + 2 : pos + 4], "big")
+    precision_and_size = jpeg[pos + 4 : pos + 9]
+    specs = b"".join(bytes((i + 1, 0x22 if i == 0 else 0x11, 0)) for i in range(listed))
+    body = precision_and_size + bytes((declared,)) + specs
+    return jpeg[:pos] + b"\xff\xc0" + (len(body) + 2).to_bytes(2, "big") + body + jpeg[end:]
+
+
+def png_without_pixel_data() -> bytes:
+    """A signature, a valid IHDR and IEND with nothing between: every CRC is right."""
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 64, 64, 8, 2, 0, 0, 0))
+        + png_chunk(b"IEND", b"")
+    )
+
+
+@pytest.mark.parametrize("listed", [0, 1, 2])
+async def test_a_jpeg_that_declares_more_components_than_it_describes_is_a_400(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    product_id: str,
+    storage: InMemoryStorage,
+    listed: int,
+) -> None:
+    """Pillow reads the sampling factors of component 0, 1 and 2 to price the decode."""
+    data = jpeg_with_component_specs(encode(patterned((400, 300)), "JPEG"), 3, listed)
+    # The premise: Pillow accepts the header, so the refusal is not its own.
+    with Image.open(io.BytesIO(data)) as probe:
+        assert probe.mode == "RGB"
+        assert len(probe.layer) == listed  # type: ignore[attr-defined]
+
+    response = await _upload(
+        client, headers, product_id, data=data, filename="p.jpg", content_type="image/jpeg"
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_IMAGE"
+    assert storage.objects == {}
+
+
+async def test_a_png_with_no_pixel_data_is_a_400(
+    client: httpx.AsyncClient, headers: dict[str, str], product_id: str, storage: InMemoryStorage
+) -> None:
+    """`verify()` seeks to the first IDAT, and there is no tile to ask."""
+    response = await _upload(client, headers, product_id, data=png_without_pixel_data())
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_IMAGE"
+    assert storage.objects == {}
+
+
 #: The first box of an iPhone photo, and of an HEIC whose major brand is the
 #: generic HEIF one. Pillow cannot read past either.
 HEIC_HEADERS = {

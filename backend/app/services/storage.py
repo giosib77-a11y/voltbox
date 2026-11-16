@@ -343,7 +343,16 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
     # a partly downloaded upload used to reach the client as a 500. The tuple
     # stays closed: anything Pillow raises that is not a statement about these
     # bytes is still a bug, not a refusal.
-    except (UnidentifiedImageError, OSError, ValueError, SyntaxError) as exc:
+    #
+    # IndexError is Pillow's answer to two files whose headers contradict
+    # themselves, both raised after `_open` (which converts it to a SyntaxError
+    # only while it runs): a JPEG whose SOF declares three components and lists
+    # fewer (`get_sampling`, called from `_decode_cost`, reads `layer[0..2]`) and
+    # a PNG with no IDAT between IHDR and IEND (`verify()` seeks to `tile[0]`).
+    # The try holds nothing of ours that indexes: `_max_pixels` is arithmetic and
+    # a dict lookup, `_png_exif` only slices, and `_exif_orientation` catches
+    # everything itself - so an IndexError here is Pillow's, about these bytes.
+    except (UnidentifiedImageError, OSError, ValueError, SyntaxError, IndexError) as exc:
         if _is_heic(data):
             raise _unsupported_format("HEIC", declared_type) from exc
         if (announced := _announced_format(data)) is not None:
