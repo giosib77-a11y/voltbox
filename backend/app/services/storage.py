@@ -468,8 +468,18 @@ _FILL = re.compile(rb"\xff+")
 _MAX_JPEG_MARKERS = 65_536
 
 
+#: The bytes of a JFIF APP0 payload up to and including the thumbnail's width and
+#: height: `JFIF\0` (5), version (2), units (1), densities (4), size (2).
+_JFIF_HEADER = 14
+
+#: The bytes of an Adobe APP14 payload that mean something: `Adobe` (5), version
+#: (2), flags0 (2), flags1 (2), transform (1).
+_ADOBE_HEADER = 12
+
+
 def _strip_jpeg(data: bytes) -> bytes:
-    """A JPEG without EXIF, XMP, IPTC, comments or anything after the image.
+    """A JPEG without EXIF, XMP, IPTC, comments, thumbnails or anything after the
+    image.
 
     Walks the segments from SOI to EOI. Kept, each only when its payload says what
     it is: APP0 starting `JFIF\\0` (the density and aspect), APP2 starting
@@ -478,6 +488,11 @@ def _strip_jpeg(data: bytes) -> bytes:
     headers). Dropped: every other APPn - APP0 `JFXX` (an extension that carries
     a thumbnail), APP1 (EXIF and XMP, extended XMP too), APP11 (C2PA), APP13
     (IPTC/Photoshop) - an APP0 or APP14 under another identifier, and COM.
+    A kept JFIF or Adobe segment is cut to the header decoders read: JFIF's
+    14 bytes with the thumbnail size set to 0x0 (after them the segment may carry
+    an uncompressed RGB thumbnail, 3*X*Y bytes), Adobe's 12. A segment that
+    already is that - what libjpeg and so Pillow write - is copied unchanged, and
+    one shorter than that (no thumbnail size, so no thumbnail) is kept as it is.
     Entropy-coded data is copied untouched, and the walk ends at the first EOI:
     phones, Samsung among them, append metadata trailers after it, and an MPO's
     second picture sits there too.
@@ -552,13 +567,24 @@ def _strip_jpeg(data: bytes) -> bytes:
             raise _unreadable()
         payload = data[pos + 2 : end]
         is_app = 0xE0 <= marker <= 0xEF
-        keep = (
-            (marker == 0xE0 and payload.startswith(b"JFIF\x00"))
-            or (marker == 0xE2 and payload.startswith(b"ICC_PROFILE\x00"))
-            or (marker == 0xEE and payload.startswith(b"Adobe"))
-            or not (is_app or marker == 0xFE)
-        )
-        if keep:
+        if marker == 0xE0 and payload.startswith(b"JFIF\x00"):
+            if len(payload) >= _JFIF_HEADER:
+                # Only the header, and the thumbnail declared 0x0: what follows
+                # the two size bytes is 3*X*Y bytes of uncompressed RGB - a small
+                # copy of the whole frame, taken before any crop. A decoder that
+                # reads no thumbnail reads nothing else from there.
+                payload = payload[: _JFIF_HEADER - 2] + b"\x00\x00"
+            # A shorter payload has no thumbnail size and so no thumbnail; it is
+            # kept as it is, not refused - Pillow reads such a file.
+            out += b"\xff\xe0" + (len(payload) + 2).to_bytes(2, "big") + payload
+        elif marker == 0xEE and payload.startswith(b"Adobe"):
+            # The 12 bytes decoders use - version, flags, and the transform that
+            # says how to read CMYK/YCCK. Anything after them is nobody's.
+            payload = payload[:_ADOBE_HEADER]
+            out += b"\xff\xee" + (len(payload) + 2).to_bytes(2, "big") + payload
+        elif not (is_app or marker == 0xFE) or (
+            marker == 0xE2 and payload.startswith(b"ICC_PROFILE\x00")
+        ):
             out += bytes((0xFF, marker)) + data[pos:end]
         in_scan = marker == 0xDA
         seen_scan = seen_scan or in_scan

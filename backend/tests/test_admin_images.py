@@ -1703,6 +1703,27 @@ def jpeg_with_identity(original: bytes) -> bytes:
     )
 
 
+def jpeg_segment(data: bytes, marker: int) -> bytes:
+    """The first header segment with this marker, whole: marker, length, payload."""
+    pos = 2
+    while data[pos + 1] != marker:
+        assert data[pos + 1] != 0xDA, f"no segment {marker:#x} before the scan"
+        pos += 2 + int.from_bytes(data[pos + 2 : pos + 4], "big")
+    return data[pos : pos + 2 + int.from_bytes(data[pos + 2 : pos + 4], "big")]
+
+
+def jpeg_with_payload(data: bytes, marker: int, payload: bytes) -> bytes:
+    """`data` with the first segment of this marker given another payload."""
+    old = jpeg_segment(data, marker)
+    new = bytes((0xFF, marker)) + (len(payload) + 2).to_bytes(2, "big") + payload
+    return data.replace(old, new, 1)
+
+
+#: The first 12 bytes of a JFIF payload: `JFIF\0`, version 1.01, units, density 72
+#: dpi. The thumbnail's width and height (two bytes) follow, then the thumbnail.
+JFIF_HEADER = b"JFIF\x00\x01\x01\x01\x00\x48\x00\x48"
+
+
 def animation_frames(data: bytes) -> list[bytes]:
     with Image.open(io.BytesIO(data)) as animated:
         frames: list[bytes] = []
@@ -2266,6 +2287,81 @@ class TestOnlyChunksKnownToBeHarmlessAreStored:
         assert stored.count(b"Adobe") == 1
         assert b"Phone" not in stored
         assert pixels(stored) == pixels(original)
+
+    # --- The JFIF thumbnail and what follows Adobe's 12 bytes (A-098) ---------
+
+    @pytest.mark.parametrize("size", ["fits", "resized"])
+    def test_a_jfif_thumbnail_is_not_stored(self, size: str) -> None:
+        """APP0 `JFIF` is a header followed by an uncompressed RGB thumbnail of
+        3*X*Y bytes - a small picture of the whole frame, which the public file
+        would carry beside the one that was cropped."""
+        thumbnail = b"thumbsecret!" * 3  # 4x3 RGB: 36 bytes
+        written = encode(patterned((300, 200) if size == "fits" else (1700, 400)), "JPEG")
+        original = jpeg_with_payload(written, 0xE0, JFIF_HEADER + bytes((4, 3)) + thumbnail)
+        assert thumbnail in original
+
+        stored = shrink_to_fit(original, "JPEG")
+
+        assert thumbnail not in stored
+        segment = jpeg_segment(stored, 0xE0)
+        # Length 16 and a 0x0 thumbnail, whether the file was stripped or (the
+        # larger one) re-encoded by Pillow, whose writer makes a header of its own.
+        assert segment[:4] == b"\xff\xe0\x00\x10"
+        assert segment[4:9] == b"JFIF\x00"
+        assert segment[-2:] == b"\x00\x00"
+        if size == "fits":  # stripped, not re-encoded: the same header and pixels
+            assert segment == b"\xff\xe0\x00\x10" + JFIF_HEADER + b"\x00\x00"
+            assert pixels(stored) == pixels(original)
+
+    def test_a_jfif_header_with_a_thumbnail_size_and_no_thumbnail_is_reset(self) -> None:
+        written = encode(patterned((300, 200)), "JPEG")
+        original = jpeg_with_payload(written, 0xE0, JFIF_HEADER + bytes((9, 9)))
+
+        stored = shrink_to_fit(original, "JPEG")
+
+        assert jpeg_segment(stored, 0xE0) == b"\xff\xe0\x00\x10" + JFIF_HEADER + b"\x00\x00"
+
+    def test_adobe_keeps_its_twelve_bytes_with_the_transform_and_nothing_after(self) -> None:
+        """The transform byte says how to read CMYK (2 is YCCK); what follows the
+        12 bytes is nobody's."""
+        written = encode(patterned((200, 100), "CMYK"), "JPEG")
+        adobe = jpeg_segment(written, 0xEE)
+        assert adobe[:2] + adobe[4:9] == b"\xff\xeeAdobe"
+        header = adobe[4:16][:11] + b"\x02"  # `Adobe`, version, two flags, transform
+        original = jpeg_with_payload(written, 0xEE, header + b"adobe-secret")
+        assert b"adobe-secret" in original
+
+        stored = shrink_to_fit(original, "JPEG")
+
+        assert jpeg_segment(stored, 0xEE) == b"\xff\xee\x00\x0e" + header
+        assert b"adobe-secret" not in stored
+        assert pixels(stored) == pixels(original)
+
+    @pytest.mark.parametrize("mode", ["RGB", "CMYK"])
+    def test_a_jpeg_whose_segments_are_already_minimal_comes_back_byte_for_byte(
+        self, mode: str
+    ) -> None:
+        written = encode(patterned((200, 100), mode), "JPEG", icc_profile=ICC_PROFILE)
+        if mode == "RGB":  # Pillow writes a JFIF header for RGB and Adobe for CMYK
+            jfif = jpeg_segment(written, 0xE0)
+            assert (jfif[:4], jfif[-2:]) == (b"\xff\xe0\x00\x10", b"\x00\x00")  # no thumbnail
+        else:
+            assert jpeg_segment(written, 0xEE)[:4] == b"\xff\xee\x00\x0e"
+
+        assert shrink_to_fit(written, "JPEG") == written
+
+    def test_a_jfif_or_adobe_segment_too_short_to_hold_a_thumbnail_is_kept_as_it_is(self) -> None:
+        """A payload under 14 bytes has no thumbnail size, so there is nothing to
+        reset or cut - and refusing it would turn away a file Pillow reads."""
+        written = encode(patterned((200, 100), "CMYK"), "JPEG")
+        short_jfif = JFIF_HEADER[:-3]  # 9 bytes: `JFIF\0`, version, units, one density byte
+        short_adobe = b"Adobe\x00\x64\x00\x00"
+        original = jpeg_with_segments(written, (0xE0, short_jfif), (0xEE, short_adobe))
+
+        stored = storage_module._strip_jpeg(original)
+
+        assert jpeg_segment(stored, 0xE0) == b"\xff\xe0\x00\x0b" + short_jfif
+        assert b"\xff\xee\x00\x0b" + short_adobe in stored
 
     @pytest.mark.parametrize("fmt", ["png", "webp", "jpeg"])
     async def test_an_upload_is_stored_without_the_chunks_it_carried(
