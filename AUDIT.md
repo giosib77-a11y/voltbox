@@ -349,6 +349,27 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   როცა პარალელურად pytest მიდიოდა; მომდევნო 3 გაშვება მწვანეა. ტესტის სახელი ვერ დავაფიქსირე, ამიტომ flaky-ს მიზეზი დაუდგენელია.
   არ გაშვებულა: e2e, ნამდვილი ბრაუზერი, frontend Node 22-ზე, Render, ლაივ ბაზა.
 
+**`/fix A-080 A-037 A-081 A-083 A-084 A-085 A-086 A-087` 2026-11-16** (ბრენჩი `fix/a080-a037-a081-a083-a087`, `agent-system`-იდან,
+`0a9522c`). რვავე ID ღია იყო, არცერთი მხოლოდ frontend-ის არ არის. მფლობელმა წინასწარ დაამტკიცა A-080 (300/წთ, health-ის
+გამონაკლისი), A-037 (TOTP-ის გარეშე) და A-085 (მესამე მარკერი). ძველ კოდზე ჩავარდნა ორკესტრატორმა `git stash`-ით ხელახლა
+გაუშვა ყველა კოდის ID-ზე. pytest ერთდროულად ერთზე მეტი არასდროს გაშვებულა.
+- A-080 — fixed (verified), `1d9e314`; re-review: security-auditor — დახურულია.
+- A-037 — fixed (verified), `e09ce2e` + `85bb546` (re-review-ის should-fix, რაუნდი 1/2); security-auditor ×2 — დახურულია.
+- A-081 — fixed (verified), `77f1e58`; security-auditor — დახურულია.
+- A-083 — fixed (verified), `a36741f`; code-reviewer — დახურულია.
+- A-084 — fixed (reviewed), `45c8326`; code-reviewer — დახურულია.
+- A-085 — fixed (verified), `f5f948b`; code-reviewer — დახურულია.
+- A-086 — fixed (verified), `3c72ab5`; code-reviewer — დახურულია.
+- A-087 — fixed (verified), `95c98b5` (აუდიტის მექანიზმი არ დადასტურდა, გაჟონვა — კი); code-reviewer — დახურულია.
+- ახალი nit-ები: A-088–A-095 (A-094 — მფლობელის გადაწყვეტილება) — სექციის ბოლოს.
+- pytest: 1447 (baseline `0a9522c`) → 1455 → 1616 → 1638 → 1648 → 1656 → **1658 passed, 1 skipped**.
+- საბოლოო შემოწმება (`95c98b5`, tester): ruff ✅ · format 185 ✅ · mypy 165 ✅ · **pytest 1658 passed, 1 skipped** ·
+  alembic 0001→0017 + check ✅ (ცარიელ `voltbox_final_check`-ზე, შემდეგ წაიშალა) · `docker build` ✅ (პაროლების სიის sha256
+  image-ში ემთხვევა) · eslint ✅ · **vitest 682 / 58** (baseline 681 / 58) · build `http` ✅ · build `mock` ✅. Node 22.23.2 /
+  npm 10.9.8 container-ში (ორკესტრატორი; მხოლოდ `frontend` + ორი backend ფაილი, რომელსაც ტესტები კითხულობს): `npm ci`,
+  eslint, vitest 682 / 58, ორივე build ✅.
+  არ გაშვებულა: e2e, ნამდვილი ბრაუზერი, Telegram-ის ნამდვილი გაგზავნა, Render (ლიმიტი რეალური IP-ით), ლაივ ბაზა.
+
 ### Should-fix
 
 #### A-030 · should-fix · refresh-ის 429 ან 5xx პასუხი მომხმარებელს სისტემიდან აგდებს
@@ -493,7 +514,13 @@ re-review: security-auditor — დახურულია; ნარჩენ�
      (ელფოსტა ნიღბით, IP-ის გარეშე).
   5. ტესტები ოთხივე პუნქტზე.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `e09ce2e` + `85bb546` (2026-11-16, TOTP-ის გარეშე). სია: SecLists 10k (MIT, `913b327`),
+  `backend/app/core/common_passwords.txt` + NOTICE, sha256 ტესტით; image-ში შემოწმდა. pattern: 3-სიმბოლოიანი
+  გამეორება/±1/კლავიატურის რიგი იშლება, < 5 განსხვავებული → უარი. ადმინი 12 (`ADMIN_PASSWORD_TOO_SHORT`),
+  login წესს არ ამოწმებს (ძველი სუსტი პაროლი შედის — ტესტი). დაბლოკვაზე ერთი Telegram (`b***@domain`, IP-ის გარეშე),
+  `AppError.after_response`-ით. ძველ კოდზე: 25 ტესტი ვარდება + `test_password_policy.py` import-ზე. re-review
+  (security-auditor): should-fix — reset-ის გვერდი ადმინს „ძალიან მარტივია“-ს აჩვენებდა → რაუნდი 1/2, `85bb546`
+  (ტესტი ძველ გვერდზე ვარდება); მეორე re-review — დახურულია. ნარჩენი nit-ები: A-088, A-089.
 
 ### Nit
 
@@ -1023,7 +1050,12 @@ re-review: security-auditor — დახურულია; ნარჩენ�
 - **გამოსწორება:** გადაწყვეტა სჭირდება — slowapi-ის route-ის ძებნა FastAPI-ის ახალ სტრუქტურაზე, ან ნაგულისხმევი ლიმიტი საკუთარ
   middleware-ში `limiter.limiter.hit`-ით. ტესტი: decorator-ის გარეშე route-ზე 61-ე მოთხოვნა → 429.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `1d9e314` (+ კომენტარები `a36741f`). მფლობელის გადაწყვეტილებით 300/წთ ერთ კლიენტზე,
+  ერთი საერთო bucket decorator-ის გარეშე ყველა route-ზე (slowapi-ის application limit), app-wide FastAPI dependency-ით
+  (`enforce_default_limit`); `/api/v1/health` და `/health/live` გამონაკლისია; decorator-იანი route მხოლოდ თავის ლიმიტს
+  ითვლის. 301-ე `GET /api/v1/categories` → 429 `RATE_LIMITED` + Retry-After (ტესტი ნამდვილ app-ზე); 6 ტესტი ძველ კოდზე
+  ვარდება. re-review (security-auditor) — დახურულია; nit-ები: გაუპარსავი body არ ითვლება (Decision Log-ში ჩაიწერა),
+  ძველი კომენტარი `routes/auth.py`-ში (`a36741f`-ში გასწორდა), A-094.
 
 #### A-081 · nit · `Settings.requires_ssl` TLS-ს URL-ის ნებისმიერ ადგილას ნაპოვნი „localhost"-ით თიშავს
 - **ფაილი:** `backend/app/core/config.py` (`requires_ssl`: `not any(host in url for host in ("localhost", "127.0.0.1"))`)
@@ -1033,7 +1065,9 @@ re-review: security-auditor — დახურულია; ნარჩენ�
 - **გამოსწორება:** URL-ის parse და მხოლოდ hostname-ის შედარება `{"localhost","127.0.0.1","::1"}`-თან (`app/db/local_url.py`-ს
   უკვე აქვს ეს ლოგიკა); ტესტი.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `77f1e58`. `requires_ssl` = `not is_local_database_url(url)`; გაუპარსავი URL, host-ის
+  გარეშე ან `?host=`/`?hostaddr=` → TLS; `[::1]` და `LOCALHOST` ლოკალურია. 18 ახალი შემთხვევა ძველ `config.py`-ზე ვარდება
+  (მათ შორის `build_connect_args()` → `{}` remote URL-ზე). re-review (security-auditor) — დახურულია; nit: A-092.
 
 #### A-082 · nit · `robots.txt`-ში `/en/search?` არ არის
 - **ფაილი:** `frontend/public/robots.txt`
@@ -1048,7 +1082,10 @@ re-review: security-auditor — დახურულია; ნარჩენ�
 - **გამოსწორება:** `AppError`-ს არასავალდებულო `headers` და `handle_app_error`-ში მისი გადაცემა; reset-ის ლიმიტზე წამები
   `get_window_stats`-ით.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `a36741f`. `AppError(headers=...)`; ანგარიშის დაბლოკვის 429 — `max(1, retryAfterSeconds)`,
+  reset-ის 429 — ფანჯრის დარჩენილი წამები (store → process fallback → 3600). API-ის ყველა 429-ს ახლა Retry-After აქვს;
+  შესვლის lock 401-ად რჩება header-ის გარეშე (ტესტით). 8 ტესტი ძველ კოდზე ვარდება. re-review (code-reviewer) —
+  დახურულია; nit: A-090.
 
 #### A-084 · nit · docs/deployment.md-ის წვრილმანები (code-reviewer, f5b0cd3-ის re-review)
 - **ფაილი:** `docs/deployment.md` (§5 ≈626–670, §10 ≈761, ≈804–814)
@@ -1058,7 +1095,8 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   არ უშვებს; (3) FORWARDED_ALLOW_IPS-ის შემოწმებაში „ერთი ქსელიდან მნიშვნელობა იცვლება" ქმედების გარეშეა; მობილურ
   ინტერნეტზე CGNAT IP-ს შეიძლება ცვლიდეს (დაუდასტურებელი) — განმეორებითი მოთხოვნები სჯობს Wi-Fi-დან.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (reviewed) — `45c8326` (docs; alembic-ის ტექსტი alembic-ის წყაროთი დადასტურდა, ბრძანება არ
+  გაშვებულა). re-review (code-reviewer) — დახურულია; nit: A-091.
 
 #### A-085 · nit (მფლობელის გადაწყვეტილება) · storefront-ის HSTS-ის ბლოკს `TEMP-ONRENDER` მარკერი არ აქვს
 - **ფაილი:** `frontend/render.yaml:76-88`, `docs/deployment.md` §0 (ცხრილი ≈40–53)
@@ -1068,7 +1106,9 @@ re-review: security-auditor — დახურულია; ნარჩენ�
 - **გამოსწორება:** HSTS-ის ბლოკს მარკერი (რაოდენობა ტესტში 3), §0-ის ცხრილში ხაზი `Strict-Transport-Security | max-age=300 |
   max-age=31536000`.
 - **owner:** frontend-dev
-- **status:** open — needs owner decision
+- **status:** fixed (verified) — `f5f948b`. მფლობელმა მესამე მარკერი დაუშვა (2026-11-16); ძველი ორი ბაიტ-ბაიტ უცვლელია,
+  ტესტი 3-ს აფიქსირებს (ძველი 2 ახალ yaml-ზე ვარდება), §0-ში HSTS-ის ხაზი. re-review (code-reviewer) — დახურულია;
+  nit: A-093.
 
 #### A-086 · nit · DB TLS-ის წვრილმანები (security-auditor)
 - **ფაილი:** `backend/app/db/ssl.py:57`, `:71-80`; `backend/.env.example:59-62`
@@ -1077,7 +1117,10 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   ამბობს); (3) `.env.example` ახალ WARNING-ს არ ახსენებს.
 - **გამოსწორება:** `disable`-ზეც WARNING დეპლოიზე; სურვილისამებრ warning lifespan-ში; `.env.example`-ის კომენტარი.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `3c72ab5`. `log_tls_mode()` lifespan-ში, `configure_logging`-ის შემდეგ (JSON, ყოველ
+  worker-ზე ერთხელ); დეპლოიზე `disable` + არალოკალური host → „unencrypted“ (`not authenticated`-ს არ შეიცავს, მფლობელის
+  შემოწმება უცვლელია); `build_connect_args` ჩუმია. 14 ტესტი ძველ კოდზე ვარდება. `.env.example` და docs „ბაზასთან TLS“.
+  re-review (code-reviewer) — დახურულია.
 
 #### A-087 · nit · `test_configuring_twice_does_not_stack_a_second_filter` logging-ის გლობალურ მდგომარეობას ბოლომდე არ აბრუნებს
 - **ფაილი:** `backend/tests/test_log_secrecy.py:363-378`
@@ -1085,5 +1128,82 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   logger-ების handler-ებს და `propagate`-ს არ აბრუნებს. `test_server_log_secrecy.py`-ის `restore_logging` შემდეგ ამას „საწყისად"
   ინახავს, ამიტომ `test_the_access_log_of_uvicorn_is_still_off` `logging.py:215`-ის წაშლას ვეღარ დაიჭერს.
 - **გამოსწორება:** ტესტმა `every_line` fixture-ის აღდგენა გამოიყენოს.
+- **owner:** backend-dev
+- **status:** fixed (verified) — `95c98b5`. ერთი `_logging_restored()` (root, server logger-ები, `uvicorn.access`, slowapi:
+  handlers, filters, level, propagate, disabled) fixture-შიც და ამ ტესტშიც + ორი ტესტი, რომ მდგომარეობა ბრუნდება.
+  გაჟონვა გაზომილია (probe ტესტმა ძველი ტესტის შემდეგ `disabled=True` ნახა, ახლა — არა). **აუდიტის მექანიზმი არ
+  დადასტურდა:** disable-ის ხაზის წაშლა გაჟონვასაც აქრობს, ამიტომ `test_the_access_log_of_uvicorn_is_still_off` ძველ
+  ტესტ-ფაილთანაც ვარდება; გაჟონვა ლატენტური იყო. re-review: code-reviewer — დახურულია (configure_logging-ის ყველა ცვლილება
+  დაფარულია, მექანიზმის შეფასება სწორია); nit: A-095.
+
+### A-080/A-037/A-081/A-083–A-087-ის re-review-ის მიგნებები (2026-11-16)
+
+#### A-088 · nit · common-სიის შემოწმება ციფრით დაწყებულ/დამთავრებულ ჩანაწერს მორთულ ფორმაში ვერ ცნობს
+- **ფაილი:** `backend/app/core/security.py` (`is_common_password`, `_DECORATION`)
+- **სცენარი (კოდით, security-auditor):** კიდეებიდან ციფრებიც იჭრება, ამიტომ `1q2w3e4r!` → `q2w3e4r`, `1qaz2wsx!` → `qaz2wsx`,
+  `q1w2e3r4!` → `q1w2e3r` — სიაში არ არის, pattern-იც ვერ იჭერს → მიიღება (შიშველი ფორმები უარყოფილია). ასევე
+  `passwordpassword`, `P@ssw0rd` (სიტყვის გამეორება, leetspeak — მფლობელის წესის გარეთ).
+- **გამოსწორება:** მესამე შემოწმება — მხოლოდ punctuation/whitespace-ით ჩამოჭრილი ფორმა; ტესტი სამივე მაგალითზე.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-089 · nit · storefront-ი ახალ პაროლის წესს მხოლოდ უარის შემდეგ ამბობს
+- **ფაილი:** `frontend/src/pages/Account/ChangePassword.jsx:58`, `frontend/src/pages/ResetPassword.jsx:142`
+- **სცენარი (კოდით, security-auditor + backend-dev):** change-password-ზე pattern/common უარი ზოგად `VALIDATION_ERROR`-ს
+  („ზოგი მონაცემი არასწორია“) აჩვენებს (ასე იყო common-სიაზეც); ველის მინიშნება ყველას „მინიმუმ 8“-ს უწერს, ადმინსაც.
+- **გამოსწორება:** change-password-ზე `newPassword` ველის შეცდომა ისე, როგორც reset-ზე; მინიშნებაში „გამეორება და
+  მიმდევრობა არ შეიძლება“. ადმინის 12 — ადმინის პანელის პაროლის შეცვლის ფორმაზე (თუ ასეთი არსებობს).
+- **owner:** frontend-dev
+- **status:** open
+
+#### A-090 · nit · reset-ის Retry-After-ის ორი ტესტი გაფუჭებულ ფუნქციასაც გაატარებდა
+- **ფაილი:** `backend/tests/test_app_error_headers.py:110-117`, `backend/tests/test_password_reset.py:545-547`
+- **სცენარი (კოდით, code-reviewer):** ასერტები `<= 3600` / `1 <= x <= 3600` ყოველთვის სრულდება; თუ `_address_key` ან route-ის
+  `scope` შეიცვლება, ფუნქცია `1`-ს დააბრუნებს („სცადე 1 წამში“, ფანჯარა კი საათია) და ტესტები გაივლის.
+- **გამოსწორება:** ორივე ადგილას `>= 3590`.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-091 · nit · docs/deployment.md: ორი წვრილმანი A-084-ის შემდეგ
+- **ფაილი:** `docs/deployment.md` (§10 ≈819-824; §5 ≈640-642)
+- **სცენარი (კოდით, code-reviewer):** (1) ცოტა ტრაფიკზე „სხვა მომხმარებლების ხაზები“ არ არის და ახალი bullet „ქსელი/VPN
+  შეცვალეთ და გაიმეორეთ“-ზე ტრიალებს — სჯობს საკუთარი საჯარო IP-ის შედარება (`curl -s https://api.ipify.org` ორჯერ);
+  (2) `alembic history -i` / `history current:` env.py-ს უშვებს — „`history` (`-i`/`current`-ის გარეშე)“.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-092 · nit · `local_url.py`-ის docstring არ ამბობს, რომ TLS-ის გამოტოვებაც მასზეა
+- **ფაილი:** `backend/app/db/local_url.py:1-13`, `:36-40`
+- **სცენარი (კოდით, security-auditor):** guard-ის მოხერხებულობისთვის `LOCAL_HOSTS`-ის გაფართოება (`db`, `host.docker.internal`)
+  ამ ჰოსტებზე TLS-ს ჩუმად გამორთავს (`Settings.requires_ssl`, A-081).
+- **გამოსწორება:** docstring-ში ერთი წინადადება.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-093 · nit · `test_storefront_blueprint.py`-ის კომენტარი მარკერებს „მისამართებს“ უწოდებს
+- **ფაილი:** `backend/tests/test_storefront_blueprint.py:11` — მესამე მარკერი `max-age=300`-ია; „temporary onrender.com values“.
+- **owner:** frontend-dev
+- **status:** open
+
+#### A-094 · nit (მფლობელის გამონაკლისი) · `/api/v1/health` ლიმიტის გარეშე ბაზას ეხება
+- **ფაილი:** `backend/app/api/v1/routes/health.py:56` (`SELECT 1`), `backend/app/core/rate_limit.py` (`HEALTH_PATHS`)
+- **სცენარი (კოდით, security-auditor):** ერთ მისამართს შეუძლია `/health`-ს ურტყას ლიმიტის გარეშე, ყოველ ჯერზე pool-იდან
+  კავშირით. Render და Docker `HEALTHCHECK` მხოლოდ `/health/live`-ს იყენებენ (Dockerfile:73). მფლობელმა ორივე გამოიყვანა
+  ლიმიტიდან — თუ `/health` მხოლოდ ხელით შემოწმებისთვისაა, მისი ლიმიტში დაბრუნება მარტივია.
+- **owner:** backend-dev
+- **status:** open — owner decision
+- **შესამოწმებელი (A-080-თან):** ახლა decorator-ის გარეშე ყოველი მოთხოვნა Redis-ის სინქრონულ hit-ს აკეთებს event loop-ზე;
+  თუ Redis-მდე პაკეტები ჩუმად იკარგება, redis-py-ის socket timeout-ის გარეშე loop შეიძლება დიდხანს დაიბლოკოს (ადრეც ასე
+  იყო decorator-იან route-ებზე). Render Redis-ზე არ შემოწმებულა.
+
+#### A-095 · nit · `test_server_log_secrecy.py`-ის `restore_logging` slowapi-ის filter-ს ტოვებს (ჩვენამდეც ასე იყო)
+- **ფაილი:** `backend/tests/test_server_log_secrecy.py:32-47`; `backend/tests/test_log_secrecy.py:402-403` (docstring)
+- **სცენარი (კოდით, code-reviewer):** `WATCHED`-ში `slowapi` არ არის და filter-ები არ ბრუნდება, ამიტომ `_configure`-ის შემდეგ
+  `PseudonymiseRateLimitKey` სესიის ბოლომდე რჩება. `pytest tests/test_server_log_secrecy.py tests/test_rate_limit.py` რიგით
+  `test_the_default_limit_warning_does_not_name_the_raw_address` მეორე filter-ს ამატებს, key ორჯერ ფსევდონიმდება და ასერტი
+  ვარდება. CI-ის ანბანურ რიგში არ ჩანს (randomly/xdist არ არის). docstring `:402-403` ჯერ კიდევ ამბობს, რომ გაჟონვა
+  წაშლილ ხაზს მალავდა — 95c98b5-მა აჩვენა, რომ არა.
+- **გამოსწორება:** `_logging_restored` → `tests/factories.py`, `restore_logging`-მაც ის გამოიყენოს (+ `voltbox.error`);
+  docstring-ის გასწორება.
 - **owner:** backend-dev
 - **status:** open

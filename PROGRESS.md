@@ -768,10 +768,14 @@ Unverified (check before acting):
   If the service does not start (`DB_SSL_ROOT_CERT … cannot be used as a CA bundle`) or `/health` says
   `"database": "down"` (the certificate does not cover the `DATABASE_URL` host — the direct `db.<ref>.supabase.co` and the
   pooler `*.pooler.supabase.com` are different hosts), delete both variables to return to `require`, and report back.
-- **2026-11-15, owner — decide (AUDIT.md A-085):** the storefront's `Strict-Transport-Security: max-age=300` is temporary
-  but carries no `TEMP-ONRENDER` marker (you asked for the markers unchanged), so `grep TEMP-ONRENDER` will not find it
-  at the switch to voltbox.ge. Either allow a third marker on it, or remember to raise it to `max-age=31536000` by hand
-  (`frontend/render.yaml`, comment above the rule).
+- (2026-11-16: resolved — the owner allowed a third marker; `f5f948b` puts `TEMP-ONRENDER` on the storefront HSTS rule and
+  a `Strict-Transport-Security` row in docs/deployment.md §0, so `grep TEMP-ONRENDER` now finds it. AUDIT.md A-085.)
+- **2026-11-16, owner — expect the API's default rate limit after deploying `fix/a080-a037-a081-a083-a087` (AUDIT.md
+  A-080).** Every route without its own limit now answers 429 after 300 requests a minute from one client (until now
+  no limit applied at all). If `FORWARDED_ALLOW_IPS` is wrong (the A-036 check above), the whole shop shares that one
+  bucket — so run the A-036 check first; a burst of 429 `RATE_LIMITED` on catalogue pages right after the deploy points
+  there. Also new: an admin password needs 12 characters when it is next set (existing ones keep working), and a
+  locked admin account sends a Telegram message.
 
 ## Run State
 - Stage: Stage 3 — Storefront redesign
@@ -828,6 +832,12 @@ Unverified (check before acting):
   re-reviewed closed; A-069 not reproduced (measured, no change). New nits A-077–A-079 open. **Before deploying: run
   `docs/migrations/0017_orders_request_hash.sql` on live** (Blockers). Gates at 0927590: ruff, format 178, mypy 158,
   pytest 1364, alembic 0001→0017 + check; eslint, vitest 677, both builds. Merge into `agent-system` is the owner's.
+- 2026-11-16 (outside Stage 3, branch `fix/a080-a037-a081-a083-a087` from `agent-system` `0a9522c`): AUDIT.md A-080 (default
+  limit 300/min per client, really enforced), A-037 (new-password rule, SecLists 10k list, admin 12, Telegram on admin
+  lock), A-081, A-083, A-085, A-086, A-087 — fixed (verified); A-084 — fixed (reviewed); all re-reviewed closed. New nits
+  A-088–A-095 open. Gates at 95c98b5: ruff, format 185, mypy 165, pytest 1658 (+1 skip), alembic 0001→0017 + check, docker
+  build; eslint, vitest 682, both builds (also in node:22). Before deploying: see the A-080 entry in Blockers. Merge into
+  `agent-system` is the owner's.
 
 ## Stage 2 — Done
 Last session of Stage 2:
