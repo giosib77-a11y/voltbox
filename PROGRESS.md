@@ -748,13 +748,14 @@ Unverified (check before acting):
   no increase is accepted). All three empty → nothing to do.
 - **2026-11-15, owner — check on Render that the rate limiter sees real clients (AUDIT.md A-036), after deploying
   `fix/a063-a036-a046-a010-a011-a048-a065-a066`.** Each access line (`voltbox.access`) now carries `client`, a 12-char
-  pseudonym of the IP the limiter keys on; the raw IP is in no log line. From home Wi-Fi run
-  `curl -s https://<api-host>/api/v1/health/live` three times, then once from mobile data. In Render → API service → Logs,
-  find those `/api/v1/health/live` lines (Render's own health checks have their own `client` — skip them):
-  - the Wi-Fi lines show one value, the mobile line a different one, and neither shows up on almost every other user's line
-    → correct, nothing to do;
-  - the same value for both networks (or for nearly everyone) → `FORWARDED_ALLOW_IPS` on the API service is wrong and the
-    whole shop shares one limit (30 orders a day). Full procedure: `docs/deployment.md` §10, "rate limit-ის IP".
+  pseudonym of the IP the limiter keys on; the raw IP is in no log line. From home Wi-Fi and then from mobile data, twice
+  each, run `curl -s https://api.ipify.org; echo` and `curl -s https://<api-host>/api/v1/health/live` (ipify shows your own
+  public IP; the two networks must show different ones). In Render → API service → Logs, find those `/api/v1/health/live`
+  lines (Render's own health checks have their own `client` — skip them) and pair them with the IPs:
+  - `client` follows the IP (same within a network, different across the two) → correct, nothing to do;
+  - it does not (differs within one network, or is the same for two different IPs) → `FORWARDED_ALLOW_IPS` on the API
+    service is wrong and the whole shop shares one limit (30 orders a day). Full procedure: `docs/deployment.md` §10,
+    "rate limit-ის IP" (rewritten for A-091).
 - **2026-11-15, owner — switch the database connection to a verified certificate (AUDIT.md A-011, status: blocked
   (owner)).** Today the API uses the default `DB_SSL_MODE=require`: the traffic is encrypted, but the server is not
   authenticated. After this deploy, a line containing `not authenticated` in the logs says so. Steps (`docs/deployment.md`

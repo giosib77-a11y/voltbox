@@ -1254,7 +1254,10 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   შეცვალეთ და გაიმეორეთ“-ზე ტრიალებს — სჯობს საკუთარი საჯარო IP-ის შედარება (`curl -s https://api.ipify.org` ორჯერ);
   (2) `alembic history -i` / `history current:` env.py-ს უშვებს — „`history` (`-i`/`current`-ის გარეშე)“.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (reviewed) — §10 ერთ პროცედურად გადაიწერა: ორივე ქსელიდან ორ-ორჯერ ipify + `/health/live`,
+  ჯერ IP-ების შედარება, მერე `client`-ის „მიჰყვება IP-ს / არ მიჰყვება"; „სხვა ხაზები" და „VPN შეცვალეთ" წაიშალა.
+  §5: `history` (`-i`/`current`-ის გარეშე) — alembic-ის `command.history`-ის კოდით შემოწმდა (`run_env` მხოლოდ
+  `current`-ზე ან `-i`/`revision_environment`-ზე). PROGRESS.md-ის A-036 Blocker-იც ამას მიჰყვება. ცოცხალზე არ გაშვებულა.
 
 #### A-092 · nit · `local_url.py`-ის docstring არ ამბობს, რომ TLS-ის გამოტოვებაც მასზეა
 - **ფაილი:** `backend/app/db/local_url.py:1-13`, `:36-40`
@@ -1262,12 +1265,15 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   ამ ჰოსტებზე TLS-ს ჩუმად გამორთავს (`Settings.requires_ssl`, A-081).
 - **გამოსწორება:** docstring-ში ერთი წინადადება.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (reviewed) — module docstring-ში და `LOCAL_HOSTS`-თან: `requires_ssl = not is_local_database_url(...)`,
+  ასე რომ დამატებული ჰოსტი ბაზას TLS-ის გარეშე უკავშირდება ყველა გარემოში. კოდი უცვლელია.
 
 #### A-093 · nit · `test_storefront_blueprint.py`-ის კომენტარი მარკერებს „მისამართებს“ უწოდებს
 - **ფაილი:** `backend/tests/test_storefront_blueprint.py:11` — მესამე მარკერი `max-age=300`-ია; „temporary onrender.com values“.
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (reviewed) — backend-ის ტესტის კომენტარია, ამიტომ backend-dev-მა გაასწორა: „temporary onrender.com
+  values: the sitemap rewrite target, the connect-src address, and the HSTS max-age=300“ (`frontend/render.yaml`-თან
+  შედარებით). `TEMP_ONRENDER_MARKERS` და ასერტები უცვლელია.
 
 #### A-094 · nit (მფლობელის გამონაკლისი) · `/api/v1/health` ლიმიტის გარეშე ბაზას ეხება
 - **ფაილი:** `backend/app/api/v1/routes/health.py:56` (`SELECT 1`), `backend/app/core/rate_limit.py` (`HEALTH_PATHS`)
