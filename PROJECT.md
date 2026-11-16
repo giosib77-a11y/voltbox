@@ -343,6 +343,16 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
   the admin must cancel it first (cancellation returns stock) or adjust stock by hand. The
   confirmation dialog says this. What still holds: the stock ledger is never edited, so
   `inventory_movements` still adds up to the product's stock.
+- **A noisy-alpha WebP can go over the image decode budget** (owner, 2026-11-16, AUDIT.md A-103, status: accepted).
+  A 1601×1187 RGBA WebP whose alpha channel is noise peaks at 108–113 MiB on Linux during an upload, against
+  the 100 MiB `MAX_IMAGE_DECODE_BYTES` budget (measured in the production image; decode is 47–55 MiB, libwebp's
+  alpha encoder adds the rest). Accepted because it is not an OOM — two workers at that peak still fit the
+  512 MB instance (`config.py`'s arithmetic) — uploading is for administrators only, and a WebP cost strict
+  enough to cover it would refuse ordinary transparent product photos (a soft-edged cut-out of that size peaks
+  at 82.5 MiB). What still holds: `DECODE_COST["WEBP"] = (71 MiB, 16)`, `MAX_IMAGE_DECODE_BYTES` and the
+  per-worker `Semaphore(1)` are unchanged, so one upload at a time per worker and every JPEG/PNG path stays
+  inside the budget. Revisit if Render shows memory trouble on the API service (restarts, OOM kills, memory
+  near the limit around an image upload).
 
 ## Constraints
 - Budget: free tiers until launch (Render free, Supabase free — no scheduled
@@ -385,10 +395,11 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
   as one (AUDIT.md A-104). `MAX_IMAGE_DECODE_BYTES`, `DECODE_COST` and `Semaphore(1)` are unchanged. The bad-bytes
   list was measured on the Pillow in `.venv`; another Pillow version may raise another type for some other malformed
   chunk. **Not held:** a 1601×1187 RGBA WebP with noise in its alpha channel peaks 108–113 MiB on Linux, over the
-  budget (AUDIT.md A-103, owner's decision); the WEBP fixture of `TestDecodeMemoryIsBounded` is flat and cannot show it.
+  budget (AUDIT.md A-103; accepted by the owner, see Accepted Risks); the WEBP fixture of `TestDecodeMemoryIsBounded`
+  is flat and cannot show it.
 - How it changes: allowing animation again means deciding what a reduced one becomes (all frames re-encoded, with
   its own decode cost) before removing the check. Pricing WebP for noisy alpha (an unmeasured estimate of 1.0–1.5 MP;
-  to be measured first) or accepting the overrun is A-103.
+  to be measured first) was not chosen: the owner accepted the overrun (A-103, Accepted Risks).
 
 ### 2026-11-16 — Image strippers are allowlists; WebP method 5; order-number zone from settings (A-055–A-059, A-075, A-077–A-079)
 - Decision (all approved by the owner beforehand; values that were left to us are marked):

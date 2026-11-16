@@ -1377,7 +1377,8 @@ A-102 security-auditor-მა იპოვა და მფლობელის
   მკაცრია: 1601×1187 WebP აღარ მიიღება); (ბ) გადაჭარბების მიღება Accepted Risks-ში;
   (გ) re-encode `alpha_quality < 100`-ით ან `method=4`-ით — ჯერ გაზომვა.
 - **owner:** მფლობელი (შემდეგ backend-dev)
-- **status:** needs decision. კომენტარები და docstring-ები, რომლებიც სხვას ამბობდა, გასწორდა (`72361f8`); მნიშვნელობა უცვლელია.
+- **status:** accepted (მფლობელი, 2026-11-16, ვარიანტი ბ) — `PROJECT.md` Accepted Risks; კოდი და `DECODE_COST` უცვლელია.
+  კომენტარები და docstring-ები, რომლებიც სხვას ამბობდა, გასწორდა (`72361f8`).
 
 #### A-104 · nit · APNG ორი `acTL` chunk-ით Pillow-ს ერთ ფრეიმად ეჩვენება და `IMAGE_ANIMATED`-ს გვერდს უვლის (ჩვენამდეც ასე იყო)
 - **ფაილი:** `backend/app/services/storage.py` (`validate_image`-ის `n_frames`, `_PNG_KEPT`)
