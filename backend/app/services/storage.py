@@ -791,7 +791,7 @@ def shrink_to_fit(data: bytes, image_format: str) -> bytes:
             #   RGBA product m4 498 ms /  101.8 kB  m5 376 / 102.1   m6 3615 / 98.3
             # Across five alpha shapes m6 took 2.2-4.0 s where m4 and m5 took
             # 0.18-0.73 s: any partly transparent pixel makes m6 8-14x slower, for
-            # a file 2-3% smaller than m5's. The encoder runs under Semaphore(1),
+            # a file 2-4% smaller than m5's. The encoder runs under Semaphore(1),
             # so that is seconds in which every other upload waits. On a WebP with
             # no transparency m5 is 16% faster than m6 for a file 1.4% larger, so
             # m5 keeps nearly all of m6's size win and none of its worst case; m4

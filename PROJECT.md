@@ -358,6 +358,31 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-11-16 — Image strippers are allowlists; WebP method 5; order-number zone from settings (A-055–A-059, A-075, A-077–A-079)
+- Decision (all approved by the owner beforehand; values that were left to us are marked):
+  - Stored images keep only chunks known to be harmless (A-058): PNG — 18 decode/colour/pHYs/APNG chunks; WebP —
+    VP8X, VP8, VP8L, ALPH, ANIM, ANMF, ICCP, and inside an ANMF frame only ALPH/VP8/VP8L; JPEG — APP0 only with
+    `JFIF\0`, APP14 only with `Adobe`, APP2 only with `ICC_PROFILE\0`.
+  - The WebP walk refuses a file past `_MAX_WEBP_CHUNKS = 65_536`, one budget for the file and all its frames
+    (A-075, confirmed: 5 MiB of empty chunks cost 285 ms, now 33 ms). Value ours, same as `_MAX_JPEG_MARKERS`.
+  - WebP re-encodes with `method=5` (A-056, ours after measuring): `method=6` took 2.2–4.0 s on any WebP with
+    partial transparency vs 0.2–0.7 s, for a file 2–4% smaller, while holding the single decode slot.
+  - A PNG's EXIF is read from its chunk list wherever `eXIf` sits (A-057), so a late one rotates like an early one
+    and is costed the same way.
+  - A resized file whose byte-level walk fails is stored as its re-encode instead of refused (A-059).
+  - The order number's date uses `settings.store_timezone` as a bind parameter (A-077), and `Settings` refuses an
+    unknown `STORE_TIMEZONE` at startup (ours: the change had made a typo break every checkout).
+  - `import_products.py` refuses stock outside 0..`MAX_STOCK`, `lowStockThreshold` outside
+    0..`MAX_LOW_STOCK_THRESHOLD` and non-integers before any write (A-078). `MAX_STOCK`, not the admin form's
+    100 000, because `adjust_stock` enforces only `MAX_STOCK` and an import is a bulk restock (ours).
+- What still holds: `MAX_IMAGE_DECODE_BYTES`, `DECODE_COST` and `Semaphore(1)` are unchanged; the WEBP
+  `DECODE_COST` pair was measured with `method=6` on Linux and is now an unre-measured upper bound (Windows peaks
+  fell 90 → 58 MiB). The ICC profile is still kept whole, and so are an allowlisted APP0 JFIF / APP14 Adobe segment
+  (an inline JFIF thumbnail survives: AUDIT.md A-098). Timings are Windows-only. zoneinfo, not Postgres, validates
+  the zone name.
+- How it changes: re-measure WEBP on the production image before lowering its `DECODE_COST`; add a chunk to an
+  allowlist only with a reason it cannot identify anyone.
+
 ### 2026-11-16 — New-password rule, administrator minimum 12, Telegram on an administrator's lock (A-037, no TOTP)
 - Decision (owner-approved scope; details chosen in the fix): `_validate_password` (register, change-password,
   reset) refuses, besides < 8 characters, (1) a password on the common list, compared lower-cased, whole or with
@@ -440,8 +465,8 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
   bytes and restart markers inside a scan are copied in bulk and never turn the loop. 65 536 markers cost 27 ms;
   the 5 MiB hostile files that took 1.1 s (`FF 01`) and 1.5 s (`FF FF 00` in a scan) now stop in 35 / 84 ms.
   A lower cap (4 096) would save nothing worth having and leaves less room for unusual phone files.
-- What still holds: only Pillow-made files were measured, not phone files with MPO or extended XMP; the WEBP
-  stripper has no chunk cap (AUDIT.md A-075, unconfirmed).
+- What still holds: only Pillow-made files were measured, not phone files with MPO or extended XMP. (The WEBP
+  stripper's missing cap, A-075, was confirmed and closed 2026-11-16: `_MAX_WEBP_CHUNKS`.)
 - How it changes: lower the constant if a measurement on the production image shows the cap costing more than
   ~100 ms.
 
@@ -469,8 +494,8 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
   never refused); initial stock ≤ `MAX_STOCK_ADJUSTMENT`, `low_stock_threshold` ≤ 100 000, category `position`
   ≤ 10 000 (400 `VALIDATION_ERROR`). All owner-approved. No database CHECK and no migration for the stock total
   (orchestrator's call: the owner approved only 0017's `request_hash`, and `adjust_stock` is the only writer).
-  What still holds: `scripts/import_products.py` does not pre-check these bounds in `validate()`/`--dry-run`
-  (A-078); the admin forms resend `position`/`lowStockThreshold` on every save, so a live row already above a
+  What still holds: `scripts/import_products.py` pre-checks the stock and threshold bounds since A-078
+  (2026-11-16) but not `reviewsCount` (AUDIT.md A-099); the admin forms resend `position`/`lowStockThreshold` on every save, so a live row already above a
   bound is not saveable from the panel until that value is lowered (PROGRESS.md Blockers has the check).
 - Zero stock change: the owner approved "zero forbidden". It already was — `adjust_stock` answers 400
   `EMPTY_ADJUSTMENT`, which has ka/en text and a test — so it keeps that code instead of becoming
@@ -532,9 +557,10 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
   JPEG 30.7, PNG 20.8 against the 100 MiB budget (`TestDecodeMemoryIsBoundedWhenOnlyTurning`); the source
   bitmap is released before encoding, without which the WebP case measured 97.7 MiB.
 - What still holds: a file with nothing to strip is stored byte for byte; the format is preserved; a file
-  whose container cannot be walked is refused with `INVALID_IMAGE` (never decoded instead — that path is
-  unbudgeted), so a truncated small JPEG without EOI, once stored, is now refused. Orientation is read from
-  EXIF only, header-only: a PNG whose `eXIf` follows the pixel data reads as upright (AUDIT.md A-057).
+  that fits, is upright and whose container cannot be walked is refused with `INVALID_IMAGE` (never decoded
+  instead — that path is unbudgeted), so a truncated small JPEG without EOI, once stored, is now refused. Since
+  A-059 (2026-11-16) a resized or turned file whose walk fails is stored as its clean re-encode instead.
+  Orientation is read from EXIF only, header-only; since A-057 a PNG's `eXIf` counts wherever it sits.
 
 ### 2026-11-12 — Upload decoding runs in a thread, one at a time per worker (A-032)
 - Decision: `admin_image.prepare_upload` runs `validate_image` + `shrink_to_fit` in one `asyncio.to_thread`
@@ -545,7 +571,8 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
   photo-like 2800×2100 RGBA PNG, for a file about 10% larger.
 - What still holds: one decode per worker process, so the memory ceiling stays `MAX_IMAGE_DECODE_BYTES` per
   process and `WEB_CONCURRENCY` times that per deployment; `DECODE_COST` and `TestDecodeMemoryIsBounded`
-  unchanged. JPEG keeps `optimize=True` (0.2 s), WebP keeps `method=6` (its encode time is not measured: AUDIT.md A-056).
+  unchanged. JPEG keeps `optimize=True` (0.2 s). WebP moved from `method=6` to `method=5` on 2026-11-16 (A-056,
+  measured; see the entry of that date).
 - How to change: raising the semaphore multiplies the memory ceiling by its value.
 
 ### 2026-11-12 — `/auth/refresh` has its own limit, 30/min (A-031)

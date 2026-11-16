@@ -768,7 +768,7 @@ class TestAnUploadIsStoredAtASaneSize:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """libwebp's `method=6` took 2.2-4.0 s on a 1600px WebP with partly
-        transparent pixels, against 0.2-0.7 s for methods 4 and 5, for a file 2-3%
+        transparent pixels, against 0.2-0.7 s for methods 4 and 5, for a file 2-4%
         smaller; the encoder runs under Semaphore(1), so every other upload waited
         that long. The measurement is in `shrink_to_fit`."""
         big = image_bytes("WEBP", (1700, 1700), mode="RGBA", lossless=True, method=0)
