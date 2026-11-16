@@ -544,7 +544,9 @@ class TestTheLimits:
         # Says when to come back: the rest of the hour's window, whole seconds.
         retry_after = answers[-1].headers["Retry-After"]
         assert retry_after.isdigit()
-        assert 1 <= int(retry_after) <= 3600
+        # Not merely "between 1 and 3600": a lookup that misses the address's
+        # window answers 1, and that must not pass.
+        assert 3590 <= int(retry_after) <= 3600
         assert other.status_code == 200
         # Counted on the address in any spelling.
         again = await _forgot(client, address.upper())

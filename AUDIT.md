@@ -1245,7 +1245,8 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   `scope` შეიცვლება, ფუნქცია `1`-ს დააბრუნებს („სცადე 1 წამში“, ფანჯარა კი საათია) და ტესტები გაივლის.
 - **გამოსწორება:** ორივე ადგილას `>= 3590`.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — ორივე `3590 <= x <= 3600`. mutation (`_address_key(...) + "MUTATION"` lookup-ში →
+  ფუნქცია 1-ს აბრუნებს): ორივე შეცვლილი ტესტი (reset-ისა — known/unknown) `assert 3590 <= 1`-ზე ვარდება; mutation დაბრუნდა.
 
 #### A-091 · nit · docs/deployment.md: ორი წვრილმანი A-084-ის შემდეგ
 - **ფაილი:** `docs/deployment.md` (§10 ≈819-824; §5 ≈640-642)

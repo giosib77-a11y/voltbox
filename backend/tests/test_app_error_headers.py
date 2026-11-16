@@ -109,10 +109,12 @@ class TestSecondsUntilAnAddressResets:
     def test_the_spelling_of_the_address_does_not_matter(self) -> None:
         hit_per_address("3/hour", scope="test", address=ADDRESS)
 
-        assert (
-            seconds_until_address_resets("3/hour", scope="test", address=ADDRESS.upper() + " ")
-            <= 3600
+        seconds = seconds_until_address_resets(
+            "3/hour", scope="test", address=ADDRESS.upper() + " "
         )
+
+        # The hit made in the plain spelling is found: a missed lookup would say 1.
+        assert 3590 <= seconds <= 3600
 
     def test_a_window_that_is_over_still_says_one_second(
         self, monkeypatch: pytest.MonkeyPatch
