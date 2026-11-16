@@ -71,7 +71,27 @@ async function mountHome(categories) {
     { initialEntries: ['/'] },
   );
   render(<RouterProvider router={router} />);
+  // The mocked answers are already resolved, so they land in the microtasks
+  // right after render, before the caller's first findBy has switched act off.
+  await pageSettled(api);
   return { router, api };
+}
+
+/**
+ * Until every request the page has made so far has been answered and drawn.
+ *
+ * The hero is on screen before the sections below it have their data; a test
+ * that ends in between sees those answers land outside act(). The answers are
+ * the mocked promises themselves, so this waits for exactly them, inside act.
+ * The extra macrotask lets the `.then().catch().finally()` chains behind them
+ * (useAsync) run to their last state update before act closes.
+ */
+async function pageSettled(api) {
+  await act(async () => {
+    const spies = [api.getCategories, api.getHomeSections, api.getDeliveryRules, api.getProducts];
+    await Promise.all(spies.flatMap((spy) => spy.mock.results.map((result) => result.value)));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 }
 
 /** The links inside the hero - the section with the page's only h1. */
@@ -83,7 +103,7 @@ async function heroLinks() {
 describe('the home hero buttons', () => {
   it('each opens a category that exists after Phones is deleted', async () => {
     const user = userEvent.setup();
-    const { router } = await mountHome(AFTER_PHONES_DELETED);
+    const { router, api } = await mountHome(AFTER_PHONES_DELETED);
 
     // The owner's first two top-level categories, in the owner's order; the
     // subcategory between them is not one of them
@@ -101,6 +121,7 @@ describe('the home hero buttons', () => {
       ).toBeInTheDocument();
       expect(screen.queryByText('კატეგორია ვერ მოიძებნა')).toBeNull();
       await act(() => router.navigate('/'));
+      await pageSettled(api);
     }
   });
 
@@ -109,7 +130,7 @@ describe('the home hero buttons', () => {
 
     await screen.findByRole('heading', { level: 1 });
     // Checked after the list has arrived, not while it is still loading
-    await act(() => api.getCategories.mock.results[0].value);
+    await pageSettled(api);
     expect(await heroLinks()).toEqual([]);
   });
 });

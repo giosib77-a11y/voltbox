@@ -8,6 +8,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import AdminLayout from './AdminLayout.jsx';
@@ -37,7 +38,7 @@ describe('AdminLayout', () => {
       </ToastProvider>,
     );
 
-    screen.getByRole('button', { name: 'go' }).click();
+    await userEvent.click(screen.getByRole('button', { name: 'go' }));
 
     expect(await screen.findByText('შეკვეთა გადატანილია სანაგვეში')).toBeInTheDocument();
   });

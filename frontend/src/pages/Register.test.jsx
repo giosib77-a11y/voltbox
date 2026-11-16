@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 
 vi.mock('virtual:api-impl', () => import('../services/httpApi.js'));
 
@@ -20,6 +20,7 @@ vi.mock('../hooks/useAuth.js', () => ({
 
 import Register from './Register.jsx';
 import { ToastProvider } from '../context/ToastContext.jsx';
+import ToastViewport from '../components/common/Toast.jsx';
 import { ConflictError, ValidationError } from '../services/errors.js';
 import { t } from '../i18n/index.js';
 
@@ -96,5 +97,178 @@ describe('a password the server refuses at registration', () => {
       </ToastProvider>,
     );
     expect(screen.getByText(/გამეორება და მიმდევრობა არ შეიძლება/)).toBeInTheDocument();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Validation, redirect and a refusal that belongs to no field                 */
+/* -------------------------------------------------------------------------- */
+
+function Where() {
+  const { pathname, search } = useLocation();
+  return <p data-testid="where">{`${pathname}${search}`}</p>;
+}
+
+function renderAt(url) {
+  return render(
+    <ToastProvider>
+      <MemoryRouter initialEntries={[url]}>
+        <Where />
+        <Routes>
+          <Route path="/register" element={<Register />} />
+          <Route path="*" element={<p>elsewhere</p>} />
+        </Routes>
+      </MemoryRouter>
+      <ToastViewport />
+    </ToastProvider>,
+  );
+}
+
+const field = (key) => screen.getByLabelText(t(key), { exact: false, selector: 'input' });
+const submitButton = () => screen.getByRole('button', { name: t('auth.createAccount') });
+
+async function fill(user, { password = 'sakartvelo', confirm = password } = {}) {
+  await user.type(field('fields.firstName'), 'Nino');
+  await user.type(field('fields.lastName'), 'Beridze');
+  await user.type(field('fields.email'), 'nino@example.ge');
+  await user.type(passwordField(), password);
+  if (confirm) await user.type(field('fields.repeatPassword'), confirm);
+}
+
+describe('client-side validation', () => {
+  it('shows a message at every empty field and does not call the API', async () => {
+    const user = userEvent.setup();
+    renderAt('/register');
+
+    await user.click(submitButton());
+
+    expect(register).not.toHaveBeenCalled();
+    expect(screen.getByText(t('validation.firstName'))).toBeInTheDocument();
+    expect(screen.getByText(t('validation.lastName'))).toBeInTheDocument();
+    // email, password and the repeat all say "required"
+    expect(screen.getAllByText(t('validation.required'))).toHaveLength(3);
+    expect(field('fields.firstName')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('refuses a malformed email', async () => {
+    const user = userEvent.setup();
+    renderAt('/register');
+    await fill(user);
+    await user.clear(field('fields.email'));
+    await user.type(field('fields.email'), 'not-an-email');
+
+    await user.click(submitButton());
+
+    expect(register).not.toHaveBeenCalled();
+    expect(screen.getByText(t('validation.email'))).toBeInTheDocument();
+  });
+
+  it('refuses a password shorter than the minimum', async () => {
+    const user = userEvent.setup();
+    renderAt('/register');
+    await fill(user, { password: 'short' });
+
+    await user.click(submitButton());
+
+    expect(register).not.toHaveBeenCalled();
+    expect(screen.getByText(t('validation.password', { count: 8 }))).toBeInTheDocument();
+  });
+
+  it('refuses a repeat that differs from the password', async () => {
+    const user = userEvent.setup();
+    renderAt('/register');
+    await fill(user, { password: 'sakartvelo', confirm: 'sakartvelO' });
+
+    await user.click(submitButton());
+
+    expect(register).not.toHaveBeenCalled();
+    expect(screen.getByText(t('validation.passwordMismatch'))).toBeInTheDocument();
+  });
+
+  it('clears the mismatch once the password is changed to match', async () => {
+    const user = userEvent.setup();
+    renderAt('/register');
+    await fill(user, { password: 'sakartvelo', confirm: 'sakartvelO' });
+    await user.click(submitButton());
+    expect(screen.getByText(t('validation.passwordMismatch'))).toBeInTheDocument();
+
+    await user.clear(passwordField());
+    await user.type(passwordField(), 'sakartvelO');
+
+    expect(screen.queryByText(t('validation.passwordMismatch'))).not.toBeInTheDocument();
+  });
+});
+
+describe('a successful registration', () => {
+  it('sends the form values, says so, and goes to the orders page by default', async () => {
+    register.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderAt('/register');
+    await fill(user);
+
+    await user.click(submitButton());
+
+    expect(await screen.findByText('elsewhere')).toBeInTheDocument();
+    expect(screen.getByTestId('where')).toHaveTextContent('/account/orders');
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(register.mock.calls[0][0]).toMatchObject({
+      firstName: 'Nino',
+      lastName: 'Beridze',
+      email: 'nino@example.ge',
+      password: 'sakartvelo',
+    });
+    expect(screen.getByText(t('auth.registered'))).toBeInTheDocument();
+  });
+
+  it('follows a safe redirect parameter', async () => {
+    register.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderAt('/register?redirect=%2Fcheckout');
+    await fill(user);
+
+    await user.click(submitButton());
+
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(/^\/checkout$/));
+  });
+
+  it.each([
+    ['an absolute external URL', 'https://evil.example/steal'],
+    ['a protocol-relative URL', '//evil.example'],
+    ['a backslash variant', '/\\evil.example'],
+  ])('does not follow %s', async (_name, target) => {
+    register.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderAt(`/register?redirect=${encodeURIComponent(target)}`);
+    await fill(user);
+
+    await user.click(submitButton());
+
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(/^\/account\/orders$/));
+  });
+});
+
+describe('a refusal that belongs to no field', () => {
+  it('shows the server message in a toast and stays on the form', async () => {
+    register.mockRejectedValue(new Error('Server is on fire'));
+    const user = userEvent.setup();
+    renderAt('/register');
+    await fill(user);
+
+    await user.click(submitButton());
+
+    expect(await screen.findByText('Server is on fire')).toBeInTheDocument();
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/register$/);
+    expect(screen.queryByText(t('auth.registered'))).not.toBeInTheDocument();
+  });
+
+  it('falls back to the generic text when the error has no message', async () => {
+    register.mockRejectedValue({});
+    const user = userEvent.setup();
+    renderAt('/register');
+    await fill(user);
+
+    await user.click(submitButton());
+
+    expect(await screen.findByText(t('auth.registerFailed'))).toBeInTheDocument();
   });
 });

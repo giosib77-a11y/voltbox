@@ -21,7 +21,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('virtual:api-impl', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -179,7 +179,7 @@ describe('CartAccountSync', () => {
     renderSync(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
 
-    screen.getByText('add').click();
+    fireEvent.click(screen.getByText('add'));
 
     // After the debounce, so allow for it rather than faking the clock.
     await waitFor(
@@ -195,7 +195,7 @@ describe('CartAccountSync', () => {
     const { rerender } = renderSync(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
 
-    screen.getByText('add').click();
+    fireEvent.click(screen.getByText('add'));
     // Waiting for the save rather than for the item to appear: a save that has
     // come back is the whole condition for emptying anything.
     await waitFor(
@@ -229,7 +229,7 @@ describe('CartAccountSync', () => {
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('mergeCart'), expect.any(Error)),
     );
 
-    screen.getByText('add').click();
+    fireEvent.click(screen.getByText('add'));
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
     // Saving stays off after a failed merge: PUT /cart replaces, and this
     // browser has not read what it would be replacing.
@@ -250,13 +250,13 @@ describe('CartAccountSync', () => {
     // the failure below is what takes that back. (The merge's own result is
     // not sent back, so this save is a change made here.)
     await waitFor(() => expect(localStorage.getItem('cart-unsynced:v1')).toBeNull());
-    screen.getByText('add').click();
+    fireEvent.click(screen.getByText('add'));
     await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(1), { timeout: 2000 });
     await api.saveCart.mock.results[0].value;
 
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     api.saveCart.mockRejectedValueOnce(new Error('the server is not there'));
-    screen.getByText('add').click();
+    fireEvent.click(screen.getByText('add'));
     await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(2), { timeout: 2000 });
     await expect(api.saveCart.mock.results[1].value).rejects.toThrow();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('saveCart'), expect.any(Error));
@@ -311,7 +311,7 @@ describe('a session that ended', () => {
     api.mergeCart.mockRejectedValueOnce(new Error('the server is not there'));
     const { rerender } = renderSync(U1);
     await waitFor(() => expect(warn).toHaveBeenCalled());
-    screen.getByText('add').click();
+    fireEvent.click(screen.getByText('add'));
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
 
     authValue = { user: null, initializing: false };
@@ -347,10 +347,10 @@ describe('emptying the cart', () => {
     renderClear(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
 
-    screen.getByText('add').click();
+    fireEvent.click(screen.getByText('add'));
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
 
-    screen.getByText('clear').click();
+    fireEvent.click(screen.getByText('clear'));
 
     await waitFor(() => expect(api.clearCart).toHaveBeenCalledTimes(1));
   });
@@ -359,9 +359,9 @@ describe('emptying the cart', () => {
     authValue = { user: null, initializing: false };
     renderClear();
 
-    screen.getByText('add').click();
+    fireEvent.click(screen.getByText('add'));
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
-    screen.getByText('clear').click();
+    fireEvent.click(screen.getByText('clear'));
 
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('0'));
     expect(api.clearCart).not.toHaveBeenCalled();
@@ -400,7 +400,7 @@ describe('lines that came from the account', () => {
     renderRestored();
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
 
-    screen.getByText('add').click();
+    fireEvent.click(screen.getByText('add'));
 
     await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(api.saveCart).toHaveBeenCalledWith([expect.objectContaining({ productId: 'p1', qty: 4 })]);
@@ -419,7 +419,7 @@ describe('lines that came from the account', () => {
       release([apiLine('p1', 2)]);
       await Promise.resolve();
       await Promise.resolve();
-      screen.getByText('add').click();
+      fireEvent.click(screen.getByText('add'));
     });
 
     await waitFor(() => expect(api.saveCart).toHaveBeenCalled(), { timeout: 2000 });
@@ -479,7 +479,7 @@ describe('a session restored on page load', () => {
     await waitFor(() => expect(localStorage.getItem(UNSYNCED)).toBeNull());
 
     api.saveCart.mockRejectedValueOnce(new Error('offline'));
-    screen.getByText('add').click();
+    fireEvent.click(screen.getByText('add'));
     await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(1), { timeout: 2000 });
     await expect(api.saveCart.mock.results[0].value).rejects.toThrow();
     expect(warn).toHaveBeenCalled();
@@ -532,7 +532,7 @@ describe('a session restored on page load', () => {
     const { rerender } = renderSync(U1);
     await waitFor(() => expect(api.mergeCart).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(localStorage.getItem(UNSYNCED)).toBeNull());
-    screen.getByText('add').click();
+    fireEvent.click(screen.getByText('add'));
     await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(1), { timeout: 2000 });
     await api.saveCart.mock.results[0].value;
 

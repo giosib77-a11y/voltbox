@@ -21,7 +21,7 @@ vi.mock('virtual:api-impl', () => import('../services/httpApi.js'));
 
 import Checkout from './Checkout.jsx';
 import * as api from '../services/api.js';
-import { forgetDeliveryRules } from '../hooks/useDeliveryRules.js';
+import { forgetDeliveryRules, loadDeliveryRules } from '../hooks/useDeliveryRules.js';
 import { ToastProvider } from '../context/ToastContext.jsx';
 import ToastViewport from '../components/common/Toast.jsx';
 
@@ -93,6 +93,17 @@ const renderPage = () =>
     </ToastProvider>,
   );
 
+/**
+ * Until GET /delivery has answered and the page has drawn the answer. The page
+ * asks for it on every render, even with nothing to show for it yet; a test
+ * that ends first sees the answer land outside act().
+ */
+async function rulesLoaded() {
+  await act(async () => {
+    await loadDeliveryRules().catch(() => {});
+  });
+}
+
 const submitButton = () => screen.getByRole('button', { name: 'შეკვეთის დადასტურება' });
 
 /**
@@ -125,9 +136,10 @@ beforeEach(() => {
 });
 
 describe('the checkout form', () => {
-  it('shows an empty basket instead of a form nobody can submit', () => {
+  it('shows an empty basket instead of a form nobody can submit', async () => {
     cartValue = cart([]);
     renderPage();
+    await rulesLoaded();
 
     expect(screen.getByText('კალათა ცარიელია')).toBeInTheDocument();
     expect(screen.queryByLabelText(/^სახელი/)).not.toBeInTheDocument();
@@ -579,6 +591,7 @@ describe('the delivery fee before ordering', () => {
 describe('payment', () => {
   it('offers cash on delivery and not card to the courier', async () => {
     renderPage();
+    await rulesLoaded();
 
     expect(screen.getByRole('radio', { name: 'ნაღდი ანგარიშსწორება მიღებისას' })).toBeChecked();
     expect(screen.queryByRole('radio', { name: 'ბარათით კურიერთან' })).not.toBeInTheDocument();
