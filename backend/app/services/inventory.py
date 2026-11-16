@@ -71,10 +71,12 @@ async def adjust_stock(
     # Every increase is held to the ceiling, whatever its reason - an order
     # cancellation's restock included. What still holds: a decrease is never
     # refused for the ceiling, so a row already above it (written before the
-    # limit existed) can still be sold down; and an order cancellation, at most
-    # 20 x 10 units, is refused only if an admin has restocked the product to
-    # within that of the ceiling while the order was open - the admin then lowers
-    # the stock and cancels again, nothing is half-applied (one transaction).
+    # limit existed) can still be sold down; and an order cancellation restocks
+    # at most MAX_LINE_QUANTITY (10) units of one product - a product sent on two
+    # lines is merged and the sum is held to that same 10 at checkout - so it is
+    # refused only if an admin has restocked the product to within 10 units of the
+    # ceiling while the order was open - the admin then lowers the stock and
+    # cancels again, nothing is half-applied (one transaction).
     if change > 0 and new_stock > MAX_STOCK:
         raise ValidationError(
             f"Stock cannot exceed {MAX_STOCK} units",

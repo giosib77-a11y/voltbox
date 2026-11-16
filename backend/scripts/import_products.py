@@ -34,7 +34,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.db.models import REASON_INITIAL, Brand, Category, Product, ProductImage
 from app.db.session import SessionLocal, engine
-from app.services.inventory import adjust_stock
+from app.schemas.admin_product import MAX_LOW_STOCK_THRESHOLD
+from app.services.inventory import MAX_STOCK, adjust_stock
 from app.services.search import build_search_text
 
 REQUIRED = ("slug", "name", "category", "brand", "price")
@@ -60,6 +61,28 @@ def to_decimal(value: Any, field: str, slug: str) -> Decimal | None:
         raise ProductImportError(f"{slug}: `{field}` არ არის რიცხვი: {value!r}") from exc
 
 
+def to_int(value: Any, field: str, slug: str) -> int:
+    """A whole number from the file, or a ProductImportError naming the field.
+
+    Accepted: an int, an integral float (`5.0`) and a string of digits (`"5"`).
+    Refused: `true`/`false` (a bool is an int in Python, so `int(True)` would
+    silently import one unit - in a stock column that is a typo, not a number),
+    a fraction (`1.5` would be truncated without a word), `null` and text.
+    """
+    if isinstance(value, bool):
+        raise ProductImportError(f"{slug}: `{field}` არ არის მთელი რიცხვი: {value!r}")
+    try:
+        if isinstance(value, float):
+            if not value.is_integer():
+                raise ValueError(value)
+            return int(value)
+        if isinstance(value, (int, str)):
+            return int(value)
+    except ValueError as exc:
+        raise ProductImportError(f"{slug}: `{field}` არ არის მთელი რიცხვი: {value!r}") from exc
+    raise ProductImportError(f"{slug}: `{field}` არ არის მთელი რიცხვი: {value!r}")
+
+
 def validate(row: dict[str, Any], index: int) -> None:
     slug = row.get("slug") or f"#{index}"
     for field in REQUIRED:
@@ -75,8 +98,24 @@ def validate(row: dict[str, Any], index: int) -> None:
         raise ProductImportError(
             f"{slug}: `oldPrice` ({old_price}) უნდა იყოს `price`-ზე ({price}) მეტი"
         )
-    if int(row.get("stock", 0)) < 0:
-        raise ProductImportError(f"{slug}: `stock` უარყოფითია")
+    # The import sets an absolute stock and writes the difference through
+    # `adjust_stock`, which refuses an increase past MAX_STOCK. So the ceiling
+    # here is MAX_STOCK, not MAX_STOCK_ADJUSTMENT: that one only caps the admin
+    # form's initial stock and one manual change, `adjust_stock` does not apply
+    # it, and an import is a bulk restock tool that can legitimately set a
+    # larger number. Checked here so a dry-run says what a real run would do,
+    # instead of the real run ending on a raw STOCK_LIMIT_EXCEEDED traceback.
+    stock = to_int(row.get("stock", 0), "stock", slug)
+    if not 0 <= stock <= MAX_STOCK:
+        raise ProductImportError(f"{slug}: `stock` ({stock}) უნდა იყოს 0-დან {MAX_STOCK}-მდე")
+    # products.low_stock_threshold is an int4; without the cap 3 000 000 000
+    # passes the dry-run and fails at flush.
+    threshold = to_int(row.get("lowStockThreshold", 3), "lowStockThreshold", slug)
+    if not 0 <= threshold <= MAX_LOW_STOCK_THRESHOLD:
+        raise ProductImportError(
+            f"{slug}: `lowStockThreshold` ({threshold}) უნდა იყოს 0-დან "
+            f"{MAX_LOW_STOCK_THRESHOLD}-მდე"
+        )
     rating = to_decimal(row.get("rating", 0), "rating", slug) or Decimal("0")
     if not (0 <= rating <= 5):
         raise ProductImportError(f"{slug}: `rating` უნდა იყოს 0-დან 5-მდე")
@@ -127,7 +166,7 @@ async def import_one(db: AsyncSession, row: dict[str, Any], *, allow_create_bran
     product.brand_id = brand.id
     product.price = to_decimal(row["price"], "price", slug) or Decimal("0")
     product.old_price = to_decimal(row.get("oldPrice"), "oldPrice", slug)
-    product.low_stock_threshold = int(row.get("lowStockThreshold", 3))
+    product.low_stock_threshold = to_int(row.get("lowStockThreshold", 3), "lowStockThreshold", slug)
     product.specs = dict(row.get("specs", {}))
     product.tags = list(row.get("tags", []))
     product.rating = to_decimal(row.get("rating", 0), "rating", slug) or Decimal("0")
@@ -157,7 +196,7 @@ async def import_one(db: AsyncSession, row: dict[str, Any], *, allow_create_bran
     # მარაგი ერთადერთი გზით — `adjust_stock`-ით, რომ ledger სრული იყოს.
     # სხვაობას ვწერთ და არა აბსოლუტურ მნიშვნელობას: ხელახლა იმპორტისას
     # კორექტირება ჩანაწერად აისახება და არა ჩუმ გადაწერად.
-    desired = int(row.get("stock", 0))
+    desired = to_int(row.get("stock", 0), "stock", slug)
     delta = desired - product.stock
     if delta:
         await adjust_stock(db, product.id, delta, REASON_INITIAL)

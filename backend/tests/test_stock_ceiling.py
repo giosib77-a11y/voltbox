@@ -3,16 +3,21 @@
 What it covers: `adjust_stock` refuses an increase that would take `products.stock`
 past MAX_STOCK (1 000 000) with a 400 STOCK_LIMIT_EXCEEDED, writing nothing; the
 ceiling itself is allowed; a decrease is never refused for it, so a row already
-above it can be sold down; and an order cancellation's restock is held to it too.
+above it can be sold down; an order cancellation's restock is held to it too; and
+so is the opening stock of a new product (service level - the admin schema caps
+that at 100 000, so over the API the ceiling is out of reach).
 
 Why it exists: products.stock is an int4 and one manual change is +-100 000, so
 about 21 475 additions overflowed into a 500.
 """
 
+from decimal import Decimal
+
 import httpx
 import pytest
 from app.core.errors import ValidationError
 from app.db.models import (
+    REASON_INITIAL,
     REASON_MANUAL,
     REASON_ORDER_PLACED,
     REASON_RESTOCK,
@@ -20,8 +25,8 @@ from app.db.models import (
     InventoryMovement,
     Product,
 )
+from app.services import admin_product, order_status
 from app.services import order as order_service
-from app.services import order_status
 from app.services.inventory import MAX_STOCK, adjust_stock
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -128,6 +133,17 @@ async def test_an_increase_from_above_the_ceiling_is_refused(db: AsyncSession) -
 
 
 async def test_checkout_below_the_ceiling_is_unaffected(db: AsyncSession) -> None:
+    product = await _product(db, stock=MAX_STOCK - 5)
+
+    await order_service.create_order(
+        db, items=[(product.id, 3)], customer=CUSTOMER, payment_method="cash", user=None
+    )
+
+    assert await _stock(db, product) == MAX_STOCK - 8
+
+
+async def test_checkout_from_above_the_ceiling_still_sells_down(db: AsyncSession) -> None:
+    """A row written before the limit existed: a sale is a decrease, never refused."""
     product = await _product(db, stock=MAX_STOCK + 500)
 
     await order_service.create_order(
@@ -135,6 +151,64 @@ async def test_checkout_below_the_ceiling_is_unaffected(db: AsyncSession) -> Non
     )
 
     assert await _stock(db, product) == MAX_STOCK + 497
+
+
+async def test_the_create_path_starts_at_zero_and_ledgers_the_opening_stock(
+    db: AsyncSession,
+) -> None:
+    """Creating a product moves its opening stock in through `adjust_stock`, so the
+    ceiling is enforced there too. The admin schema caps the initial stock at
+    MAX_STOCK_ADJUSTMENT (100 000), far below MAX_STOCK, so over the API the ceiling
+    is unreachable; this calls the service directly to show it holds on its own."""
+    category = await make_category(db, slug="ceiling-create")
+    brand = await make_brand(db, "CeilingCreateBrand")
+
+    product = await admin_product.create_product(
+        db,
+        {
+            "name": "Full shelf",
+            "slug": "full-shelf",
+            "category_id": category.id,
+            "brand_id": brand.id,
+            "price": Decimal("10.00"),
+            "stock": MAX_STOCK,
+        },
+        actor_id=None,
+    )
+
+    assert await _stock(db, product) == MAX_STOCK
+    assert await _movement_count(db, product) == 1
+    reason = await db.scalar(
+        select(InventoryMovement.reason).where(InventoryMovement.product_id == product.id)
+    )
+    assert reason == REASON_INITIAL
+
+
+async def test_the_create_path_refuses_an_opening_stock_past_the_ceiling(
+    db: AsyncSession,
+) -> None:
+    category = await make_category(db, slug="ceiling-create-over")
+    brand = await make_brand(db, "CeilingCreateOverBrand")
+
+    with pytest.raises(ValidationError) as caught:
+        await admin_product.create_product(
+            db,
+            {
+                "name": "Overfull shelf",
+                "slug": "overfull-shelf",
+                "category_id": category.id,
+                "brand_id": brand.id,
+                "price": Decimal("10.00"),
+                "stock": MAX_STOCK + 1,
+            },
+            actor_id=None,
+        )
+
+    assert caught.value.code == "STOCK_LIMIT_EXCEEDED"
+    assert caught.value.details["room"] == MAX_STOCK
+    # The product row was flushed before the refusal; the request's transaction
+    # rolls it back, and no movement was written.
+    assert (await db.scalar(select(func.count()).select_from(InventoryMovement)) or 0) == 0
 
 
 async def test_cancelling_an_order_is_held_to_the_ceiling_and_stays_whole(
