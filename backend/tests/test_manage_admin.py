@@ -18,7 +18,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-from app.core.security import hash_refresh_token
+from app.core.security import hash_refresh_token, verify_password
 from app.db.models import ROLE_ADMIN, ROLE_CUSTOMER, RefreshToken, User
 from app.schemas.auth import LoginRequest
 from pydantic import ValidationError
@@ -129,6 +129,57 @@ async def test_valid_emails_still_promote_and_demote(db: AsyncSession) -> None:
     await SCRIPT.demote_user("staff@example.com")
     await db.refresh(user)
     assert user.role == ROLE_CUSTOMER
+
+
+@pytest.mark.parametrize(
+    ("password", "message"),
+    [
+        ("k7#Rm2!pQzW", "მინიმუმ 12"),  # eleven: one short of an administrator's minimum
+        ("k7#Rm2!", "მინიმუმ 12"),
+        ("aaaaaaaaaaaa", "მიმდევრობა"),
+        ("123456789012", "მიმდევრობა"),
+        ("qwertyuiopas", "მიმდევრობა"),
+        ("Password123!", "გავრცელებულია"),
+        ("monkey2024!!", "გავრცელებულია"),
+    ],
+)
+async def test_create_admin_refuses_a_password_the_api_would_refuse_an_admin(
+    db: AsyncSession, monkeypatch: pytest.MonkeyPatch, password: str, message: str
+) -> None:
+    monkeypatch.setenv(SCRIPT.PASSWORD_ENV, password)
+
+    with pytest.raises(SystemExit, match=message):
+        await SCRIPT.create_admin("boss@example.com", "Nino", "K")
+
+    assert await _users(db) == 0
+
+
+async def test_create_admin_takes_exactly_twelve_characters(
+    db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(SCRIPT.PASSWORD_ENV, "k7#Rm2!pQzWx")
+
+    await SCRIPT.create_admin("boss@example.com", "Nino", "K")
+
+    created = await db.scalar(select(User).where(User.email == "boss@example.com"))
+    assert created is not None
+    assert created.role == ROLE_ADMIN
+    assert verify_password("k7#Rm2!pQzWx", created.password_hash)
+
+
+async def test_promote_user_leaves_the_existing_password_alone(
+    db: AsyncSession, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Promotion sets no password, so the rule for a new one has nothing to check:
+    the old, weaker one keeps working until its owner changes it - and is told so."""
+    user = await make_user(db, email="staff@example.com", password="abcd1234")
+
+    await SCRIPT.promote_user("staff@example.com")
+
+    await db.refresh(user)
+    assert user.role == ROLE_ADMIN
+    assert verify_password("abcd1234", user.password_hash)
+    assert "პაროლი უცვლელია" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(

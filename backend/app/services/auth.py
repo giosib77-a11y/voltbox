@@ -8,8 +8,10 @@ refresh-ტოკენები rotation-on-use პრინციპით მ
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from math import ceil
 
 from sqlalchemy import ColumnElement, String, case, delete, func, literal, or_, select, update
@@ -20,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.errors import AppError, ConflictError, UnauthorizedError, ValidationError
 from app.core.security import (
+    MIN_ADMIN_PASSWORD_LENGTH,
     PASSWORD_RESET_TTL,
     create_access_token,
     generate_password_reset_token,
@@ -29,11 +32,15 @@ from app.core.security import (
     hash_refresh_token,
     verify_password_async,
 )
-from app.db.models import PasswordResetToken, RefreshToken, User
+from app.db.models import ROLE_ADMIN, PasswordResetToken, RefreshToken, User
+from app.services import telegram
 
 # წარუმატებელი შესვლისას ყოველთვის ერთი და იგივე ტექსტი: არსებული და
 # არარსებული ელ. ფოსტის გარჩევა მომხმარებელთა ბაზის აღრიცხვის საშუალებას მისცემდა
 INVALID_CREDENTIALS = "Invalid email or password"
+
+#: Work for `AppError.after_response`: runs once the refusal has been sent.
+AfterResponse = Callable[[], Awaitable[None]]
 
 # დროის მუდმივობისთვის: არარსებულ მომხმარებელზეც ვასრულებთ ჰეშის შემოწმებას,
 # რომ პასუხის დრო არსებობას არ ამხელდეს
@@ -154,12 +161,33 @@ def _password_check_locked(locked_until: datetime | None) -> AppError:
     )
 
 
-def _invalid_current_password() -> ValidationError:
+def _invalid_current_password(after_response: AfterResponse | None = None) -> ValidationError:
     return ValidationError(
         "Current password is incorrect",
         code="INVALID_CURRENT_PASSWORD",
         details=[{"field": "currentPassword", "message": "Current password is incorrect"}],
+        after_response=after_response,
     )
+
+
+def require_admin_length(user: User, new_password: str) -> None:
+    """An administrator's new password is at least `MIN_ADMIN_PASSWORD_LENGTH` long.
+
+    Here and not in the request schema, which does not know whose password it
+    is: change-password has the caller, reset-password the owner of the link.
+    A customer's minimum stays `MIN_PASSWORD_LENGTH`, checked by the schema,
+    and this is never asked at sign-in, so a shorter password set earlier keeps
+    working until its owner changes it.
+    """
+    if user.role == ROLE_ADMIN and len(new_password) < MIN_ADMIN_PASSWORD_LENGTH:
+        message = (
+            f"An administrator's password must be at least {MIN_ADMIN_PASSWORD_LENGTH} characters"
+        )
+        raise ValidationError(
+            message,
+            code="ADMIN_PASSWORD_TOO_SHORT",
+            details=[{"field": "newPassword", "message": message}],
+        )
 
 
 def _locked_now(user: User) -> bool:
@@ -180,8 +208,9 @@ async def _wrong_current_password(db: AsyncSession, user: User) -> AppError:
     The route commits this refusal (and the lock one) so the count survives the
     request - see `_record_failure`.
     """
-    if await _record_failure(db, user):
-        return _invalid_current_password()
+    counted = await _record_failure(db, user)
+    if counted is not None:
+        return _invalid_current_password(counted.after_response)
     # Locked by another guess while this one was hashing: refused as locked,
     # whatever it guessed, as `_refused_meanwhile` does at sign-in for a wrong
     # password. A right one is refused the same way by `_refused_write`.
@@ -224,7 +253,44 @@ async def _refused_meanwhile(db: AsyncSession, user: User) -> UnauthorizedError:
     return UnauthorizedError(INVALID_CREDENTIALS, code="INVALID_CREDENTIALS")
 
 
-async def _record_failure(db: AsyncSession, user: User) -> bool:
+@dataclass(frozen=True)
+class _Counted:
+    """A wrong password that was counted on the account.
+
+    `after_response` is set only for the one guess that locked an
+    administrator's account: the message to the owner, which the refusal
+    carries out of the request. None for every other guess.
+    """
+
+    after_response: AfterResponse | None = None
+
+
+def _admin_lock_notice(
+    user: User, locked_until: datetime | None, now: datetime
+) -> AfterResponse | None:
+    """The Telegram message for a lock this very statement set on an administrator.
+
+    `_record_failure`'s UPDATE only touches an unlocked row, so a lock in the
+    future on the row it returns can only be the one it just wrote: the lock
+    is announced once, by the guess that set it, and never by the refused ones
+    that follow. A customer's lock tells nobody. With Telegram off there is
+    nothing to schedule.
+    """
+    if (
+        user.role != ROLE_ADMIN
+        or locked_until is None
+        or locked_until <= now
+        or not settings.telegram_enabled
+    ):
+        return None
+    notice = telegram.AdminLockNotice(email=user.email, locked_until=locked_until)
+    # A partial of the coroutine function, not a lambda that returns the
+    # coroutine: Starlette runs what it cannot see is async in a thread, and
+    # the coroutine would be dropped there unawaited.
+    return partial(telegram.notify_admin_locked, notice)
+
+
+async def _record_failure(db: AsyncSession, user: User) -> _Counted | None:
     """Count a wrong password, and lock the account once there are too many.
 
     The count is on the account, not on the caller's address: the limiter in
@@ -246,8 +312,13 @@ async def _record_failure(db: AsyncSession, user: User) -> bool:
     pooled connection for an Argon2 run, and a burst against one email would
     take the pool - and the shop - with it.
 
-    False, with nothing counted, when the account was locked after `login` read
+    None, with nothing counted, when the account was locked after `login` read
     it: one at a time, this guess would have been refused before the hash.
+
+    When the guess that is counted is the one that locks an administrator's
+    account, the result carries the Telegram notice (`_admin_lock_notice`). The
+    route commits the refusal before re-raising it, so the owner is told of a
+    lock that is in the database, after the response and never instead of it.
     """
     now = datetime.now(UTC)
     counted = User.failed_login_count + 1
@@ -262,10 +333,13 @@ async def _record_failure(db: AsyncSession, user: User) -> bool:
             failed_login_count=case((reached, 0), else_=counted),
             locked_until=case((reached, lock_until), else_=User.locked_until),
         )
-        .returning(User.id)
+        .returning(User.id, User.locked_until)
         .execution_options(synchronize_session="fetch")
     )
-    return recorded.first() is not None
+    row = recorded.first()
+    if row is None:
+        return None
+    return _Counted(after_response=_admin_lock_notice(user, row.locked_until, now))
 
 
 async def _clear_failures(db: AsyncSession, user: User) -> bool:
@@ -337,10 +411,19 @@ async def login(db: AsyncSession, *, email: str, password: str) -> dict[str, obj
         raise _too_many_attempts(user.locked_until)
 
     # The check that decides is in the statement that records the outcome.
+    #
+    # No password policy here, by design: the rule for a new password is
+    # applied where one is set, and a password chosen under an older, looser
+    # rule has to keep signing in.
     if not await verify_password_async(password, user.password_hash):
-        if not await _record_failure(db, user):
+        counted = await _record_failure(db, user)
+        if counted is None:
             raise await _refused_meanwhile(db, user)
-        raise UnauthorizedError(INVALID_CREDENTIALS, code="INVALID_CREDENTIALS")
+        raise UnauthorizedError(
+            INVALID_CREDENTIALS,
+            code="INVALID_CREDENTIALS",
+            after_response=counted.after_response,
+        )
     if not user.is_active:
         raise UnauthorizedError("Account is disabled", code="ACCOUNT_DISABLED")
     if not await _clear_failures(db, user):
@@ -530,6 +613,9 @@ async def revoke_all(db: AsyncSession, user_id: object) -> None:
 async def change_password(
     db: AsyncSession, *, user: User, current_password: str, new_password: str
 ) -> None:
+    # First, before anything is counted or hashed: an administrator's password
+    # is refused for its length whatever the current one was.
+    require_admin_length(user, new_password)
     # Ends the transaction that loaded `user`, so its connection is not held
     # through two hashes - see `login`.
     await db.commit()
@@ -656,6 +742,9 @@ async def reset_password(db: AsyncSession, *, raw_token: str, new_password: str)
     user = await db.scalar(select(User).where(User.id == owner_id).with_for_update(key_share=True))
     if user is None or not user.is_active:
         raise invalid_reset_token()
+    # Under the row lock, with the link still unspent: the refusal rolls back
+    # and the owner can try again with a longer password on the same link.
+    require_admin_length(user, new_password)
 
     claimed = (
         await db.execute(

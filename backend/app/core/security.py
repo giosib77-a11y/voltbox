@@ -13,8 +13,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import secrets
+import string
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any, Literal
 
 import jwt
@@ -25,8 +27,15 @@ from app.core.config import settings
 
 _hasher = PasswordHasher()
 
-# ყველაზე გავრცელებული პაროლები — რეგისტრაციაზე უარვყოფთ
-COMMON_PASSWORDS = frozenset(
+#: SecLists' 10k most common passwords, byte for byte; the source, commit, hash
+#: and MIT notice are in common_passwords.NOTICE.txt beside it. A data file in
+#: the package tree, so the wheel and `COPY app ./app` both carry it.
+_COMMON_PASSWORDS_FILE = Path(__file__).with_name("common_passwords.txt")
+
+#: What this shop adds to the list: its own market, and the short obvious ones
+#: it has always refused. Kept here, not in the file, so the file stays
+#: identical to upstream and its hash stays checkable.
+_SHOP_COMMON_PASSWORDS = frozenset(
     {
         "password",
         "12345678",
@@ -47,7 +56,22 @@ COMMON_PASSWORDS = frozenset(
         "sakartvelo",
     }
 )
+
+
+def _load_common_passwords() -> frozenset[str]:
+    """Lower-cased, once, at import. A missing file raises here, so a build that
+    forgot to ship it fails to start instead of quietly accepting `123456`."""
+    lines = _COMMON_PASSWORDS_FILE.read_text(encoding="utf-8").splitlines()
+    return frozenset(line.strip().lower() for line in lines if line.strip()) | (
+        _SHOP_COMMON_PASSWORDS
+    )
+
+
+COMMON_PASSWORDS = _load_common_passwords()
 MIN_PASSWORD_LENGTH = 8
+#: An administrator's panel shows every buyer's name, phone, address and orders,
+#: and signs in with a password alone, so theirs has to be longer.
+MIN_ADMIN_PASSWORD_LENGTH = 12
 
 
 def hash_password(password: str) -> str:
@@ -87,8 +111,84 @@ async def verify_password_async(password: str, password_hash: str) -> bool:
         return await asyncio.to_thread(verify_password, password, password_hash)
 
 
+#: Shortest core worth looking up. The list's own shortest entries are four
+#: characters, so today this only keeps it that way: should a later update of
+#: the list bring in one- to three-letter words, `ab!!!!!!12` would otherwise
+#: be refused for starting with `ab`, which says nothing about the password.
+_MIN_CORE_LENGTH = 4
+
+#: Dropped from both ends before the second look-up: what people append to a
+#: word to satisfy a "digit and symbol" rule (`Password1!`, `monkey2024!`).
+_DECORATION = string.digits + string.punctuation + string.whitespace
+
+
 def is_common_password(password: str) -> bool:
-    return password.lower() in COMMON_PASSWORDS
+    """True when the password is on the common list, bare or merely decorated.
+
+    Two look-ups, both lower-cased: the whole password, and the password with
+    digits, punctuation and spaces trimmed off both ends - so `Password1!` is
+    `password`, and `monkey2024!` is `monkey`. The trimmed form counts only
+    from `_MIN_CORE_LENGTH` characters, and only when it is the *whole* core:
+    `Tbilisi-Vake-2026` trims to `tbilisi-vake`, which is not on the list.
+    """
+    lowered = password.lower()
+    if lowered in COMMON_PASSWORDS:
+        return True
+    core = lowered.strip(_DECORATION)
+    return len(core) >= _MIN_CORE_LENGTH and core in COMMON_PASSWORDS
+
+
+#: Rows of a keyboard. Three keys in a row, in either direction, are a pattern.
+_KEYBOARD_ROWS = ("1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm")
+_KEYBOARD_TRIPLES = frozenset(
+    run[i : i + 3]
+    for row in _KEYBOARD_ROWS
+    for run in (row, row[::-1])
+    for i in range(len(row) - 2)
+)
+
+#: How many different characters must be left once the patterns are taken out.
+MIN_DISTINCT_CHARACTERS = 5
+
+
+def _is_digit(char: str) -> bool:
+    return "0" <= char <= "9"
+
+
+def _is_pattern(a: str, b: str, c: str) -> bool:
+    """Three characters that are one character, a step of one, or three adjacent keys."""
+    if a == b == c or a + b + c in _KEYBOARD_TRIPLES:
+        return True
+    step = ord(b) - ord(a)
+    if step not in (1, -1) or ord(c) - ord(b) != step:
+        return False
+    # Digits with digits and letters with letters: `9:;` is consecutive in
+    # Unicode and means nothing.
+    return all(map(_is_digit, (a, b, c))) or (a.isalpha() and b.isalpha() and c.isalpha())
+
+
+def is_patterned_password(password: str) -> bool:
+    """True when the password is a repetition or a sequence with a little added.
+
+    The rule: take out every character that belongs to a run of three or more
+    that is the same character (`aaa`), a step of one in the alphabet or among
+    the digits, up or down (`abc`, `321`), or neighbouring keys of a keyboard
+    row, either way (`qwe`, `rewq`). What is left must contain at least
+    `MIN_DISTINCT_CHARACTERS` different characters, case ignored. So
+    `aaaaaaaa`, `12345678`, `hgfedcba`, `qwertyuiop`, `12345678a` and
+    `aaaaaaaa1` leave 0 or 1 and are refused; `Tbilisi-Vake-2026` loses
+    nothing, and a random `Xv9$kLm2#qRz` loses only `klm`.
+
+    A pattern anywhere is removed, not only at the ends, but nothing else is
+    estimated: this is a filter for the lazy, not a measure of strength.
+    """
+    lowered = password.lower()
+    in_pattern: set[int] = set()
+    for i in range(len(lowered) - 2):
+        if _is_pattern(lowered[i], lowered[i + 1], lowered[i + 2]):
+            in_pattern.update((i, i + 1, i + 2))
+    left = {char for i, char in enumerate(lowered) if i not in in_pattern}
+    return len(left) < MIN_DISTINCT_CHARACTERS
 
 
 #: Claim carrying the account's token version at the moment of issue. Compared

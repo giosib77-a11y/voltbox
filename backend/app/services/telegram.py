@@ -7,6 +7,11 @@ Where it fits: the checkout route schedules `notify_order_placed` as a
 background task after the order has been committed, so the order never waits
 for Telegram and never fails because of it.
 
+The same channel carries one other message: `notify_admin_locked`, when failed
+passwords lock an administrator's account (A-037). It is sent after the refusal
+the guesser receives - see `AppError.after_response` - with the address masked
+and nothing about the client; a customer's lock sends nothing.
+
 Notes: a lost message is possible - a Telegram outage longer than the retries,
 a bad token, a worker restarted between the response and the send. Each of
 those is logged at ERROR, and the admin panel stays the list of orders to
@@ -24,9 +29,11 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from urllib.parse import quote
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -69,6 +76,30 @@ class OrderNotice:
     item_count: int
 
 
+@dataclass(frozen=True)
+class AdminLockNotice:
+    """An administrator's account was just locked by failed passwords.
+
+    The address, when, and nothing about who was guessing: the client's IP and
+    user agent are not here, so they cannot reach the chat or its history.
+    """
+
+    email: str
+    locked_until: datetime
+
+
+def mask_email(email: str) -> str:
+    """`nino.k@example.ge` -> `n***@example.ge`.
+
+    Enough for the owner to tell which administrator it is - the domain is not
+    a secret and the first letter separates a handful of staff - without
+    writing the whole address into a third party's chat. A one-letter local
+    part would be shown whole, so it is `***@` alone.
+    """
+    local, _, domain = email.partition("@")
+    return f"{local[:1] if len(local) > 1 else ''}***@{domain}"
+
+
 def log_configuration() -> None:
     """Say once, at startup, whether notifications are on."""
     token = bool(settings.telegram_bot_token.get_secret_value())
@@ -95,6 +126,15 @@ def message_text(notice: OrderNotice) -> str:
         f"ჯამი: {notice.total:.2f} {notice.currency}\n"
         f"ნივთები: {notice.item_count}\n"
         f"{link}"
+    )
+
+
+def admin_lock_text(notice: AdminLockNotice) -> str:
+    until = notice.locked_until.astimezone(ZoneInfo(settings.store_timezone))
+    return (
+        "ადმინისტრატორის ანგარიში დაბლოკილია — ბევრი არასწორი პაროლი\n"
+        f"ანგარიში: {mask_email(notice.email)}\n"
+        f"დაბლოკილია {until:%H:%M}-მდე"
     )
 
 
@@ -126,3 +166,19 @@ async def notify_order_placed(notice: OrderNotice) -> None:
         what="Telegram notification",
         order_number=notice.order_number,
     )
+
+
+async def notify_admin_locked(notice: AdminLockNotice) -> None:
+    """Runs after the refusal is sent (`AppError.after_response`); never raises.
+
+    A lost message is one ERROR line without the address - the lock itself is
+    in the database and expires on its own.
+    """
+    if not settings.telegram_enabled:
+        return
+    failure = await outbound.attempt(lambda: _send(admin_lock_text(notice)))
+    if failure is not None:
+        logger.error(
+            "Telegram notification of an administrator account lock was not sent: %s",
+            outbound.redact(failure),
+        )

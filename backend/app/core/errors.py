@@ -9,12 +9,14 @@
 """
 
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.headers import BASE_HEADERS
@@ -36,11 +38,18 @@ class AppError(Exception):
         code: str | None = None,
         details: Any = None,
         status_code: int | None = None,
+        after_response: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self.message = message or self.message
         self.code = code or self.code
         self.details = details
         self.status_code = status_code or self.status_code
+        # Work to run once this refusal has been sent. A FastAPI `BackgroundTasks`
+        # added before a raise is dropped - the handler builds a new response and
+        # the tasks hang on the one that never was - so a refusal that has to
+        # cause something (a failed sign-in that locked an administrator out)
+        # carries it here instead. It must not raise: nothing reads its result.
+        self.after_response = after_response
         super().__init__(self.message)
 
 
@@ -104,6 +113,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         response = JSONResponse(
             status_code=exc.status_code,
             content=error_body(exc.code, exc.message, exc.details),
+            background=BackgroundTask(exc.after_response) if exc.after_response else None,
         )
         return _finish(response, request)
 

@@ -24,7 +24,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.core.security import MIN_PASSWORD_LENGTH, hash_password, is_common_password
+from app.core.security import (
+    MIN_ADMIN_PASSWORD_LENGTH,
+    hash_password,
+    is_common_password,
+    is_patterned_password,
+)
 from app.db.models import ROLE_ADMIN, ROLE_CUSTOMER, User
 from app.db.session import SessionLocal, engine
 from app.services import auth as auth_service
@@ -44,10 +49,16 @@ def _read_password() -> str:
         if password != getpass("Repeat password: "):
             raise SystemExit("პაროლები არ ემთხვევა.")
 
-    if len(password) < MIN_PASSWORD_LENGTH:
-        raise SystemExit(f"პაროლი უნდა იყოს მინიმუმ {MIN_PASSWORD_LENGTH} სიმბოლო.")
+    # Only an administrator's password is read here, so the administrator's
+    # minimum is the one that applies; the rest of the rule is the API's.
+    if len(password) < MIN_ADMIN_PASSWORD_LENGTH:
+        raise SystemExit(
+            f"ადმინისტრატორის პაროლი უნდა იყოს მინიმუმ {MIN_ADMIN_PASSWORD_LENGTH} სიმბოლო."
+        )
     if is_common_password(password):
         raise SystemExit("პაროლი ძალიან გავრცელებულია — აირჩიე სხვა.")
+    if is_patterned_password(password):
+        raise SystemExit("პაროლი განმეორებაა ან მარტივი მიმდევრობა — აირჩიე სხვა.")
     return password
 
 
@@ -108,6 +119,12 @@ async def promote_user(email: str) -> None:
         user.role = ROLE_ADMIN
         await db.commit()
     print(f"✔ {email} ახლა ადმინისტრატორია.")
+    # No password is set here, so the account keeps the one it has: the rule
+    # applies when a new one is set, and sign-in never checks it.
+    print(
+        f"  პაროლი უცვლელია. ადმინისტრატორის ახალი პაროლი მინიმუმ {MIN_ADMIN_PASSWORD_LENGTH} "
+        "სიმბოლოა; ძველი პაროლი ამ წესს არ ექვემდებარება, სანამ არ შეიცვლება."
+    )
 
 
 async def demote_user(email: str) -> None:

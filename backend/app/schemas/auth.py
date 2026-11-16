@@ -5,15 +5,24 @@ from uuid import UUID
 
 from pydantic import EmailStr, Field, field_validator
 
-from app.core.security import MIN_PASSWORD_LENGTH, is_common_password
+from app.core.security import MIN_PASSWORD_LENGTH, is_common_password, is_patterned_password
 from app.schemas.base import ApiModel, ApiRequest
 
 
 def _validate_password(value: str) -> str:
+    """The rule for a NEW password, for everyone.
+
+    Only the requests that set one use it - register, change-password, reset -
+    and never LoginRequest: a password chosen under an older, looser rule must
+    keep signing in. An administrator's longer minimum needs the role, which a
+    schema does not know; the service enforces it (`auth.require_admin_length`).
+    """
     if len(value) < MIN_PASSWORD_LENGTH:
         raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
     if is_common_password(value):
         raise ValueError("This password is too common")
+    if is_patterned_password(value):
+        raise ValueError("This password is a repetition or a simple sequence")
     return value
 
 

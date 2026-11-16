@@ -308,6 +308,10 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
   `/api/v1/health/live` exempt; a route with its own limit is counted only against that one — Decision Log
   2026-11-16); password reset also 3/hour per email address. Redis-backed in production; client IP
   only through `FORWARDED_ALLOW_IPS` (never `*`).
+- A new password (register, change, reset, `manage_admin.py`): at least 8 characters, 12 for an administrator;
+  not on the common list (SecLists 10k + the shop's own words, also with digits/punctuation trimmed off the ends);
+  not a repetition or simple sequence. Never checked at sign-in, so older passwords keep working (Decision Log
+  2026-11-16). An administrator's lock sends one Telegram message (masked email, no IP).
 - Production startup refuses unsafe config (CORS `*`, missing
   `TRUSTED_HOSTS`/`FORWARDED_ALLOW_IPS`, short `JWT_SECRET`, ...).
 - Every new table must enable RLS in its migration — the Supabase API is
@@ -354,12 +358,38 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-11-16 — New-password rule, administrator minimum 12, Telegram on an administrator's lock (A-037, no TOTP)
+- Decision (owner-approved scope; details chosen in the fix): `_validate_password` (register, change-password,
+  reset) refuses, besides < 8 characters, (1) a password on the common list, compared lower-cased, whole or with
+  digits, punctuation and spaces trimmed off both ends when that core is ≥ 4 characters (`Password1!` → `password`);
+  (2) a pattern: every character inside a 3-character window of one repeated character, a ±1 step among digits or
+  letters, or three adjacent keys of a keyboard row is removed, and fewer than 5 distinct characters may not remain
+  (`MIN_DISTINCT_CHARACTERS`). An administrator's new password needs 12 (`MIN_ADMIN_PASSWORD_LENGTH`), checked in the
+  service where the role is known (change-password before anything is counted; reset under the row lock before the
+  link is spent, so a refusal leaves it usable) → 400 `ADMIN_PASSWORD_TOO_SHORT`; `manage_admin.py create-admin`
+  applies all of it; `promote-user` sets no password and says so. Login never checks the rule.
+- The list: SecLists `Passwords/Common-Credentials/10k-most-common.txt`, upstream commit `913b327`, 10 001 entries,
+  **MIT License (Copyright (c) 2018 Daniel Miessler)**, kept byte-identical at `backend/app/core/common_passwords.txt`
+  with `common_passwords.NOTICE.txt` (source, commit, sha256, license text); the shop's 17 old words are merged in
+  code. A test pins the sha256 and the count, so changing the data is a visible decision. Shipped in the image
+  (checked in a built image: wheel and `COPY app` both carry it).
+- Lock notice: `_record_failure`'s conditional UPDATE returns the new `locked_until`; only the guess that set the
+  lock on an admin row builds a message (`b***@example.ge`, until HH:MM Asia/Tbilisi, no IP or user agent). It is
+  carried on `AppError.after_response` and sent as a Starlette background task after the committed refusal — a
+  FastAPI `BackgroundTasks` is dropped when the route raises. A Telegram failure is one ERROR line and never changes
+  the response. A customer's lock sends nothing.
+- What still holds: lockout itself is unchanged (10 failures → 15 minutes), so whoever knows an admin email can still
+  keep the panel locked — now the owner sees it, but it is not prevented until TOTP (separate stage). The frontend
+  still only knows the 8-character minimum and shows the generic validation text for a pattern refusal.
+
 ### 2026-11-16 — The default rate limit is 300/min per client, enforced by an app-wide dependency (A-080)
 - Decision (owner-approved: 300/min, health exempt, same 429): every route without its own `@limiter.limit` is
   counted against `DEFAULT_LIMIT = "300/minute"` in one bucket per client address shared by all of them (slowapi's
   *application* limit), by `enforce_default_limit`, a FastAPI dependency on the whole app. `/api/v1/health` and
-  `/api/v1/health/live` are exempt by exact path; `/sitemap.xml` is counted; a CORS preflight and a path with no
-  route (404/405) are not. A decorated route is counted only against its own limit. The 429 is the same
+  `/api/v1/health/live` are exempt by exact path; `/sitemap.xml` is counted; a CORS preflight, a path with no
+  route (404/405) and a body FastAPI cannot parse (malformed JSON or multipart → 400, oversized → 413; the
+  dependency runs after the body is read) are not — none of them reaches the database. A schema-validation 400
+  is counted. A decorated route is counted only against its own limit. The 429 is the same
   `RATE_LIMITED` envelope with `Retry-After`; the WARNING keeps the A-036 pseudonym.
 - Reason: `SlowAPIMiddleware` found no handler under FastAPI 0.141 (`_IncludedRouter` in `app.routes`) and checked
   nothing — the documented 60/min never applied (measured: 70 × 200). A dependency runs after routing, where the
