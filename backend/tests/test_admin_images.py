@@ -1850,6 +1850,27 @@ def one_frame_apng(size: tuple[int, int]) -> bytes:
     return b"\x89PNG\r\n\x1a\n" + b"".join(kept)
 
 
+APNG_CHUNKS = {b"acTL", b"fcTL", b"fdAT"}
+
+
+def apng_with_two_actl(size: tuple[int, int]) -> bytes:
+    """A two-frame APNG with a second `acTL` before IDAT. Pillow takes the frame
+    count from the first `acTL` only and gives up on the animation at the second
+    (`n_frames == 1`), so `validate_image` sees one frame while every `fcTL` and
+    `fdAT` is still in the file (A-104)."""
+    return png_after_header(animated_png(size, 2), png_chunk(b"acTL", struct.pack(">II", 2, 0)))
+
+
+def apng_of_one_with_extra_frames(size: tuple[int, int]) -> bytes:
+    """A two-frame APNG whose `acTL` says one: the second frame's `fcTL` and
+    `fdAT` are dead bytes that Pillow never reads as a frame (A-104)."""
+    chunks = [
+        png_chunk(b"acTL", struct.pack(">II", 1, 0)) if chunk[4:8] == b"acTL" else chunk
+        for chunk in png_chunks(animated_png(size, 2))
+    ]
+    return b"\x89PNG\r\n\x1a\n" + b"".join(chunks)
+
+
 def one_frame_animated_webp(size: tuple[int, int]) -> bytes:
     """A `VP8X`-animated WebP (`ANIM` and one `ANMF`): what a tool exports for a
     "single frame animation"."""
@@ -1957,8 +1978,9 @@ class TestAnimatedImagesAreRefused:
         storage: InMemoryStorage,
         size: tuple[int, int],
     ) -> None:
-        """Nothing moves, so there is nothing to refuse. It still walks the
-        byte-level allowlist (acTL, fcTL, fdAT are kept chunks)."""
+        """Nothing moves, so there is nothing to refuse. It is stored as a static
+        PNG: the animation chunks are not in the allowlist (A-104), and its IDAT
+        is the one frame it has."""
         original = one_frame_apng(size)
         assert b"acTL" in png_chunk_types(original)
         with Image.open(io.BytesIO(original)) as probe:
@@ -1968,9 +1990,63 @@ class TestAnimatedImagesAreRefused:
 
         assert response.status_code == 201, response.text
         stored = only_object(storage)
+        assert not APNG_CHUNKS & set(png_chunk_types(stored))
         assert pixels(stored)[1][0] <= size[0]  # it decodes
         if size[0] <= MAX_STORED_EDGE:
-            assert stored == original  # walked, and nothing in it to strip
+            assert pixels(stored) == pixels(original)
+
+    @pytest.mark.filterwarnings("ignore:Invalid APNG:UserWarning")  # Pillow's own, for this file
+    @pytest.mark.parametrize("size", [(64, 48), (MAX_STORED_EDGE, 40)])
+    async def test_an_apng_with_a_second_actl_is_stored_as_a_static_png(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        product_id: str,
+        storage: InMemoryStorage,
+        size: tuple[int, int],
+    ) -> None:
+        """The bypass of the frame check (A-104): Pillow reports one frame for it,
+        so it is accepted - and at this size and orientation it is stripped at the
+        byte level, not re-encoded. The stored file must not carry the frames a
+        browser would animate."""
+        original = apng_with_two_actl(size)
+        types = png_chunk_types(original)
+        assert types.count(b"acTL") == 2 and b"fdAT" in types  # the premise
+        with Image.open(io.BytesIO(original)) as probe:
+            assert probe.n_frames == 1  # type: ignore[attr-defined]  # the bypass
+
+        response = await _upload(client, headers, product_id, data=original)
+
+        assert response.status_code == 201, response.text
+        stored = only_object(storage)
+        assert not APNG_CHUNKS & set(png_chunk_types(stored))
+        with Image.open(io.BytesIO(stored)) as decoded:
+            assert getattr(decoded, "n_frames", 1) == 1
+            assert decoded.size == size
+        assert pixels(stored) == pixels(original)  # the IDAT frame
+
+    @pytest.mark.parametrize("size", [(64, 48), (MAX_STORED_EDGE, 40)])
+    async def test_an_apng_of_one_frame_keeps_no_dead_frame_bytes(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        product_id: str,
+        storage: InMemoryStorage,
+        size: tuple[int, int],
+    ) -> None:
+        """`acTL` says one frame but an `fcTL` and an `fdAT` follow it."""
+        original = apng_of_one_with_extra_frames(size)
+        types = png_chunk_types(original)
+        assert types.count(b"fcTL") == 2 and b"fdAT" in types  # the premise
+        with Image.open(io.BytesIO(original)) as probe:
+            assert probe.n_frames == 1  # type: ignore[attr-defined]
+
+        response = await _upload(client, headers, product_id, data=original)
+
+        assert response.status_code == 201, response.text
+        stored = only_object(storage)
+        assert not APNG_CHUNKS & set(png_chunk_types(stored))
+        assert pixels(stored) == pixels(original)
 
     @pytest.mark.parametrize("size", ANIMATION_SIZES.values(), ids=ANIMATION_SIZES)
     async def test_an_animated_webp_of_one_frame_is_still_stored(
@@ -2041,22 +2117,27 @@ class TestOnlyChunksKnownToBeHarmlessAreStored:
 
         assert shrink_to_fit(clean, "PNG") == clean
 
-    def test_an_animated_png_keeps_every_frame(self) -> None:
-        """The strip walks the animation chunks and must not flatten them. Called
-        on `shrink_to_fit` directly: `validate_image` refuses a file of three frames
-        (A-101), so this is the walker guarantee, which the one-frame APNG that does
-        get through relies on (`TestAnimatedImagesAreRefused`)."""
+    def test_an_animated_png_is_stored_as_its_first_frame(self) -> None:
+        """The strip drops acTL, fcTL and fdAT (A-104): what is left is a static
+        PNG showing the IDAT frame. Called on `shrink_to_fit` directly:
+        `validate_image` refuses a file of three frames (A-101), so this is the
+        walker guarantee, which the one-frame APNG that does get through relies on
+        (`TestAnimatedImagesAreRefused`)."""
         first, *rest = three_frames()
         written = encode(first, "PNG", save_all=True, append_images=rest)
-        assert {b"acTL", b"fcTL", b"fdAT"} <= set(png_chunk_types(written))
+        assert set(png_chunk_types(written)) >= APNG_CHUNKS
         original = png_with_identity(written)
 
         stored = shrink_to_fit(original, "PNG")
 
-        assert not set(PNG_IDENTITY) & set(png_chunk_types(stored))
-        assert png_chunks(stored) == png_chunks(written)
-        assert len(animation_frames(stored)) == 3
-        assert animation_frames(stored) == animation_frames(original)
+        kinds = set(png_chunk_types(stored))
+        assert not set(PNG_IDENTITY) & kinds
+        assert not APNG_CHUNKS & kinds
+        # Everything else is the source's own bytes, in order.
+        expected = [c for c in png_chunks(written) if c[4:8] not in APNG_CHUNKS]
+        assert png_chunks(stored) == expected
+        assert len(animation_frames(stored)) == 1
+        assert animation_frames(stored) == animation_frames(original)[:1]
 
     def test_a_png_above_the_edge_whose_re_encode_is_no_smaller_is_stored_stripped(self) -> None:
         """The stripped original is what the re-encode is compared with and what

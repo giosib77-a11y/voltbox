@@ -1389,7 +1389,9 @@ A-102 security-auditor-მა იპოვა და მფლობელის
 - **გამოსწორება:** `_PNG_KEPT`-იდან `acTL`/`fcTL`/`fdAT` ამოიღონ (ყოველი მიღებული APNG ერთკადრიანია, მისი IDAT ფრეიმი 0-ია,
   ასე რომ შენახული ფაილი სტატიკური PNG ხდება) — Decision Log-ის „What still holds" და walker-ის ტესტების განახლებით.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `_PNG_KEPT`-ში acTL/fcTL/fdAT აღარ არის; ორი-`acTL`-იანი და `acTL`=1 + ზედმეტი ფრეიმის
+  ფაილი სტატიკურ PNG-ად ინახება (იგივე პიქსელები). 7 ტესტი ძველ `storage.py`-ზე ვარდება (`git stash`, ორკესტრატორმაც
+  გაიმეორა), `test_admin_images.py` 226 გადის.
 
 #### A-105 · nit · „re-encode უფრო დიდი გამოვიდა → stripped ორიგინალი" წესი 1600 px-ზე გრძელ სურათს ინახავს (ჩვენამდეც ასე იყო)
 - **ფაილი:** `backend/app/services/storage.py` (`shrink_to_fit`-ის ბოლო, „A re-encode that came out larger…")

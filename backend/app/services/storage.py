@@ -381,10 +381,13 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
     # the admin to export a smaller one would only lead to this refusal next.
     #
     # What still holds: one frame is accepted, including an APNG whose `acTL` says
-    # one and a `VP8X`-animated WebP with one `ANMF`. Such a file keeps its
-    # animation chunks, which is why `_PNG_KEPT` and `_WEBP_KEPT` still list them
-    # and the strip still walks them (acTL/fcTL/fdAT, ANIM/ANMF) - the walkers
-    # have to hold for exactly these files.
+    # one and a `VP8X`-animated WebP with one `ANMF`. An APNG is stored as a static
+    # PNG: `_PNG_KEPT` has no acTL/fcTL/fdAT, because Pillow counts frames from the
+    # first `acTL` only and a file with a second one passes this check at one.
+    # An APNG whose default image is not frame 0 is still refused here (Pillow
+    # counts two frames). The WebP is different and unchanged: `_WEBP_KEPT` still
+    # lists ANIM/ANMF, so a one-frame animated WebP keeps them and the WebP walker
+    # has to hold for exactly these files.
     if frames > 1:
         raise ValidationError("Animated images are not accepted", code="IMAGE_ANIMATED")
 
@@ -637,11 +640,16 @@ def _strip_jpeg(data: bytes) -> bytes:
 #:
 #: Critical: IHDR, PLTE, IDAT, IEND. Colour and transparency: tRNS, gAMA, cHRM,
 #: sRGB, iCCP (the ICC profile - it changes how the colours look), sBIT, bKGD,
-#: cICP, mDCV, cLLI. Size on screen: pHYs. Animation (acTL, fcTL, fdAT):
-#: `validate_image` refuses an APNG of more than one frame, but one whose `acTL`
-#: says one is accepted and must not be turned into something else by the strip.
-#: What is not here is dropped, including text (tEXt, zTXt, iTXt), eXIf,
-#: tIME and every chunk this list has not heard of.
+#: cICP, mDCV, cLLI. Size on screen: pHYs. What is not here is dropped,
+#: including text (tEXt, zTXt, iTXt), eXIf, tIME and every chunk this list has
+#: not heard of.
+#:
+#: The APNG chunks (acTL, fcTL, fdAT) are deliberately NOT kept. Every APNG
+#: `validate_image` accepts has one frame, and a frame that is the default image
+#: is the IDAT data itself, so dropping them leaves a static PNG that decodes to
+#: the same picture. Keeping them was a hole: Pillow takes `n_frames` from the
+#: first `acTL` only (a second one before IDAT leaves it at 1), so a file could
+#: pass the one-frame check and still carry frames a browser would animate.
 _PNG_KEPT = frozenset(
     {
         b"IHDR",
@@ -659,9 +667,6 @@ _PNG_KEPT = frozenset(
         b"cICP",
         b"mDCV",
         b"cLLI",
-        b"acTL",
-        b"fcTL",
-        b"fdAT",
     }
 )
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -673,10 +678,10 @@ def _strip_png(data: bytes) -> bytes:
     Every chunk is length, type, data, CRC, and a kept one is copied whole - the
     CRC with it, so nothing is recomputed. The walk ends after IEND, and what
     follows it is dropped. What still holds: the pixel data is never touched, so
-    the result decodes to the same pixels (an APNG keeps every frame it has -
-    `validate_image` lets one through only with a single frame, but this walk does
-    not depend on that), and a file made only of kept chunks comes back byte for
-    byte.
+    the result decodes to the same pixels, and a file made only of kept chunks
+    comes back byte for byte. An APNG loses its animation chunks (acTL, fcTL,
+    fdAT) and becomes a static PNG showing its IDAT frame - the default image,
+    which is the only frame `validate_image` lets through.
     """
     size = len(data)
     if data[:8] != _PNG_SIGNATURE:

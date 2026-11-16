@@ -368,6 +368,21 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-11-16 — A stored APNG is a static PNG; image, password and health-limit nits (A-103–A-106, A-088, A-090–A-095)
+- Decision (owner-approved beforehand):
+  - **A stored PNG never keeps APNG chunks** (A-104). `_PNG_KEPT` no longer lists acTL, fcTL, fdAT (15 chunks
+    now). Every APNG `validate_image` accepts has one frame and that frame is the default image (IDAT), so the
+    stored file is a static PNG that decodes to the same picture. Why: Pillow takes `n_frames` from the first
+    `acTL` only, so a second `acTL` before IDAT passed the A-101 one-frame check and the byte strip then kept
+    every fcTL/fdAT, which a browser may animate; an `acTL` = 1 file with extra frames kept dead bytes.
+  - A-103: the noisy-alpha WebP overrun is accepted, not priced (Accepted Risks).
+- What still holds: an APNG whose default image is not frame 0 is still refused (Pillow counts two frames), and
+  any real animation is `IMAGE_ANIMATED`. `_WEBP_KEPT` still keeps ANIM/ANMF, so a one-frame animated WebP keeps
+  them (WebP was not in scope). A PNG made only of kept chunks is still stored byte for byte.
+  `MAX_IMAGE_DECODE_BYTES`, `DECODE_COST` and `Semaphore(1)` are unchanged.
+- How it changes: keeping an APNG chunk again needs Pillow's frame count to be checked against every `acTL`
+  first.
+
 ### 2026-11-16 — Animated images are refused; a damaged image is a 400, never a 500; WebP cost re-measured (A-096–A-102)
 - Decision (owner-approved beforehand; values that were left to us are marked):
   - **Animation is not needed for a product photo** (A-101). `validate_image` refuses any image Pillow counts
@@ -389,10 +404,10 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
     and a flag (`isActive`/`isFeatured`/`isNew`) that is not a JSON bool, `null` included, before any write (A-099).
   - WEBP's `DECODE_COST` stays `(71 MiB, 16)` after a Linux re-measurement with `method=5` (A-100): a soft-edged
     cut-out reaches the 100 MiB budget between 2.3 and 2.6 MP, so no lower cost is justified.
-- What still holds: a one-frame APNG (`acTL` = 1) or one-frame animated WebP is accepted and keeps its animation
-  chunks, which is why the A-058 allowlists still list acTL/fcTL/fdAT and ANIM/ANMF. An APNG whose default image is
-  not its first frame counts as two frames in Pillow and is refused (conservative); one with two `acTL` chunks counts
-  as one (AUDIT.md A-104). `MAX_IMAGE_DECODE_BYTES`, `DECODE_COST` and `Semaphore(1)` are unchanged. The bad-bytes
+- What still holds: a one-frame APNG (`acTL` = 1) or one-frame animated WebP is accepted; the WebP keeps its
+  animation chunks (ANIM/ANMF), an APNG has been stored as a static PNG since A-104 (entry above). An APNG whose
+  default image is not its first frame counts as two frames in Pillow and is refused (conservative); one with two
+  `acTL` chunks counts as one (AUDIT.md A-104). `MAX_IMAGE_DECODE_BYTES`, `DECODE_COST` and `Semaphore(1)` are unchanged. The bad-bytes
   list was measured on the Pillow in `.venv`; another Pillow version may raise another type for some other malformed
   chunk. **Not held:** a 1601×1187 RGBA WebP with noise in its alpha channel peaks 108–113 MiB on Linux, over the
   budget (AUDIT.md A-103; accepted by the owner, see Accepted Risks); the WEBP fixture of `TestDecodeMemoryIsBounded`
@@ -403,7 +418,8 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
 ### 2026-11-16 — Image strippers are allowlists; WebP method 5; order-number zone from settings (A-055–A-059, A-075, A-077–A-079)
 - Decision (all approved by the owner beforehand; values that were left to us are marked):
-  - Stored images keep only chunks known to be harmless (A-058): PNG — 18 decode/colour/pHYs/APNG chunks; WebP —
+  - Stored images keep only chunks known to be harmless (A-058): PNG — 18 decode/colour/pHYs/APNG chunks (15 since
+    A-104: the APNG ones were dropped); WebP —
     VP8X, VP8, VP8L, ALPH, ANIM, ANMF, ICCP, and inside an ANMF frame only ALPH/VP8/VP8L; JPEG — APP0 only with
     `JFIF\0`, APP14 only with `Adobe`, APP2 only with `ICC_PROFILE\0`.
   - The WebP walk refuses a file past `_MAX_WEBP_CHUNKS = 65_536`, one budget for the file and all its frames
