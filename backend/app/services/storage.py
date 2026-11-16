@@ -786,7 +786,20 @@ def shrink_to_fit(data: bytes, image_format: str) -> bytes:
     # A re-encode that came out larger is not worth keeping - it happens with
     # small PNGs whose palette the resize expands. What it is compared with, and
     # what wins, is the stripped original, never the raw one.
-    stripped = _STRIP_METADATA[image_format](data)
+    try:
+        stripped = _STRIP_METADATA[image_format](data)
+    except ValidationError:
+        # Pillow decoded the file but the byte-level walk cannot read it (a JPEG
+        # whose tail is not an EOI, say - Pillow stops after the last MCU and
+        # never looks at what follows). The comparison is only there to prefer a
+        # smaller file; a clean re-encode already exists, and refusing the upload
+        # for the sake of a comparison would throw away a picture that was
+        # decoded and paid for. The re-encode carries no metadata: no `exif=` was
+        # passed, and the ICC profile is the only thing copied across. What still
+        # holds: at or below the edge and upright nothing is decoded, so there is
+        # no re-encode to fall back on and the walk's INVALID_IMAGE reaches the
+        # caller (above). Only the walk's own refusal is caught here.
+        return shrunk
     return shrunk if len(shrunk) < len(stripped) else stripped
 
 

@@ -23,6 +23,7 @@ import uuid
 import zlib
 from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import asynccontextmanager
+from typing import ClassVar
 
 import httpx
 import pytest
@@ -1332,6 +1333,74 @@ class TestWhatAPhotoKnowsDoesNotReachThePublicBucket:
         """At or below the edge a decode would be unbudgeted, so there is no
         fallback to one."""
         original = encode(patterned((400, 300)), "JPEG")[:-2]
+
+        with pytest.raises(ValidationError) as refused:
+            shrink_to_fit(original, "JPEG")
+
+        assert refused.value.code == "INVALID_IMAGE"
+
+    # Where the EOI should be: Pillow decodes the whole picture (it stops after the
+    # last MCU and never looks at what follows), but the walk cannot reach an EOI.
+    # (A file that merely loses its EOI is no example: Pillow refuses to decode it,
+    # "image file is truncated", so it never gets as far as the walk.)
+    UNWALKABLE_TAILS: ClassVar[dict[str, bytes]] = {
+        "marker length past the end": b"\xff\xe1\xff\xff",
+        "more standalone markers than the cap": b"\xff\x01"
+        * (storage_module._MAX_JPEG_MARKERS + 1),
+        "no marker at all": b"\x00\x00\x00\x00",
+    }
+
+    @pytest.mark.parametrize("tail", UNWALKABLE_TAILS)
+    def test_a_resized_jpeg_the_walk_cannot_read_is_stored_as_the_re_encode(
+        self, tail: str
+    ) -> None:
+        """A decode had already been paid for and a clean re-encode of it exists,
+        so the comparison with the stripped original is skipped rather than
+        turning the upload into a 400."""
+        exif = exif_bytes(gps=True, make="SecretMaker")
+        original = encode(patterned((1700, 1300)), "JPEG", exif=exif)[:-2]
+        original += self.UNWALKABLE_TAILS[tail]
+        with pytest.raises(ValidationError):  # the premise: the walk refuses it
+            storage_module._STRIP_METADATA["JPEG"](original)
+        assert validate_image(original, None)[0] == "JPEG"
+
+        stored = shrink_to_fit(original, "JPEG")
+
+        with Image.open(io.BytesIO(stored)) as saved:
+            assert saved.format == "JPEG"
+            assert max(saved.size) == MAX_STORED_EDGE
+            assert not saved.getexif()
+        assert b"Exif" not in stored
+        assert b"SecretMaker" not in stored
+
+    @pytest.mark.parametrize("tail", UNWALKABLE_TAILS)
+    async def test_an_upload_of_such_a_jpeg_is_stored_not_refused(
+        self,
+        tail: str,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+    ) -> None:
+        original = encode(patterned((1700, 1300)), "JPEG", exif=exif_bytes(gps=True))[:-2]
+        original += self.UNWALKABLE_TAILS[tail]
+
+        response = await _upload(
+            client, headers, product_id, data=original, filename="p.jpg", content_type="image/jpeg"
+        )
+
+        assert response.status_code == 201
+        stored = only_object(storage)
+        with Image.open(io.BytesIO(stored)) as saved:
+            assert max(saved.size) == MAX_STORED_EDGE
+            assert not saved.getexif()
+
+    @pytest.mark.parametrize("tail", UNWALKABLE_TAILS)
+    def test_the_same_file_at_the_edge_is_still_refused(self, tail: str) -> None:
+        """What still holds: at or below the edge and upright nothing is decoded,
+        so there is no re-encode to fall back on."""
+        original = encode(patterned((400, 300)), "JPEG")[:-2] + self.UNWALKABLE_TAILS[tail]
+        assert validate_image(original, None)[0] == "JPEG"
 
         with pytest.raises(ValidationError) as refused:
             shrink_to_fit(original, "JPEG")
