@@ -22,6 +22,7 @@ cross-worker assertion is not provable without it, which is the point.
 import ast
 import importlib
 import importlib.util
+import logging
 import os
 import re
 import sys
@@ -37,7 +38,14 @@ import redis
 from app import main
 from app.core import rate_limit
 from app.core.config import settings
-from app.core.rate_limit import MEMORY_STORAGE, build_limiter, hit_per_address, storage_uri_for
+from app.core.logging import PseudonymiseRateLimitKey, client_pseudonym
+from app.core.rate_limit import (
+    DEFAULT_LIMIT,
+    MEMORY_STORAGE,
+    build_limiter,
+    hit_per_address,
+    storage_uri_for,
+)
 from app.core.rate_limit import limiter as app_limiter
 from fastapi import FastAPI, Request
 from httpx import ASGITransport
@@ -46,6 +54,7 @@ from limits.strategies import FixedWindowRateLimiter
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 
 #: Database 1, so a developer's own Redis keys are never touched.
@@ -822,31 +831,173 @@ async def test_a_route_limit_429_says_when_to_retry(client: httpx.AsyncClient) -
     assert refused.json()["error"]["code"] == "RATE_LIMITED"
 
 
-async def test_a_middleware_checked_default_limit_429_has_the_envelope_and_retry_after() -> None:
-    """The limit on a route with no decorator is checked by SlowAPIMiddleware,
-    which swaps an `async def` handler for slowapi's own: no error code, no
-    Retry-After. Built on a bare app because the application's own routes are not
-    found by that middleware under this FastAPI (see the report on A-046)."""
-    app = FastAPI()
-    app.state.limiter = build_limiter(enabled=True, storage_uri=MEMORY_STORAGE)
-    app.exception_handler(RateLimitExceeded)(main.rate_limit_handler)
-    app.add_middleware(SlowAPIMiddleware)
+# ── the default limit on routes with no decorator (A-080) ────────────────────
+#
+# slowapi's middleware found no route handler under FastAPI 0.141 and checked
+# nothing: 70 consecutive GET /api/v1/categories all answered 200. These tests
+# go through the application's own routes, so they fail if the check stops
+# reaching them again.
 
-    @app.get("/plain")
-    async def plain() -> PlainTextResponse:
-        return PlainTextResponse("ok")
-
-    async with client_from(app, "203.0.113.9") as client:
-        refused = await _until_refused(lambda: client.get("/plain"))
-
-    assert 1 <= int(refused.headers["Retry-After"]) <= LOGIN_WINDOW_SECONDS
-    assert refused.json() == {
-        "error": {
-            "code": "RATE_LIMITED",
-            "message": "Too many requests. Please try again later.",
-            "details": None,
-        }
+CATEGORIES = "/api/v1/categories"
+DEFAULT_PER_MINUTE = int(DEFAULT_LIMIT.split("/")[0])
+RATE_LIMITED_BODY = {
+    "error": {
+        "code": "RATE_LIMITED",
+        "message": "Too many requests. Please try again later.",
+        "details": None,
     }
+}
+
+
+def test_the_default_is_three_hundred_a_minute() -> None:
+    assert DEFAULT_LIMIT == "300/minute"
+
+
+def test_the_limiter_is_off_by_default_in_the_test_environment() -> None:
+    """Without the fixture above, no test is ever counted."""
+    assert settings.app_env == "test"
+    assert app_limiter.enabled is False
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_the_301st_request_to_an_undecorated_route_is_refused(
+    client: httpx.AsyncClient,
+) -> None:
+    statuses = [(await client.get(CATEGORIES)).status_code for _ in range(DEFAULT_PER_MINUTE)]
+    assert statuses == [200] * DEFAULT_PER_MINUTE
+
+    refused = await client.get(CATEGORIES)
+
+    assert refused.status_code == 429
+    assert refused.json() == RATE_LIMITED_BODY
+    retry_after = refused.headers["Retry-After"]
+    assert re.fullmatch(r"[1-9][0-9]*", retry_after), retry_after
+    assert 1 <= int(retry_after) <= LOGIN_WINDOW_SECONDS
+    assert refused.headers["X-Request-ID"]
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_the_default_bucket_is_one_per_client_across_routes(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two a minute here, to keep the test short (the real number is asserted
+    above). One address spends one bucket over the catalogue, a path parameter
+    and the sitemap (outside the API prefix); another address has its own."""
+    monkeypatch.setattr(app_limiter, "_application_limits", _default_limits_of("2/minute"))
+    application = main.app
+
+    async with client_from(application, "203.0.113.20") as first:
+        assert (await first.get(CATEGORIES)).status_code == 200
+        # Same route, a different URL: still the same bucket.
+        assert (await first.get("/api/v1/products/no-such-product")).status_code == 404
+        assert (await first.get("/sitemap.xml")).status_code == 429
+        assert (await first.get("/api/v1/products/another-one")).status_code == 429
+
+    async with client_from(application, "203.0.113.21") as second:
+        assert (await second.get(CATEGORIES)).status_code == 200
+
+
+def _default_limits_of(limit: str) -> Any:
+    """slowapi's own representation of a default limit, so a test can lower it."""
+    return Limiter(key_func=get_remote_address, application_limits=[limit])._application_limits
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_the_health_checks_are_never_counted(client: httpx.AsyncClient) -> None:
+    """Render polls /health/live and a 429 there restarts the instance. Past the
+    limit, both still answer, and they leave the bucket of the other routes as
+    it was."""
+    for path in ("/api/v1/health/live", "/api/v1/health"):
+        for _ in range(DEFAULT_PER_MINUTE + 5):
+            assert (await client.get(path)).status_code == 200
+
+    assert (await client.get(CATEGORIES)).status_code == 200
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_a_route_with_its_own_limit_keeps_only_that_limit(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Login is limited to five a minute by its decorator. With the default
+    lowered to one a minute, the second and third logins still get through to
+    the password check (401) - counted against the default they would be 429 -
+    and the sixth is refused by the decorator's own limit."""
+    monkeypatch.setattr(app_limiter, "_application_limits", _default_limits_of("1/minute"))
+    body = {"email": "nobody@example.ge", "password": "does-not-matter-1"}
+
+    statuses = [(await client.post(LOGIN, json=body)).status_code for _ in range(6)]
+
+    assert statuses == [401] * 5 + [429]
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_a_preflight_is_answered_before_the_limit(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CORS preflights never reach the router, so they are not counted: with the
+    default spent, one still gets its answer."""
+    monkeypatch.setattr(app_limiter, "_application_limits", _default_limits_of("1/minute"))
+    origin = settings.cors_origin_list[0]
+    assert (await client.get(CATEGORIES)).status_code == 200
+    assert (await client.get(CATEGORIES)).status_code == 429
+
+    preflight = await client.options(
+        CATEGORIES, headers={"Origin": origin, "Access-Control-Request-Method": "GET"}
+    )
+
+    assert preflight.status_code == 200
+
+
+@pytest.mark.usefixtures("app_limiter_on")
+async def test_the_default_limit_warning_does_not_name_the_raw_address(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A-036 holds for the default limit too: slowapi's warning is rewritten by
+    the filter configure_logging installs on its logger."""
+    ip = "203.0.113.77"
+    monkeypatch.setattr(app_limiter, "_application_limits", _default_limits_of("1/minute"))
+    slowapi_logger = logging.getLogger("slowapi")
+    key_filter = PseudonymiseRateLimitKey()
+    slowapi_logger.addFilter(key_filter)
+    try:
+        with caplog.at_level(logging.WARNING, logger="slowapi"):
+            async with client_from(main.app, ip) as client:
+                await client.get(CATEGORIES)
+                assert (await client.get(CATEGORIES)).status_code == 429
+    finally:
+        slowapi_logger.removeFilter(key_filter)
+
+    assert "exceeded" in caplog.text
+    assert ip not in caplog.text
+    assert f"({client_pseudonym(ip)})" in caplog.text
+
+
+async def test_a_default_limit_429_has_the_same_envelope_as_a_route_limit(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One handler for both, so the storefront reads one error shape. Retry-After
+    is the time left in the window, not its length."""
+    app_limiter.enabled = True
+    app_limiter.reset()
+    monkeypatch.setattr(app_limiter, "_application_limits", _default_limits_of("1/minute"))
+    try:
+        async with client_from(main.app, "203.0.113.30") as client:
+            await client.get("/api/v1/health/live")  # exempt: spends nothing
+            await client.get(CATEGORIES)
+            refused = await client.get(CATEGORIES)
+            later = time.time() + 30
+            monkeypatch.setattr(main, "time", SimpleNamespace(time=lambda: later))
+            again = await client.get(CATEGORIES)
+    finally:
+        app_limiter.reset()
+        app_limiter.enabled = False
+
+    assert refused.status_code == 429
+    assert refused.json() == RATE_LIMITED_BODY
+    assert int(refused.headers["Retry-After"]) > 40
+    assert 25 <= int(again.headers["Retry-After"]) <= 31
 
 
 @pytest.mark.usefixtures("app_limiter_on")

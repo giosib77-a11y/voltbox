@@ -5,10 +5,9 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from math import ceil
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -23,7 +22,7 @@ from app.core.errors import error_body, register_exception_handlers
 from app.core.headers import SecurityHeadersMiddleware
 from app.core.hosts import LoggedTrustedHostMiddleware
 from app.core.logging import RequestContextMiddleware, configure_logging
-from app.core.rate_limit import limiter
+from app.core.rate_limit import enforce_default_limit, limiter
 from app.db.session import engine
 from app.services import order_email, telegram
 
@@ -90,12 +89,11 @@ def _retry_after_seconds(request: Request, exc: RateLimitExceeded) -> int:
 def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
     """429 in the API's error envelope, with Retry-After.
 
-    A plain `def` on purpose. SlowAPIMiddleware checks the default limit from a
-    synchronous helper and, when the registered handler is a coroutine function,
-    silently swaps it for slowapi's own (`{"error": "Rate limit exceeded: ..."}`,
-    no error code). A sync handler is the one that is used on both paths: the
-    default limit in the middleware and a route's own `@limiter.limit`, where
-    Starlette runs it in a worker thread.
+    Used for both kinds of limit: the default one, raised by the
+    `enforce_default_limit` dependency, and a route's own `@limiter.limit`. A
+    plain `def` is kept from when slowapi's middleware checked the default limit:
+    it swaps a coroutine handler for its own (`{"error": "Rate limit exceeded:
+    ..."}`, no error code), so a sync one is the form that cannot be swapped.
     """
     return JSONResponse(
         status_code=429,
@@ -115,6 +113,8 @@ def create_app() -> FastAPI:
         docs_url=None if settings.is_deployed else "/docs",
         redoc_url=None,
         lifespan=lifespan,
+        # The default rate limit, on every route including the sitemap's.
+        dependencies=[Depends(enforce_default_limit)],
     )
 
     app.state.limiter = limiter
@@ -125,8 +125,8 @@ def create_app() -> FastAPI:
     # რომ CORS-ისა და შეცდომების პასუხებსაც მოხვდეს
     # Innermost of all, around the router itself. A body over the limit stops the
     # request while a chunked body is being read, by raising from `receive`; that
-    # exception has to reach FastAPI as it left. The two BaseHTTPMiddleware layers
-    # further out (rate limit, request context) pass it through an anyio task
+    # exception has to reach FastAPI as it left. The BaseHTTPMiddleware layers
+    # further out (request context, security headers) pass it through an anyio task
     # group, which gives FastAPI an ExceptionGroup that it rewrites to a 400.
     app.add_middleware(BodySizeLimitMiddleware, limit_for=_body_limit_for)
     # Compression. Measured on this catalogue: a page of 48 products is 55 KB
@@ -139,7 +139,9 @@ def create_app() -> FastAPI:
     # and the one that returns a JWT - /auth/login - reflects nothing a caller
     # supplied. `minimum_size` keeps it off bodies too small to gain from it.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
-    app.add_middleware(SlowAPIMiddleware)
+    # No SlowAPIMiddleware: under FastAPI 0.141 it cannot find the route handler
+    # and checks nothing (A-080). The default limit is the `dependencies=` entry
+    # on the app above; see app/core/rate_limit.py.
     app.add_middleware(RequestContextMiddleware)
     app.add_middleware(
         CORSMiddleware,

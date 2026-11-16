@@ -304,7 +304,9 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 - Rate limits per client IP (`app/core/rate_limit.py`): auth 5/min (incl. password
   change and profile update; `POST /auth/refresh` alone 30/min — Decision Log 2026-11-12), `POST /orders` 5/min and 30/day, guest order lookup
   10/min, client error reports 20/min, guest cart quote (`POST /cart/quote`) 30/min,
-  everything else 60/min; password reset also 3/hour per email address. Redis-backed in production; client IP
+  every other route 300/min per client in one bucket shared across them (`/api/v1/health` and
+  `/api/v1/health/live` exempt; a route with its own limit is counted only against that one — Decision Log
+  2026-11-16); password reset also 3/hour per email address. Redis-backed in production; client IP
   only through `FORWARDED_ALLOW_IPS` (never `*`).
 - Production startup refuses unsafe config (CORS `*`, missing
   `TRUSTED_HOSTS`/`FORWARDED_ALLOW_IPS`, short `JWT_SECRET`, ...).
@@ -351,6 +353,24 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
+
+### 2026-11-16 — The default rate limit is 300/min per client, enforced by an app-wide dependency (A-080)
+- Decision (owner-approved: 300/min, health exempt, same 429): every route without its own `@limiter.limit` is
+  counted against `DEFAULT_LIMIT = "300/minute"` in one bucket per client address shared by all of them (slowapi's
+  *application* limit), by `enforce_default_limit`, a FastAPI dependency on the whole app. `/api/v1/health` and
+  `/api/v1/health/live` are exempt by exact path; `/sitemap.xml` is counted; a CORS preflight and a path with no
+  route (404/405) are not. A decorated route is counted only against its own limit. The 429 is the same
+  `RATE_LIMITED` envelope with `Retry-After`; the WARNING keeps the A-036 pseudonym.
+- Reason: `SlowAPIMiddleware` found no handler under FastAPI 0.141 (`_IncludedRouter` in `app.routes`) and checked
+  nothing — the documented 60/min never applied (measured: 70 × 200). A dependency runs after routing, where the
+  matched route is always known. One shared bucket, because slowapi's per-route default is scoped by URL and
+  `/products/<slug>` would give a catalogue walker a fresh bucket per product.
+- The ceiling is high on purpose until `FORWARDED_ALLOW_IPS` is confirmed on Render (A-036, PROGRESS.md Blockers):
+  if the API sees the proxy instead of the client, the whole shop shares one bucket, and 300/min keeps that from
+  becoming an outage. Once confirmed, it can be lowered (one constant in `app/core/rate_limit.py`).
+- What still holds: auth 5/min, refresh 30/min, orders 5/min + 30/day, lookup 10/min, client errors 20/min,
+  quote 30/min, reset 3/hour per address — unchanged. Uses slowapi's private `_check_request_limit` and
+  `_should_exempt` (the calls its own middleware made; slowapi is pinned in the lock).
 
 ### 2026-11-15 — Logs name a client only by a keyed pseudonym; transport and header hardening (A-036, A-046, A-011, A-010, A-063)
 - Decision (owner-approved scope; the details chosen in the fix): the access line's `client` and slowapi's

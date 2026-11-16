@@ -21,6 +21,16 @@ brute-force limit exactly when something is already wrong; not fail-closed,
 which would turn a Redis outage into "nobody can log in" for a shop. Degraded -
 per worker instead of shared - is the honest middle, and it is logged.
 
+Two kinds of limit exist. A route with its own `@limiter.limit` is checked by
+the decorator, inside the route, and only against that limit. Every other route
+is checked against DEFAULT_LIMIT (300/minute per client) by the
+`enforce_default_limit` dependency, which `create_app` installs on the whole
+application; /health and /health/live are exempt. slowapi's own
+`SlowAPIMiddleware` is not used for this: it finds the route handler by walking
+`app.routes` for objects with an `.endpoint`, and under FastAPI 0.141 that list
+holds `_IncludedRouter` objects without one, so the middleware silently skipped
+every check (A-080) - 70 consecutive `GET /api/v1/categories` all answered 200.
+
 Notes: slowapi calls the storage synchronously (`limiter.hit(...)`), so the
 sync `redis://` scheme is the right one here and not `async+redis://`. The call
 blocks the event loop for the round trip, which is sub-millisecond against a
@@ -37,7 +47,9 @@ from limits import parse
 from limits.storage import MemoryStorage
 from limits.strategies import FixedWindowRateLimiter
 from slowapi import Limiter
+from slowapi.middleware import _should_exempt
 from slowapi.util import get_remote_address
+from starlette.requests import Request
 
 from app.core.config import settings
 
@@ -90,8 +102,8 @@ CLIENT_ERROR_RATE_LIMIT = "20/minute"
 #: Checkout. A guest needs no account, an order takes its stock at once (it is
 #: `pending` until an admin acts), the owner gets a Telegram message for each,
 #: and the confirmation email goes to whatever address was typed. At the default
-#: sixty a minute one address could place orders for the whole catalogue before
-#: anyone looked. Five a minute leaves a shopper who retries or buys twice
+#: three hundred a minute one address could place orders for the whole catalogue
+#: before anyone looked. Five a minute leaves a shopper who retries or buys twice
 #: untouched; the daily ceiling stops the same script going slowly. An
 #: Idempotency-Key replay counts as a request like any other.
 ORDER_RATE_LIMIT = "5/minute;30/day"
@@ -102,7 +114,22 @@ ORDER_RATE_LIMIT = "5/minute;30/day"
 #: catalogue id by id through this public endpoint meets the limit quickly.
 CART_QUOTE_RATE_LIMIT = "30/minute"
 
-DEFAULT_LIMIT = "60/minute"
+#: Every route that has no `@limiter.limit` of its own: catalogue, cart, admin,
+#: sitemap. One bucket per client address, shared by all of those routes.
+#: Generous on purpose: a storefront page makes a handful of calls, an admin
+#: screen a few dozen, and several shoppers can sit behind one NAT address;
+#: three hundred a minute is far above that and still stops a script walking
+#: the catalogue. A route with its own decorator keeps only that limit and is
+#: not counted here (see `enforce_default_limit`).
+DEFAULT_LIMIT = "300/minute"
+
+#: Never counted against DEFAULT_LIMIT: Render's health check and the
+#: Dockerfile's HEALTHCHECK poll these from one address every few seconds, and a
+#: 429 there is read as "the instance is dead" and restarts it. Exact paths, so
+#: no other route can ride on the exemption.
+HEALTH_PATHS = frozenset(
+    {f"{settings.api_v1_prefix}/health", f"{settings.api_v1_prefix}/health/live"}
+)
 
 #: What slowapi gets when no Redis is configured: counters in this process only.
 MEMORY_STORAGE = "memory://"
@@ -127,7 +154,9 @@ def build_limiter(*, enabled: bool, storage_uri: str) -> Limiter:
         )
     return Limiter(
         key_func=get_remote_address,
-        default_limits=[DEFAULT_LIMIT],
+        # An application limit, not slowapi's `default_limits`: see
+        # `enforce_default_limit` for why, and for what it is applied to.
+        application_limits=[DEFAULT_LIMIT],
         enabled=enabled,
         storage_uri=storage_uri,
         # Keeps the same limits in process memory while Redis is unreachable
@@ -140,6 +169,40 @@ limiter = build_limiter(
     enabled=settings.app_env != "test",
     storage_uri=storage_uri_for(settings.redis_url.get_secret_value()),
 )
+
+
+async def enforce_default_limit(request: Request) -> None:
+    """Count the request against DEFAULT_LIMIT unless the route limits itself.
+
+    Installed as an application-wide dependency, so it runs after routing and
+    the matched route is in `request.scope["route"]` whatever the router tree
+    looks like - which is what slowapi's middleware could not rely on (see the
+    module docstring). Raises RateLimitExceeded, which `main.rate_limit_handler`
+    turns into the 429 envelope with Retry-After.
+
+    The check is slowapi's own `_check_request_limit` in its middleware mode,
+    which is the call SlowAPIMiddleware would have made: the same key function,
+    the same store, the in-memory fallback when Redis is down, and the same
+    "ratelimit exceeded" WARNING (whose key `PseudonymiseRateLimitKey` replaces,
+    so the raw address is not logged). The limit is registered as slowapi's
+    *application* limit, one bucket per client address shared by all the routes
+    this function counts (a per-route default would be scoped by URL, so
+    `/products/<slug>` would give a script walking the catalogue a fresh bucket
+    for every product). Middleware mode would add that bucket to a decorated
+    route too, so `_should_exempt` - the middleware's own test - skips routes
+    with `@limiter.limit`: they are counted against their own limit only.
+
+    What is not counted: HEALTH_PATHS; a CORS preflight, which CORSMiddleware
+    answers before the router and never reaches here; and a path that matches no
+    route (404), which costs one dictionary lookup and no database work.
+    """
+    if not limiter.enabled or request.scope["path"] in HEALTH_PATHS:
+        return
+    endpoint = request.scope["route"].endpoint
+    if _should_exempt(limiter, endpoint):
+        return
+    limiter._check_request_limit(request, endpoint, True)
+
 
 #: Where an address is counted while the shared store cannot be reached and
 #: slowapi has not yet switched to its own fallback. The same degraded middle
