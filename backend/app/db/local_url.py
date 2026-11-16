@@ -10,6 +10,12 @@ alembic/env.py each check the URL they are about to connect to, using this.
 Pure on purpose: no settings, no I/O, so both callers can import it first and a
 test can feed it any URL. Messages carry the host and the database name only -
 never the password or the whole URL.
+
+The same answer also decides TLS: `Settings.requires_ssl` (app/core/config.py)
+is `not is_local_database_url(DATABASE_URL)`, and `build_connect_args` sends no
+TLS to the database when it is False. So `LOCAL_HOSTS` is not only the guards'
+list - a host added to it for their convenience (`db`, `host.docker.internal`)
+also connects to Postgres in plaintext, in every environment.
 """
 
 from collections.abc import Mapping
@@ -17,6 +23,9 @@ from collections.abc import Mapping
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
 
+#: Extending this also turns TLS to the database off for the new host
+#: (`Settings.requires_ssl` reads it through `is_local_database_url`): only add
+#: a host that really is this machine.
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 #: libpq and asyncpg accept these in the query string and let them win over the
