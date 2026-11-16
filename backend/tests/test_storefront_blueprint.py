@@ -10,7 +10,7 @@ BLUEPRINT = Path(__file__).resolve().parents[2] / "frontend" / "render.yaml"
 
 # Markers of the temporary onrender.com addresses. They come off when voltbox.ge
 # is bought; this count must then drop with them, never change by accident.
-TEMP_ONRENDER_MARKERS = 2
+TEMP_ONRENDER_MARKERS = 3
 
 
 def _storefront() -> dict[str, Any]:

@@ -83,6 +83,10 @@ services:
       # live this goes to max-age=31536000; includeSubDomains and preload are
       # decided then, only after every subdomain serves HTTPS - preload is hard
       # to undo.
+      #
+      # TEMP-ONRENDER: max-age=300 is for the temporary onrender.com address.
+      # It becomes max-age=31536000 once voltbox.ge is bought; includeSubDomains and
+      # preload stay out until then, as above.
       - path: /*
         name: Strict-Transport-Security
         value: max-age=300

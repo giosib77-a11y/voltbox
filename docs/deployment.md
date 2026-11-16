@@ -43,6 +43,7 @@ storefront-ის ორი მნიშვნელობა ისევ ი�
 | `SITE_URL` (`backend/render.yaml`) | `https://voltbox-storefront.onrender.com` | `https://voltbox.ge` |
 | `connect-src` (`frontend/render.yaml`) | `https://voltbox-api.onrender.com` | `https://api.voltbox.ge` |
 | `/sitemap.xml`-ის rewrite (`frontend/render.yaml`) | `https://voltbox-api.onrender.com/sitemap.xml` | `https://api.voltbox.ge/sitemap.xml` |
+| `Strict-Transport-Security` (`frontend/render.yaml`) | `max-age=300` | `max-age=31536000` |
 | `TRUSTED_HOSTS` | ცვლილება არ სჭირდება: `voltbox-api.onrender.com`-ს აპი `RENDER_EXTERNAL_HOSTNAME`-იდან თვითონ უმატებს (§2) | `api.voltbox.ge` — უკვე ასეა |
 
 თითოეულ დროებით მნიშვნელობას ფაილში `TEMP-ONRENDER` კომენტარი ახლავს —
