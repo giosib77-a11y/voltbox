@@ -387,6 +387,194 @@ async def test_a_png_cut_inside_its_last_chunk_is_a_400_not_a_500(
     assert storage.objects == {}
 
 
+# --- A picture damaged where only the decode finds it is a 400 (A-097) -------
+#
+# `validate_image` parses structure (`verify()`) and for a JPEG checks nothing after
+# the scan header, so files whose pixel data is broken pass it. The decode in
+# `shrink_to_fit` is what meets the damage, and Pillow reports it as an OSError
+# ("image file is truncated", "broken data stream", "failed to read next frame")
+# - and, for a PNG chunk after the pixel data, as a ValueError, a SyntaxError or
+# an IndexError. All of them used to reach the client as a 500.
+
+#: What a big JPEG's last two bytes (the EOI) become when the upload was cut or
+#: mangled. The audit's three tails.
+DAMAGED_JPEG_TAILS = {"eoi-cut": b"", "eoi-is-ff": b"\xff", "eoi-is-ff-d8": b"\xff\xd8"}
+
+#: The two reasons a file is decoded at all: it is too large, or it must be turned.
+#: `(size, encoder options)`; 400x300 is far below the edge, so only the EXIF
+#: Orientation makes the second one a decode.
+DECODED_BECAUSE: dict[str, tuple[tuple[int, int], dict[str, object]]] = {
+    "too-large": ((1700, 1300), {}),
+    "rotated": ((400, 300), {"exif": exif_bytes(6)}),
+}
+
+
+async def _assert_refused_as_unreadable(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    product_id: str,
+    storage: InMemoryStorage,
+    data: bytes,
+    *,
+    filename: str,
+    content_type: str,
+) -> None:
+    # The premise: the file gets past validation, so the 400 below comes from the
+    # decode and not from the checks that always worked.
+    validate_image(data, None)
+
+    response = await _upload(
+        client, headers, product_id, data=data, filename=filename, content_type=content_type
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_IMAGE"
+    assert storage.objects == {}
+
+
+@pytest.mark.parametrize("tail", DAMAGED_JPEG_TAILS.values(), ids=DAMAGED_JPEG_TAILS.keys())
+@pytest.mark.parametrize("case", DECODED_BECAUSE)
+async def test_a_jpeg_with_damaged_entropy_data_is_a_400_not_a_500(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    product_id: str,
+    storage: InMemoryStorage,
+    case: str,
+    tail: bytes,
+) -> None:
+    size, options = DECODED_BECAUSE[case]
+    data = encode(patterned(size), "JPEG", **options)[:-2] + tail
+
+    await _assert_refused_as_unreadable(
+        client,
+        headers,
+        product_id,
+        storage,
+        data,
+        filename="p.jpg",
+        content_type="image/jpeg",
+    )
+
+
+def png_with_pixel_stream(png: bytes, mutate: Callable[[bytes], bytes]) -> bytes:
+    """`png` with its IDAT chunks replaced by one holding `mutate(zlib stream)`.
+
+    Every chunk keeps a valid CRC, which is what makes the damage invisible to
+    `verify()`: the container is sound and only the compressed pixels are not.
+    """
+    chunks = png_chunks(png)
+    stream = b"".join(chunk[8:-4] for chunk in chunks if chunk[4:8] == b"IDAT")
+    out = [b"\x89PNG\r\n\x1a\n"]
+    placed = False
+    for chunk in chunks:
+        if chunk[4:8] != b"IDAT":
+            out.append(chunk)
+        elif not placed:
+            out.append(png_chunk(b"IDAT", mutate(stream)))
+            placed = True
+    return b"".join(out)
+
+
+def png_with_chunk_after_pixels(png: bytes, kind: bytes, payload: bytes) -> bytes:
+    """`png` with a chunk between its last IDAT and IEND, CRC correct."""
+    return png[:-12] + png_chunk(kind, payload) + png[-12:]
+
+
+def _bad_filter_byte(stream: bytes) -> bytes:
+    raw = bytearray(zlib.decompress(stream))
+    raw[0] = 9  # the first scanline's filter type; 0-4 are defined
+    return zlib.compress(bytes(raw))
+
+
+#: Damage to a PNG that `verify()` cannot see, by the exception Pillow answers with.
+DAMAGED_PNGS: dict[str, Callable[[bytes], bytes]] = {
+    # OSError: the zlib stream ends before the pixels do.
+    "zlib-stream-cut": lambda png: png_with_pixel_stream(png, lambda s: s[: len(s) // 2]),
+    "zlib-stream-empty": lambda png: png_with_pixel_stream(png, lambda s: b""),
+    # OSError: not a zlib stream at all.
+    "zlib-header-broken": lambda png: png_with_pixel_stream(png, lambda s: b"\x00\x00" + s[2:]),
+    # OSError: a filter type the format does not define.
+    "filter-type-undefined": lambda png: png_with_pixel_stream(png, _bad_filter_byte),
+    # ValueError: a chunk after the pixels that is too short for its own type.
+    "pHYs-too-short": lambda png: png_with_chunk_after_pixels(png, b"pHYs", b"\x00"),
+    "tRNS-too-short-for-rgb": lambda png: png_with_chunk_after_pixels(png, b"tRNS", b"\x00"),
+    # SyntaxError: an animation chunk with no animation.
+    "stray-fdAT": lambda png: png_with_chunk_after_pixels(png, b"fdAT", b"\x00\x00\x00\x00abc"),
+    # IndexError: an ICC profile chunk with no name, so no compression method.
+    "iCCP-empty": lambda png: png_with_chunk_after_pixels(png, b"iCCP", b""),
+}
+
+
+@pytest.mark.parametrize("damage", DAMAGED_PNGS)
+@pytest.mark.parametrize("case", DECODED_BECAUSE)
+async def test_a_png_with_damaged_pixel_data_is_a_400_not_a_500(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    product_id: str,
+    storage: InMemoryStorage,
+    case: str,
+    damage: str,
+) -> None:
+    size, options = DECODED_BECAUSE[case]
+    data = DAMAGED_PNGS[damage](encode(patterned(size), "PNG", **options))
+
+    await _assert_refused_as_unreadable(
+        client,
+        headers,
+        product_id,
+        storage,
+        data,
+        filename="p.png",
+        content_type="image/png",
+    )
+
+
+def webp_with_damaged_pixels(webp: bytes) -> bytes:
+    """`webp` with 200 bytes in the middle of its lossless image data flipped.
+
+    The RIFF structure is rebuilt around it, so every size still adds up and
+    `verify()` has nothing to object to.
+    """
+    chunks: list[tuple[bytes, bytes]] = []
+    for fourcc, payload in riff_chunks(webp, 12, len(webp)):
+        if fourcc == b"VP8L":
+            middle = len(payload) // 2
+            flipped = bytes(b ^ 0x5A for b in payload[middle : middle + 200])
+            payload = payload[:middle] + flipped + payload[middle + 200 :]
+        chunks.append((fourcc, payload))
+    return webp_from_chunks(chunks)
+
+
+@pytest.mark.parametrize(
+    "case, size, options",
+    [
+        # 1601x1187 is the largest WebP the decode budget admits.
+        ("too-large", (1601, 1187), {}),
+        ("rotated", (300, 200), {"exif": exif_bytes(6)}),
+    ],
+)
+async def test_a_webp_with_damaged_image_data_is_a_400_not_a_500(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    product_id: str,
+    storage: InMemoryStorage,
+    case: str,
+    size: tuple[int, int],
+    options: dict[str, object],
+) -> None:
+    data = webp_with_damaged_pixels(encode(patterned(size), "WEBP", lossless=True, **options))
+
+    await _assert_refused_as_unreadable(
+        client,
+        headers,
+        product_id,
+        storage,
+        data,
+        filename="p.webp",
+        content_type="image/webp",
+    )
+
+
 #: The first box of an iPhone photo, and of an HEIC whose major brand is the
 #: generic HEIF one. Pillow cannot read past either.
 HEIC_HEADERS = {

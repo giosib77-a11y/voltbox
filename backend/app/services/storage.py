@@ -407,6 +407,17 @@ def _unreadable() -> ValidationError:
     return ValidationError("This file is not a readable image", code="INVALID_IMAGE")
 
 
+#: What Pillow raises while decoding bytes that are not a picture, measured on
+#: damaged files of all three formats: OSError for JPEG ("image file is
+#: truncated", "broken data stream"), PNG pixel data and WebP ("failed to read next
+#: frame"); for a PNG chunk after the pixel data - which Pillow parses only when it
+#: decodes - ValueError (a chunk too short for its type), SyntaxError (an APNG chunk
+#: out of sequence) and IndexError (an `iCCP` with no name, an unguarded index in
+#: Pillow). A closed list on purpose: anything else is not a statement about the
+#: bytes and stays a 500.
+_BAD_PIXEL_DATA = (OSError, ValueError, SyntaxError, IndexError)
+
+
 # Lossless metadata removal. Each function below walks the container of one
 # format byte by byte - no Pillow, no decode, so no allocation to budget - and
 # copies everything except the metadata verbatim. Pixels are never touched. A
@@ -747,7 +758,11 @@ def shrink_to_fit(data: bytes, image_format: str) -> bytes:
     counts wherever it sits, before or after the pixel data), and a file with
     nothing to strip is returned byte for byte. A file whose structure cannot be
     walked raises INVALID_IMAGE rather than being decoded, because that path is
-    unbudgeted.
+    unbudgeted. So does a file whose pixel data cannot be decoded (a JPEG whose
+    EOI was cut, a PNG whose zlib stream is broken): `validate_image` does not read
+    that far, and the decode is where it shows. Only Pillow's own errors for bad
+    bytes are turned into it (`_BAD_PIXEL_DATA`), and only around the two calls
+    that decode; a bug anywhere else is still an error, not a refusal.
     """
     # The one parser `validate_image` already accepted the file for, so a caller
     # that skips validation cannot reach another one through this call.
@@ -760,15 +775,25 @@ def shrink_to_fit(data: bytes, image_format: str) -> bytes:
         saved_as_gray = image_format == "PNG" and image.mode in ("L", "LA")
         profile = _profile_for(image.info.get("icc_profile"), saved_as_gray)
 
-        image.thumbnail((MAX_STORED_EDGE, MAX_STORED_EDGE), Image.Resampling.LANCZOS)
-        if orientation != 1:
-            upright = image.transpose(_UPRIGHT[orientation])
-            # The source bitmap is not needed again, and the encoder below is the
-            # most expensive step: keeping both alive through it measured 97.7 MiB
-            # for the largest WebP the budget admits, releasing the source 89.8.
-            image.close()
-        else:
-            upright = image
+        # Where the pixels are decoded - `thumbnail` for a large image, `transpose`
+        # for one that only has to be turned - and so the only place damage that
+        # `validate_image` cannot see (it parses structure, and for a JPEG nothing
+        # after the scan header) surfaces. Only these two calls are covered: the
+        # encoder below works on a bitmap that is already in memory, and an error
+        # there is ours, not the upload's.
+        try:
+            image.thumbnail((MAX_STORED_EDGE, MAX_STORED_EDGE), Image.Resampling.LANCZOS)
+            if orientation != 1:
+                upright = image.transpose(_UPRIGHT[orientation])
+                # The source bitmap is not needed again, and the encoder below is
+                # the most expensive step: keeping both alive through it measured
+                # 97.7 MiB for the largest WebP the budget admits, releasing the
+                # source 89.8.
+                image.close()
+            else:
+                upright = image
+        except _BAD_PIXEL_DATA as exc:
+            raise _unreadable() from exc
         buffer = io.BytesIO()
         # No `exif=` anywhere: a writer given none writes none.
         if image_format == "JPEG":
