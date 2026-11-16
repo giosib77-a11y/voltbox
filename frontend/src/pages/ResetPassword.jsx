@@ -14,6 +14,7 @@ import {
   validateField,
   validateForm,
 } from '../utils/validate.js';
+import { passwordFieldError } from '../utils/passwordErrors.js';
 import { t } from '../i18n/index.js';
 
 const EMPTY = { newPassword: '', confirmPassword: '' };
@@ -93,18 +94,12 @@ export default function ResetPassword() {
         setLinkDead(true);
         return;
       }
-      // An administrator's password needs 12 characters, which this page cannot
-      // know (the account is unknown until the server looks the token up). The
-      // client has already turned the code into its localised text.
-      if (error?.details?.code === 'ADMIN_PASSWORD_TOO_SHORT') {
-        setErrors({ newPassword: error.message });
-        return;
-      }
-      // Rules the server checks and this page does not: a password from the
-      // list of the most common ones, or a repeated / sequential one.
-      const fields = error?.details?.details;
-      if (Array.isArray(fields) && fields.some((f) => f?.field === 'newPassword')) {
-        setErrors({ newPassword: t('auth.tooCommon') });
+      // Rules the server checks and this page does not: an administrator's 12
+      // characters (the account is unknown until the server looks the token
+      // up), a common password, a repeated / sequential one.
+      const passwordError = passwordFieldError(error, 'newPassword');
+      if (passwordError) {
+        setErrors({ newPassword: passwordError });
         return;
       }
       toast.error(error?.message || t('auth.resetFailed'));
@@ -139,7 +134,7 @@ export default function ResetPassword() {
           type="password"
           required
           autoComplete="new-password"
-          hint={t('auth.minChars', { count: MIN_PASSWORD_LENGTH })}
+          hint={t('auth.passwordHint', { count: MIN_PASSWORD_LENGTH })}
           value={values.newPassword}
           error={touched.newPassword ? errors.newPassword : ''}
           onChange={(e) => handleChange('newPassword', e.target.value)}

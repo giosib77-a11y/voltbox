@@ -19,6 +19,7 @@ def _validate_password(value: str) -> str:
     """
     if len(value) < MIN_PASSWORD_LENGTH:
         raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
+    # Wording read by frontend/src/utils/passwordErrors.js; pinned by test_password_policy.py.
     if is_common_password(value):
         raise ValueError("This password is too common")
     if is_patterned_password(value):

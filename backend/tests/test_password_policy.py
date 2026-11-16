@@ -304,6 +304,40 @@ async def test_register_refuses_a_weak_password(client: httpx.AsyncClient, passw
     assert error["details"][0]["field"] == "password"
 
 
+# frontend/src/utils/passwordErrors.js tells the two refusals apart by these words in
+# `details[].message` (/too common/i, /repetition|sequence/i); a rewording here would
+# silently turn the storefront's specific message into the generic one.
+@pytest.mark.parametrize(
+    ("password", "words"),
+    [("Password1!", ["too common"]), ("xkxkxkxkxk", ["repetition", "sequence"])],
+)
+async def test_the_refusal_message_keeps_the_words_the_storefront_matches(
+    client: httpx.AsyncClient, db: AsyncSession, password: str, words: list[str]
+) -> None:
+    register = await client.post(
+        REGISTER,
+        json={
+            "firstName": "ნინო",
+            "lastName": "კაპანაძე",
+            "email": "words@example.ge",
+            "password": password,
+        },
+    )
+    user = await make_user(db)
+    change = await client.post(
+        CHANGE,
+        headers=auth_header(user),
+        json={"currentPassword": "supersecret1", "newPassword": password},
+    )
+
+    for response, field in ((register, "password"), (change, "newPassword")):
+        assert response.status_code == 400
+        details = response.json()["error"]["details"]
+        assert details[0]["field"] == field
+        for word in words:
+            assert word in details[0]["message"]
+
+
 @pytest.mark.parametrize("password", ["Tbilisi-Vake-2026", "k7#Rm2!pQz", "mzeqalaqi-ghame-77"])
 async def test_register_accepts_a_good_password(client: httpx.AsyncClient, password: str) -> None:
     response = await client.post(

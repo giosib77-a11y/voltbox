@@ -8,6 +8,7 @@ import { useToast } from '../../hooks/useToast.js';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle.js';
 import { MIN_PASSWORD_LENGTH, PASSWORD_FIELDS, validateField, validateForm } from '../../utils/validate.js';
 import { QUERY_KEYS } from '../../constants/index.js';
+import { passwordFieldError } from '../../utils/passwordErrors.js';
 import { t } from '../../i18n/index.js';
 
 const EMPTY = { currentPassword: '', newPassword: '', confirmPassword: '' };
@@ -55,10 +56,19 @@ export default function ChangePassword() {
       toast.success(t('account.passwordChangedSignIn'));
       navigate(`/login?${QUERY_KEYS.redirect}=${encodeURIComponent('/account')}`, { replace: true });
     } catch (error) {
-      toast.error(error?.message || t('account.passwordChangeFailed'));
-      if (error?.details?.currentPassword) {
+      // A refusal that belongs to a field is shown at that field only, as on
+      // the reset page. `details.currentPassword` is the mock's shape; the real
+      // API sends the code.
+      if (error?.details?.currentPassword || error?.details?.code === 'INVALID_CURRENT_PASSWORD') {
         setErrors({ currentPassword: error.message });
+        return;
       }
+      const passwordError = passwordFieldError(error, 'newPassword');
+      if (passwordError) {
+        setErrors({ newPassword: passwordError });
+        return;
+      }
+      toast.error(error?.message || t('account.passwordChangeFailed'));
     } finally {
       setSaving(false);
     }

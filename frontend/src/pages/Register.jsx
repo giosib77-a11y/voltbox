@@ -10,6 +10,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import { MIN_PASSWORD_LENGTH, REGISTER_FIELDS, validateField, validateForm } from '../utils/validate.js';
 import { QUERY_KEYS } from '../constants/index.js';
 import { getSafeRedirect } from '../utils/redirect.js';
+import { passwordFieldError } from '../utils/passwordErrors.js';
 import { t } from '../i18n/index.js';
 
 const EMPTY = { firstName: '', lastName: '', email: '', password: '', confirmPassword: '' };
@@ -60,8 +61,18 @@ export default function Register() {
       toast.success(t('auth.registered'));
       navigate(redirectTo, { replace: true });
     } catch (error) {
+      // A refusal that belongs to a field is shown at that field only.
+      // `details.email` is the mock's shape; the real API sends the code.
+      if (error?.details?.email || error?.details?.code === 'EMAIL_ALREADY_EXISTS') {
+        setErrors((c) => ({ ...c, email: error.message }));
+        return;
+      }
+      const passwordError = passwordFieldError(error, 'password');
+      if (passwordError) {
+        setErrors((c) => ({ ...c, password: passwordError }));
+        return;
+      }
       toast.error(error?.message || t('auth.registerFailed'));
-      if (error?.details?.email) setErrors((c) => ({ ...c, email: error.message }));
     }
   }
 
@@ -126,7 +137,7 @@ export default function Register() {
               type={showPassword ? 'text' : 'password'}
               required
               autoComplete="new-password"
-              hint={t('auth.minChars', { count: MIN_PASSWORD_LENGTH })}
+              hint={t('auth.passwordHint', { count: MIN_PASSWORD_LENGTH })}
               value={values.password}
               error={touched.password ? errors.password : ''}
               onChange={(e) => handleChange('password', e.target.value)}

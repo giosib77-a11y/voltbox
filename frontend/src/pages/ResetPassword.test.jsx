@@ -151,6 +151,41 @@ describe('the reset page', () => {
     expect(screen.getByLabelText(/^ახალი პაროლი/)).toHaveAttribute('aria-invalid', 'true');
   });
 
+  it('marks the password field when the server finds it a repetition or a sequence', async () => {
+    serve({
+      reset: () =>
+        reply(
+          {
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Invalid request',
+              details: [
+                {
+                  field: 'newPassword',
+                  message: 'Value error, This password is a repetition or a simple sequence',
+                  type: 'value_error',
+                },
+              ],
+            },
+          },
+          400,
+        ),
+    });
+    renderPage();
+
+    choose('aaaaaaaaaa');
+
+    expect(await screen.findByText(/გამეორება ან მიმდევრობა/)).toBeInTheDocument();
+    expect(screen.queryByText('ეს პაროლი ძალიან მარტივია — აირჩიეთ სხვა.')).not.toBeInTheDocument();
+  });
+
+  it('says in the hint that repetitions and sequences are not allowed', async () => {
+    serve();
+    renderPage();
+
+    expect(await screen.findByText(/გამეორება და მიმდევრობა არ შეიძლება/)).toBeInTheDocument();
+  });
+
   it('tells an administrator the 12-character rule instead of calling the password too common', async () => {
     serve({
       reset: () =>

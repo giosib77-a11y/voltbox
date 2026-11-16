@@ -90,6 +90,119 @@ describe('a successful password change', () => {
   });
 });
 
+const refusal = (field, message) =>
+  reply(
+    {
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid request',
+        details: [{ field, message: `Value error, ${message}`, type: 'value_error' }],
+      },
+    },
+    400,
+  );
+
+describe('a new password the server refuses', () => {
+  it.each([
+    ['a common one', 'This password is too common', 'auth.tooCommon'],
+    ['a repetition or sequence', 'This password is a repetition or a simple sequence', 'auth.tooPatterned'],
+  ])('shows the reason at the new-password field for %s', async (_name, message, key) => {
+    global.fetch = vi.fn(async () => refusal('newPassword', message));
+    renderForm();
+    expect(await screen.findByTestId('user')).toHaveTextContent(USER.email);
+
+    await fillAndSubmit(userEvent.setup());
+
+    expect(await screen.findByText(t(key))).toBeInTheDocument();
+    expect(screen.getByLabelText(new RegExp('^' + t('auth.newPassword')))).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    expect(readSession()).toEqual({ user: USER, token: 'tok' });
+  });
+
+  it('shows an administrator the 12-character rule at the new-password field', async () => {
+    global.fetch = vi.fn(async () =>
+      reply(
+        {
+          error: {
+            code: 'ADMIN_PASSWORD_TOO_SHORT',
+            message: "An administrator's password must be at least 12 characters",
+            details: [{ field: 'newPassword', message: 'too short' }],
+          },
+        },
+        400,
+      ),
+    );
+    renderForm();
+    expect(await screen.findByTestId('user')).toHaveTextContent(USER.email);
+
+    await fillAndSubmit(userEvent.setup());
+
+    // The toast says the same words, so the field is what tells them apart.
+    const field = screen.getByLabelText(new RegExp('^' + t('auth.newPassword')));
+    await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'));
+    expect(document.getElementById(field.getAttribute('aria-describedby'))).toHaveTextContent(
+      t('apiErrors.ADMIN_PASSWORD_TOO_SHORT'),
+    );
+  });
+
+  it('says in the rule text that repetitions and sequences are not allowed', () => {
+    global.fetch = vi.fn(async () => reply({ ok: true }));
+    renderForm();
+    expect(screen.getByText(t('account.passwordRule', { count: 8 }))).toBeInTheDocument();
+    expect(t('account.passwordRule', { count: 8 })).toMatch(/მიმდევრობა/);
+  });
+});
+
+describe('a refusal shown at its field only', () => {
+  const generic = () => t('apiErrors.VALIDATION_ERROR');
+
+  it('names a refusal for any other reason at the new-password field, with no generic toast', async () => {
+    global.fetch = vi.fn(async () =>
+      reply(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Invalid request',
+            details: [
+              {
+                field: 'newPassword',
+                message: 'String should have at most 128 characters',
+                type: 'string_too_long',
+              },
+            ],
+          },
+        },
+        400,
+      ),
+    );
+    renderForm();
+    expect(await screen.findByTestId('user')).toHaveTextContent(USER.email);
+
+    await fillAndSubmit(userEvent.setup());
+
+    expect(await screen.findByText(t('auth.passwordRefused'))).toBeInTheDocument();
+    expect(screen.queryByText(generic())).not.toBeInTheDocument();
+  });
+
+  it('shows a wrong current password at its own field, as the real API sends it', async () => {
+    global.fetch = vi.fn(async () =>
+      reply({ error: { code: 'INVALID_CURRENT_PASSWORD', message: 'wrong password' } }, 400),
+    );
+    renderForm();
+    expect(await screen.findByTestId('user')).toHaveTextContent(USER.email);
+
+    await fillAndSubmit(userEvent.setup());
+
+    const field = screen.getByLabelText(t('account.currentPassword'), { exact: false });
+    await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'));
+    expect(document.getElementById(field.getAttribute('aria-describedby'))).toHaveTextContent(
+      t('apiErrors.INVALID_CURRENT_PASSWORD'),
+    );
+  });
+});
+
 describe('a rejected password change', () => {
   it('keeps the session and stays on the page', async () => {
     global.fetch = vi.fn(async () =>
