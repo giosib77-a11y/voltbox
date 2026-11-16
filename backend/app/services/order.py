@@ -74,17 +74,21 @@ async def _next_order_number(db: AsyncSession) -> str:
     since `_is_idempotency_clash` rightly lets that violation through, checkout
     answered 500. What still holds: the same happens at the 100,001st.
 
-    The date is the Tbilisi calendar day, not the database session's: the
-    database runs in UTC, so a bare `now()` stamped an order placed between
-    00:00 and 04:00 Tbilisi time with the previous day. What still holds: the
-    sequence is global and never reset, so the suffix does not restart at 00001
-    on a new day.
+    The date is the store's calendar day in `settings.store_timezone` (default
+    Asia/Tbilisi), not the database session's: the database runs in UTC, so a
+    bare `now()` stamped an order placed between 00:00 and 04:00 Tbilisi time
+    with the previous day. It is the same zone the admin "today" filter uses
+    (`admin_orders`), so the date in a number and that filter cannot disagree.
+    What still holds: the sequence is global and never reset, so the suffix does
+    not restart at 00001 on a new day; and a zone name Postgres does not know
+    makes this statement fail, as it would `ZoneInfo` in the admin filter.
     """
     row = await db.execute(
         text(
-            "SELECT to_char(now() AT TIME ZONE 'Asia/Tbilisi', 'YYYYMMDD') AS day, "
+            "SELECT to_char(now() AT TIME ZONE :tz, 'YYYYMMDD') AS day, "
             "nextval('order_number_seq') AS seq"
-        )
+        ),
+        {"tz": settings.store_timezone},
     )
     day, seq = row.one()
     return f"VB-{day}-{int(seq) % 100000:05d}"

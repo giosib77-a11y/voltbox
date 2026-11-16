@@ -9,6 +9,7 @@ import os
 from functools import lru_cache
 from typing import Literal
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -244,6 +245,25 @@ class Settings(BaseSettings):
     def strip_secret(cls, value: SecretStr) -> SecretStr:
         """A token pasted with a trailing space or newline is the same token."""
         return SecretStr(value.get_secret_value().strip())
+
+    @field_validator("store_timezone")
+    @classmethod
+    def known_store_timezone(cls, value: str) -> str:
+        """A zone name nobody can resolve stops the process at startup.
+
+        The name is used for the date inside an order number (as a bind
+        parameter to Postgres, `AT TIME ZONE`) and for the admin "today" filter
+        (`ZoneInfo`). Left unchecked, a typo in STORE_TIMEZONE surfaced as a 500
+        on every checkout. What still holds: this asks Python's zoneinfo, not
+        Postgres, so a rare name one tz database has and the other lacks still
+        passes here; the default Asia/Tbilisi is in both.
+        """
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError, OSError) as error:
+            # OSError: a name that is a directory in the tz database ("America").
+            raise ValueError(f"STORE_TIMEZONE {value!r} is not a known time zone") from error
+        return value
 
     @property
     def telegram_enabled(self) -> bool:
