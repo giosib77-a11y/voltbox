@@ -1018,7 +1018,9 @@ class TestAnUploadIsStoredAtASaneSize:
             assert saved.size == (MAX_STORED_EDGE, MAX_STORED_EDGE // 4)
 
     def test_a_re_encode_that_grew_is_discarded(self) -> None:
-        """Some small PNGs come out larger after a resize; the original wins."""
+        """At the edge and upright nothing is re-encoded at all (the walk strips it
+        byte for byte), so a re-encode that would have grown cannot happen. What
+        happens to one over the edge is `test_a_png_above_the_edge_is_resized...`."""
         already_small = image_bytes("PNG", (100, 100))
 
         assert shrink_to_fit(already_small, "PNG") == already_small
@@ -1632,8 +1634,8 @@ class TestWhatAPhotoKnowsDoesNotReachThePublicBucket:
         self, tail: str
     ) -> None:
         """A decode had already been paid for and a clean re-encode of it exists,
-        so the comparison with the stripped original is skipped rather than
-        turning the upload into a 400."""
+        and the walk is not run on a decoded image (A-105), so it cannot turn the
+        upload into a 400."""
         exif = exif_bytes(gps=True, make="SecretMaker")
         original = encode(patterned((1700, 1300)), "JPEG", exif=exif)[:-2]
         original += self.UNWALKABLE_TAILS[tail]
@@ -2139,21 +2141,58 @@ class TestOnlyChunksKnownToBeHarmlessAreStored:
         assert len(animation_frames(stored)) == 1
         assert animation_frames(stored) == animation_frames(original)[:1]
 
-    def test_a_png_above_the_edge_whose_re_encode_is_no_smaller_is_stored_stripped(self) -> None:
-        """The stripped original is what the re-encode is compared with and what
-        is kept when the re-encode does not beat it - so it is the one that must
-        not carry the chunks. A repeating ramp compresses well as drawn and badly
-        once the resize has smoothed it."""
-        original = png_with_identity(encode(patterned((1700, 40), "L"), "PNG"))
-        stripped = storage_module._strip_png(original)
+    @staticmethod
+    def _periodic_png(mode: str) -> bytes:
+        """1700x50 that compresses well as drawn and badly once the resize has
+        smoothed it: a repeating ramp, so the re-encode is larger than the file."""
+        size = (1700, 50)
+        if mode == "I;16":
+            image = Image.new("I;16", size)
+            image.putdata([x % 256 * 257 for _ in range(size[1]) for x in range(size[0])])
+        else:
+            image = patterned(size, mode)
+        return encode(image, "PNG")
+
+    @staticmethod
+    def _re_encode_size(original: bytes) -> int:
         with Image.open(io.BytesIO(original)) as probe:
             probe.thumbnail((MAX_STORED_EDGE, MAX_STORED_EDGE), Image.Resampling.LANCZOS)
-            assert len(encode(probe, "PNG")) >= len(stripped)  # the premise
+            return len(encode(probe, "PNG"))
+
+    @pytest.mark.parametrize("mode", ["L", "I;16"])
+    def test_a_png_above_the_edge_is_resized_even_when_the_re_encode_is_larger(
+        self, mode: str
+    ) -> None:
+        """A-105: the stripped original used to win when the re-encode was larger,
+        so a file over the edge was stored at its own size."""
+        original = png_with_identity(self._periodic_png(mode))
+        stripped = storage_module._strip_png(original)
+        assert self._re_encode_size(original) >= len(stripped)  # the premise
+        assert max(pixels(original)[1]) > MAX_STORED_EDGE
 
         stored = shrink_to_fit(original, "PNG")
 
-        assert stored == stripped
+        assert max(pixels(stored)[1]) <= MAX_STORED_EDGE
         assert not set(PNG_IDENTITY) & set(png_chunk_types(stored))
+
+    @pytest.mark.parametrize("mode", ["L", "I;16"])
+    async def test_an_upload_above_the_edge_is_stored_within_it_even_when_the_re_encode_grew(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        product_id: str,
+        storage: InMemoryStorage,
+        mode: str,
+    ) -> None:
+        original = self._periodic_png(mode)
+        assert self._re_encode_size(original) >= len(storage_module._strip_png(original))
+
+        response = await _upload(client, headers, product_id, data=original)
+
+        assert response.status_code == 201, response.text
+        stored = only_object(storage)
+        assert max(pixels(stored)[1]) <= MAX_STORED_EDGE
+        assert len(stored) > len(original)  # and the re-encode really is the larger file
 
     def test_a_webp_keeps_what_shows_the_picture_and_nothing_that_names_its_maker(self) -> None:
         written = encode(
@@ -2391,8 +2430,8 @@ class TestOnlyChunksKnownToBeHarmlessAreStored:
 
     def test_a_resized_webp_the_walk_refuses_is_stored_as_the_re_encode(self) -> None:
         """What still holds from A-059: a WebP that was decoded anyway (it is above
-        the edge) has a clean re-encode, so the walk's refusal only costs the
-        comparison with the stripped original."""
+        the edge) has a clean re-encode, and since A-105 the walk is not run on it
+        at all."""
         written = encode(patterned((1700, 1000)), "WEBP", lossless=True, method=0)
         picture = riff_chunks(written, 12, len(written))
         padded = webp_from_chunks([*picture, *[(b"zzzz", b"")] * self.EMPTY_CHUNKS])

@@ -376,7 +376,15 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
     `acTL` only, so a second `acTL` before IDAT passed the A-101 one-frame check and the byte strip then kept
     every fcTL/fdAT, which a browser may animate; an `acTL` = 1 file with extra frames kept dead bytes.
   - A-103: the noisy-alpha WebP overrun is accepted, not priced (Accepted Risks).
-- What still holds: an APNG whose default image is not frame 0 is still refused (Pillow counts two frames), and
+  - **A decoded image always stores its re-encode** (A-105). The "keep the stripped original when the re-encode
+    is not smaller" rule is removed, not narrowed: it ran only for an upright image, and an upright image is
+    decoded only when it is over `MAX_STORED_EDGE`, so the rule could only ever store an over-edge file (a
+    synthetic 1700×50 `I;16` PNG was kept at 1700 px). AUDIT.md's "only when the original fits the edge" would
+    have been a condition that never holds. Consequence: a stored re-encode may be larger in bytes than the
+    upload; the edge holds.
+- What still holds: an upright image at or below the edge is never decoded and is stripped byte for byte (a file
+  the walk cannot read is still `INVALID_IMAGE` there); a decoded file is no longer walked, so one the walk would
+  refuse is stored as its metadata-free re-encode, as A-059 already did. An APNG whose default image is not frame 0 is still refused (Pillow counts two frames), and
   any real animation is `IMAGE_ANIMATED`. `_WEBP_KEPT` still keeps ANIM/ANMF, so a one-frame animated WebP keeps
   them (WebP was not in scope). A PNG made only of kept chunks is still stored byte for byte.
   `MAX_IMAGE_DECODE_BYTES`, `DECODE_COST` and `Semaphore(1)` are unchanged.

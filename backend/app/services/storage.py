@@ -925,28 +925,23 @@ def shrink_to_fit(data: bytes, image_format: str) -> bytes:
             upright.save(buffer, format="WEBP", quality=JPEG_QUALITY, method=5, icc_profile=profile)
         shrunk = buffer.getvalue()
 
-    # An image that was turned upright keeps its re-encode whatever the size: the
-    # stripped original would show sideways.
-    if orientation != 1:
-        return shrunk
-    # A re-encode that came out larger is not worth keeping - it happens with
-    # small PNGs whose palette the resize expands. What it is compared with, and
-    # what wins, is the stripped original, never the raw one.
-    try:
-        stripped = _STRIP_METADATA[image_format](data)
-    except ValidationError:
-        # Pillow decoded the file but the byte-level walk cannot read it (a JPEG
-        # whose tail is not an EOI, say - Pillow stops after the last MCU and
-        # never looks at what follows). The comparison is only there to prefer a
-        # smaller file; a clean re-encode already exists, and refusing the upload
-        # for the sake of a comparison would throw away a picture that was
-        # decoded and paid for. The re-encode carries no metadata: no `exif=` was
-        # passed, and the ICC profile is the only thing copied across. What still
-        # holds: at or below the edge and upright nothing is decoded, so there is
-        # no re-encode to fall back on and the walk's INVALID_IMAGE reaches the
-        # caller (above). Only the walk's own refusal is caught here.
-        return shrunk
-    return shrunk if len(shrunk) < len(stripped) else stripped
+    # The re-encode is always what is stored once the code gets here. Reaching it
+    # means the image was decoded for one of two reasons - its longest side is over
+    # MAX_STORED_EDGE, or its Orientation is not 1 - and in neither case would the
+    # stripped original do: an over-edge one breaks the edge, a turned one would
+    # show sideways. It used to be compared with the stripped original when the
+    # Orientation was 1 and the smaller won (A-105); that comparison could only
+    # ever be about an image over the edge, and a synthetic 1700x50 `I;16` PNG
+    # whose re-encode was larger was stored at 1700 px because of it. So a
+    # re-encode may be larger in bytes than the file that arrived, and the edge
+    # holds. What still holds: an image at or below the edge and upright is never
+    # decoded - it is stripped at the byte level above, so a file the walk cannot
+    # read still raises INVALID_IMAGE there; and the walk is no longer run on an
+    # image that was decoded, so one it cannot read (a JPEG whose tail is not an
+    # EOI - Pillow stops after the last MCU) is stored as its clean re-encode,
+    # which carries no metadata: no `exif=` is passed and the ICC profile is the
+    # only thing copied across.
+    return shrunk
 
 
 def object_key(product_id: uuid.UUID, extension: str) -> str:
