@@ -196,24 +196,53 @@ def _max_pixels(probe: Image.Image, image_format: str) -> int:
 _ORIENTATION_TAG = 0x0112
 
 
-def _exif_orientation(probe: Image.Image) -> int:
+def _png_exif(data: bytes) -> bytes | None:
+    """The payload of the first `eXIf` chunk of a PNG, wherever it sits, or None.
+
+    Pillow only has a PNG's EXIF at open when the chunk precedes the pixel data;
+    one placed after IDAT (the PNG spec allows either) is read only by `load()`,
+    which decodes the whole image. So the chunk list is walked here, the way
+    `_strip_png` walks it: length and type of each chunk, no CRC, no pixels. Cost:
+    one pass over the chunk headers, the same order of work as Pillow's own
+    `verify()`, which walks every chunk of the file (and checks its CRC); it
+    stops at IEND or at the first chunk that does not fit, and a file that is
+    broken is refused later by `verify()`, not here.
+    """
+    size = len(data)
+    pos = 8  # past the signature, which Pillow has already matched
+    while pos + 12 <= size:
+        end = pos + 12 + int.from_bytes(data[pos : pos + 4], "big")
+        if end > size:
+            return None
+        kind = data[pos + 4 : pos + 8]
+        if kind == b"eXIf":
+            return data[pos + 8 : end - 4]
+        if kind == b"IEND":
+            return None
+        pos = end
+    return None
+
+
+def _exif_orientation(probe: Image.Image, data: bytes) -> int:
     """The EXIF Orientation of a just-opened image, 1 (upright) when there is none.
 
-    Header-only on purpose, and the one function both `validate_image` and
-    `shrink_to_fit` ask, so they agree on which images are decoded. It reads the
-    raw `info["exif"]` and parses only that. `getexif()` is avoided: on a PNG
-    whose `eXIf` chunk follows the pixel data it calls `load()`, which decodes the
-    whole image before the budget has been checked.
+    `data` is the file `probe` was opened from. Header-only on purpose, and the
+    one function both `validate_image` and `shrink_to_fit` ask, so they agree on
+    which images are decoded: it reads the raw EXIF and parses only that.
+    `getexif()` is avoided because on a PNG whose `eXIf` chunk follows the pixel
+    data it calls `load()`, which decodes the whole image before the budget has
+    been checked. A PNG's EXIF is therefore always taken from its chunk list
+    (`_png_exif`) and never from `info["exif"]`, so an `eXIf` before the pixel
+    data and one after it turn the picture the same way.
 
     Only EXIF counts. A browser turns a picture upright by EXIF Orientation and
     ignores the XMP one, and XMP is removed from what is stored anyway.
 
-    What still holds: a PNG whose `eXIf` chunk comes after the pixel data has no
-    `info["exif"]` at open, so it reads as upright and is stored as drawn. A value
-    outside 2..8 (0, 9, garbage, a non-integer) is not a rotation either, and
-    unreadable EXIF is not a reason to refuse a picture.
+    What still holds: a PNG with several `eXIf` chunks (the spec allows one) is
+    read from the first. A value outside 2..8 (0, 9, garbage, a non-integer) is
+    not a rotation, and unreadable EXIF is not a reason to refuse a picture.
     """
-    raw = probe.info.get("exif")
+    raw = _png_exif(data) if probe.format == "PNG" else probe.info.get("exif")
     if not raw:
         return 1
     exif = Image.Exif()
@@ -271,7 +300,7 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
             # sampling factors are only readable from the probe.
             allowed = image_format in ALLOWED_FORMATS
             pixel_budget = _max_pixels(probe, image_format) if allowed else 0
-            orientation = _exif_orientation(probe)
+            orientation = _exif_orientation(probe, data)
             probe.verify()
     except Image.DecompressionBombError as exc:
         # Pillow has a guard of its own: it warns above MAX_IMAGE_PIXELS
@@ -603,14 +632,16 @@ def shrink_to_fit(data: bytes, image_format: str) -> bytes:
     which is a worse picture than a large one.
 
     What still holds: nothing is decoded that `validate_image` did not cost
-    (it reads the orientation the same way), and a file with nothing to strip is
-    returned byte for byte. A file whose structure cannot be walked raises
-    INVALID_IMAGE rather than being decoded, because that path is unbudgeted.
+    (it reads the orientation the same way, from the same bytes - a PNG's `eXIf`
+    counts wherever it sits, before or after the pixel data), and a file with
+    nothing to strip is returned byte for byte. A file whose structure cannot be
+    walked raises INVALID_IMAGE rather than being decoded, because that path is
+    unbudgeted.
     """
     # The one parser `validate_image` already accepted the file for, so a caller
     # that skips validation cannot reach another one through this call.
     with Image.open(io.BytesIO(data), formats=[image_format]) as image:
-        orientation = _exif_orientation(image)
+        orientation = _exif_orientation(image, data)
         if max(image.size) <= MAX_STORED_EDGE and orientation == 1:
             return _STRIP_METADATA[image_format](data)
 

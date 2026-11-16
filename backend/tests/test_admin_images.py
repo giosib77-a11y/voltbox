@@ -167,6 +167,15 @@ def png_chunk_types(data: bytes) -> list[bytes]:
     return kinds
 
 
+def png_with_late_exif(png: bytes, exif: bytes) -> bytes:
+    """`png` with an `eXIf` chunk between its last IDAT and IEND.
+
+    A PNG carries EXIF without the `Exif\\0\\0` prefix that `exif_bytes` writes.
+    """
+    payload = exif.removeprefix(b"Exif\x00\x00")
+    return png[:-12] + png_chunk(b"eXIf", payload) + png[-12:]
+
+
 def webp_chunks(data: bytes) -> dict[bytes, bytes]:
     chunks: dict[bytes, bytes] = {}
     pos = 12
@@ -913,6 +922,108 @@ class TestWhatAPhotoKnowsDoesNotReachThePublicBucket:
 
         assert pixels(stored) == ("RGB", expected.size, expected.tobytes())
         assert png_chunk_types(stored).count(b"eXIf") == 0
+
+    @pytest.mark.parametrize("orientation", range(2, 9))
+    def test_a_png_whose_exif_follows_the_pixels_is_turned_like_one_whose_exif_precedes_them(
+        self, orientation: int
+    ) -> None:
+        """The PNG spec allows `eXIf` on either side of IDAT. Pillow has it at open
+        only when it comes first, so a late one used to read as upright, was
+        deleted by the stripper, and the photo came out sideways."""
+        picture = patterned((60, 40))
+        early = encode(picture, "PNG", exif=exif_bytes(orientation))
+        late = png_with_late_exif(encode(picture, "PNG"), exif_bytes(orientation))
+        assert png_chunk_types(early).index(b"eXIf") < png_chunk_types(early).index(b"IDAT")
+        assert png_chunk_types(late).index(b"eXIf") > png_chunk_types(late).index(b"IDAT")
+
+        assert validate_image(late, "image/png") == ("PNG", "png")
+        stored = shrink_to_fit(late, "PNG")
+
+        assert pixels(stored) == pixels(shrink_to_fit(early, "PNG"))
+        assert pixels(stored)[1] == ((40, 60) if orientation >= 5 else (60, 40))
+        assert png_chunk_types(stored).count(b"eXIf") == 0
+
+    async def test_a_late_exif_png_is_stored_upright_through_the_upload(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+    ) -> None:
+        picture = Image.new("RGB", (1200, 900), (255, 0, 0))
+        picture.paste((0, 0, 255), (600, 0, 1200, 900))
+        photo = png_with_late_exif(encode(picture, "PNG"), exif_bytes(6, gps=True, make="Acme"))
+
+        stored = await self._store(client, headers, storage, product_id, photo, "png")
+
+        assert png_chunk_types(stored).count(b"eXIf") == 0
+        assert b"Acme" not in stored
+        mode, size, _ = pixels(stored)
+        assert (mode, size) == ("RGB", (900, 1200))
+        with Image.open(io.BytesIO(stored)) as saved:
+            rgb = saved.convert("RGB")
+            top = rgb.getpixel((450, 100))
+            bottom = rgb.getpixel((450, 1100))
+        assert isinstance(top, tuple)
+        assert isinstance(bottom, tuple)
+        assert top[0] > 200 > top[2]
+        assert bottom[2] > 200 > bottom[0]
+
+    @pytest.mark.parametrize("late", [False, True])
+    def test_a_png_that_must_be_turned_is_costed_wherever_its_exif_sits(
+        self, monkeypatch: pytest.MonkeyPatch, late: bool
+    ) -> None:
+        """The budget is applied to an image that is decoded, and a late `eXIf` makes
+        the decode as real as an early one: an over-budget file is refused alike."""
+        fixed, per_pixel = DECODE_COST["PNG"]
+        monkeypatch.setattr(settings, "max_image_decode_bytes", fixed + 1_000_000 * per_pixel)
+        upright = encode(patterned((1600, 1600)), "PNG")
+        assert validate_image(upright, None)[0] == "PNG"  # never decoded: not costed
+        exif = exif_bytes(6)
+        turned = (
+            png_with_late_exif(upright, exif)
+            if late
+            else encode(patterned((1600, 1600)), "PNG", exif=exif)
+        )
+
+        with pytest.raises(ValidationError) as refused:
+            validate_image(turned, None)
+
+        assert refused.value.code == "IMAGE_TOO_MANY_PIXELS"
+
+    @pytest.mark.parametrize("payload", [b"", b"not exif at all", b"Exif\x00\x00II*\x00\xff\xff"])
+    def test_an_unreadable_late_exif_is_not_a_rotation_and_not_a_500(self, payload: bytes) -> None:
+        original = png_with_late_exif(encode(patterned((60, 40)), "PNG"), payload)
+
+        assert validate_image(original, "image/png") == ("PNG", "png")
+        stored = shrink_to_fit(original, "PNG")
+
+        assert pixels(stored) == pixels(original)
+        assert png_chunk_types(stored).count(b"eXIf") == 0
+
+    def test_a_png_cut_short_after_its_late_exif_is_invalid_not_a_500(self) -> None:
+        good = png_with_late_exif(encode(patterned((60, 40)), "PNG"), exif_bytes(6))
+
+        inside_exif = good.index(b"eXIf") + 8 + 2  # in the payload, past the header
+        for broken in (good[:-12], good[:-20], good[:inside_exif]):
+            with pytest.raises(ValidationError) as refused:
+                validate_image(broken, "image/png")
+            assert refused.value.code == "INVALID_IMAGE"
+
+    def test_the_chunk_walk_that_finds_a_late_exif_is_cheap_on_a_file_of_tiny_chunks(self) -> None:
+        """5 MiB of empty chunks is the worst case for a walk that does one step per
+        chunk: Pillow's `verify()` takes as many steps (and checks each CRC)."""
+        clean = encode(patterned((16, 16)), "PNG")
+        filler = png_chunk(b"prVT", b"")
+        count = (settings.max_image_bytes - len(clean)) // len(filler)
+        hostile = clean[:-12] + filler * count + clean[-12:]
+        assert len(hostile) <= settings.max_image_bytes
+
+        started = time.perf_counter()
+        assert storage_module._png_exif(hostile) is None
+        elapsed = time.perf_counter() - started
+
+        assert elapsed < 2.0, f"{elapsed:.2f}s for {count} chunks"
 
     async def test_a_png_loses_every_chunk_that_carries_metadata(
         self,
