@@ -371,10 +371,11 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 ### 2026-11-16 — A stored APNG is a static PNG; image, password and health-limit nits (A-103–A-106, A-088, A-090–A-095)
 - Decision (owner-approved beforehand):
   - **A stored PNG never keeps APNG chunks** (A-104). `_PNG_KEPT` no longer lists acTL, fcTL, fdAT (15 chunks
-    now). Every APNG `validate_image` accepts has one frame and that frame is the default image (IDAT), so the
-    stored file is a static PNG that decodes to the same picture. Why: Pillow takes `n_frames` from the first
-    `acTL` only, so a second `acTL` before IDAT passed the A-101 one-frame check and the byte strip then kept
-    every fcTL/fdAT, which a browser may animate; an `acTL` = 1 file with extra frames kept dead bytes.
+    now). Every APNG `validate_image` accepts has one frame as Pillow counts it, and the stored file is its IDAT
+    picture in every case — a static PNG. Why: a second `acTL` makes Pillow drop the animation and count one
+    frame whatever the first said (`PngImagePlugin`, `im_n_frames` reset to None), so such a file passed the
+    A-101 one-frame check and the byte strip then kept every fcTL/fdAT, which a browser may animate; an
+    `acTL` = 1 file with extra frames kept dead bytes.
   - A-103: the noisy-alpha WebP overrun is accepted, not priced (Accepted Risks).
   - **A decoded image always stores its re-encode** (A-105). The "keep the stripped original when the re-encode
     is not smaller" rule is removed, not narrowed: it ran only for an upright image, and an upright image is

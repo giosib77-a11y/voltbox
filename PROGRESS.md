@@ -748,9 +748,9 @@ Unverified (check before acting):
   no increase is accepted). All three empty → nothing to do.
 - **2026-11-15, owner — check on Render that the rate limiter sees real clients (AUDIT.md A-036), after deploying
   `fix/a063-a036-a046-a010-a011-a048-a065-a066`.** Each access line (`voltbox.access`) now carries `client`, a 12-char
-  pseudonym of the IP the limiter keys on; the raw IP is in no log line. From home Wi-Fi and then from mobile data, twice
-  each, run `curl -s https://api.ipify.org; echo` and `curl -s https://<api-host>/api/v1/health/live` (ipify shows your own
-  public IP; the two networks must show different ones). In Render → API service → Logs, find those `/api/v1/health/live`
+  pseudonym of the IP the limiter keys on; the raw IP is in no log line. From home Wi-Fi and then from mobile data, 4–5
+  times each, run `curl -4 -s https://api.ipify.org; echo` and `curl -4 -s https://<api-host>/api/v1/health/live` (ipify
+  shows your own public IPv4, hence `-4` on both; the two networks must show different ones). In Render → API service → Logs, find those `/api/v1/health/live`
   lines (Render's own health checks have their own `client` — skip them) and pair them with the IPs:
   - `client` follows the IP (same within a network, different across the two) → correct, nothing to do;
   - it does not (differs within one network, or is the same for two different IPs) → `FORWARDED_ALLOW_IPS` on the API

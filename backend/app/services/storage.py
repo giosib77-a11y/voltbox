@@ -182,8 +182,8 @@ DECODE_COST = {
     # on Linux, the resize path (1601x1187) peaks at 108.8-113.4 MiB with noise
     # in alpha; the only-turning path (EXIF orientation 6, 1378x1378 and
     # 1600x1187) at 107.9-108.1 with noise in alpha and 112.5-112.8 for RGBA
-    # noise, lossless. That is recorded as AUDIT.md A-103 (the value is the
-    # owner's to change), and the flat test fixture cannot show it.
+    # noise, lossless. That is accepted by the owner as a risk (PROJECT.md
+    # Accepted Risks, AUDIT.md A-103), and the flat test fixture cannot show it.
     "WEBP": (71 * _MIB, 16),
 }
 
@@ -382,10 +382,11 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
     #
     # What still holds: one frame is accepted, including an APNG whose `acTL` says
     # one and a `VP8X`-animated WebP with one `ANMF`. An APNG is stored as a static
-    # PNG: `_PNG_KEPT` has no acTL/fcTL/fdAT, because Pillow counts frames from the
-    # first `acTL` only and a file with a second one passes this check at one.
-    # An APNG whose default image is not frame 0 is still refused here (Pillow
-    # counts two frames). The WebP is different and unchanged: `_WEBP_KEPT` still
+    # PNG: `_PNG_KEPT` has no acTL/fcTL/fdAT, because a second `acTL` makes Pillow
+    # drop the animation and count one frame whatever the first said, so such a
+    # file passes this check at one. Whatever the file carried, the stored one is
+    # the IDAT picture. An APNG whose default image is not frame 0 is still refused
+    # here (Pillow counts two frames). The WebP is different and unchanged: `_WEBP_KEPT` still
     # lists ANIM/ANMF, so a one-frame animated WebP keeps them and the WebP walker
     # has to hold for exactly these files.
     if frames > 1:
@@ -646,11 +647,12 @@ def _strip_jpeg(data: bytes) -> bytes:
 #: not heard of.
 #:
 #: The APNG chunks (acTL, fcTL, fdAT) are deliberately NOT kept. Every APNG
-#: `validate_image` accepts has one frame, and a frame that is the default image
-#: is the IDAT data itself, so dropping them leaves a static PNG that decodes to
-#: the same picture. Keeping them was a hole: Pillow takes `n_frames` from the
-#: first `acTL` only (a second one before IDAT leaves it at 1), so a file could
-#: pass the one-frame check and still carry frames a browser would animate.
+#: `validate_image` accepts has one frame as Pillow counts it, and the stored
+#: file is the IDAT picture in every case - the default image Pillow decodes -
+#: so dropping them leaves a static PNG. Keeping them was a hole: a second `acTL`
+#: makes Pillow drop the animation and count one frame whatever the first said,
+#: so a file could pass the one-frame check and still carry frames a browser
+#: would animate.
 _PNG_KEPT = frozenset(
     {
         b"IHDR",

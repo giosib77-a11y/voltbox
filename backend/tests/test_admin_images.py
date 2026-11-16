@@ -1017,7 +1017,7 @@ class TestAnUploadIsStoredAtASaneSize:
         with Image.open(io.BytesIO(shrink_to_fit(wide, "JPEG"))) as saved:
             assert saved.size == (MAX_STORED_EDGE, MAX_STORED_EDGE // 4)
 
-    def test_a_re_encode_that_grew_is_discarded(self) -> None:
+    def test_an_image_at_the_edge_and_upright_is_not_re_encoded(self) -> None:
         """At the edge and upright nothing is re-encoded at all (the walk strips it
         byte for byte), so a re-encode that would have grown cannot happen. What
         happens to one over the edge is `test_a_png_above_the_edge_is_resized...`."""
@@ -1856,10 +1856,10 @@ APNG_CHUNKS = {b"acTL", b"fcTL", b"fdAT"}
 
 
 def apng_with_two_actl(size: tuple[int, int]) -> bytes:
-    """A two-frame APNG with a second `acTL` before IDAT. Pillow takes the frame
-    count from the first `acTL` only and gives up on the animation at the second
-    (`n_frames == 1`), so `validate_image` sees one frame while every `fcTL` and
-    `fdAT` is still in the file (A-104)."""
+    """A two-frame APNG with a second `acTL` before IDAT. A second `acTL` makes
+    Pillow drop the animation and count one frame (`n_frames == 1`) whatever the
+    first said, so `validate_image` sees one frame while every `fcTL` and `fdAT`
+    is still in the file (A-104)."""
     return png_after_header(animated_png(size, 2), png_chunk(b"acTL", struct.pack(">II", 2, 0)))
 
 
