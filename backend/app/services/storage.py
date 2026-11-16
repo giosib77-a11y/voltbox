@@ -111,9 +111,11 @@ _MIB = 1024 * 1024
 #: measurement was reading a broken counter at the time and could not contradict
 #: them - which is how WebP came to be under-priced.
 #:
-#: Each pair is the most expensive variant of its path, because the ceiling is
-#: set by the worst file the validation accepts, not by the average upload. The
-#: fixed part is mostly the re-encode of the 1600px result, which is why WebP -
+#: JPEG's and PNG's pairs are the most expensive variant of their path, because
+#: the ceiling is set by the worst file the validation accepts, not by the
+#: average upload. WEBP's was set from the most expensive variant measured at
+#: the time and is known not to cover alpha made of noise (see the WEBP entry).
+#: The fixed part is mostly the re-encode of the 1600px result, which is why WebP -
 #: saved with `method=5` - carries most of it. The WEBP pair was measured with
 #: `method=6`, which holds more while it encodes (on Windows the same WebP case
 #: fell from 90 to 58 MiB and a lossy RGBA one from 97 to 82 on the switch), and
@@ -171,11 +173,17 @@ DECODE_COST = {
     # sets the limit: decoding takes 47-55 MiB whatever the file holds, and the
     # re-encode adds 4 MiB for a flat picture, 36 for a cut-out and 58 for noise,
     # because libwebp's alpha encoder allocates by what it finds in the plane.
-    # A cut-out passes the budget at about 2.3 megapixels (98.5 MiB; 107.8 at
-    # 2.6), so there is no room to admit more, and the pair is kept. What still
-    # holds: a cut-out like that stays 17 MiB under the budget at 1.9 megapixels, and
-    # an RGB one 60 MiB under. What does not: alpha made of noise is 9-13 MiB over
-    # it at the limit, and the flat test fixture cannot show that.
+    # A cut-out reaches the budget between 2.3 and 2.6 megapixels (98.5 MiB at
+    # 2.3, 107.8 at 2.6), so there is no room to admit more, and the pair is
+    # kept. What still holds: a cut-out like that stays 17 MiB under the budget
+    # at 1.9 megapixels, and an RGB one 31-60 MiB under (flat lossy 40.1, photo
+    # 39.5, noise 62.1 lossy and 68.9 lossless, at 1601x1187). What does not:
+    # alpha made of noise is over the budget on both paths that decode. Measured
+    # on Linux, the resize path (1601x1187) peaks at 108.8-113.4 MiB with noise
+    # in alpha; the only-turning path (EXIF orientation 6, 1378x1378 and
+    # 1600x1187) at 107.9-108.1 with noise in alpha and 112.5-112.8 for RGBA
+    # noise, lossless. That is recorded as AUDIT.md A-103 (the value is the
+    # owner's to change), and the flat test fixture cannot show it.
     "WEBP": (71 * _MIB, 16),
 }
 

@@ -2803,11 +2803,15 @@ def peak_decode_bytes(data: bytes) -> int:
 class TestDecodeMemoryIsBounded:
     """The budget is a number in a config file until something measures it.
 
-    Every case here is the largest image its decode path accepts, in the most
-    expensive variant of that path, and the assertion is the promise the limit
-    makes: one upload never costs more than the budget. Without this, a Pillow
-    upgrade that changes a decoder moves the real cost and nothing notices - the
-    limit would keep its shape and quietly stop meaning anything.
+    Every case here is the largest image its decode path accepts, and the
+    assertion is the promise the limit makes: one upload never costs more than
+    the budget. For JPEG and PNG the case is the most expensive variant of its
+    path. For WEBP it is not: the fixture is a flat picture, which does not
+    exercise libwebp's alpha encoder at its worst (noise in alpha peaks over the
+    budget, AUDIT.md A-103), so for WEBP this pins the decode and a cheap
+    encode, not the worst case. Without this, a Pillow upgrade that changes a
+    decoder moves the real cost and nothing notices - the limit would keep its
+    shape and quietly stop meaning anything.
 
     Measured while writing it: at the old 50M pixel limit the same images peaked
     at 334 MB (JPEG), 426 MB (PNG) and 830 MB (WebP).
@@ -2865,7 +2869,10 @@ class TestDecodeMemoryIsBoundedWhenOnlyTurning:
     `TestDecodeMemoryIsBounded` covers what is resized. This is the other way to
     be decoded: at most 1600x1600 with an EXIF Orientation, where the bitmap and
     its rotated copy are alive together. The largest image `validate_image`
-    admits on each path must still stay inside the budget.
+    admits on each path must still stay inside the budget. For WEBP the fixture
+    is a flat picture, which does not exercise libwebp's alpha encoder at its
+    worst (noise in alpha peaks over the budget, AUDIT.md A-103), so for WEBP
+    this pins the decode and a cheap encode, not the worst case.
     """
 
     @pytest.mark.parametrize(
