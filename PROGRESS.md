@@ -852,6 +852,14 @@ Unverified (check before acting):
   108–113 MiB against the 100 MiB budget), nits A-104–A-106. Gates at 72361f8: ruff, format 186, mypy 166, pytest 1866
   (+1 skip), alembic 0001→0017 + check; eslint, vitest 683/58, both builds (also in node:22). No migration, nothing to run
   on live. Merge into `agent-system` is the owner's.
+- 2026-11-16 (outside Stage 3, branch `fix/a103-a106-a088-a095` from `agent-system` `4213a95`): AUDIT.md A-103 accepted
+  (owner: noisy-alpha WebP overrun → Accepted Risks, no code change); A-104 (a stored APNG is a static PNG), A-105, A-088
+  (`1q2w3e4r!`-type passwords refused by the list and the keyboard rule; sign-in unchanged), A-090, A-094 (`/health`
+  30/min per client, `/health/live` unlimited), A-095 — fixed (verified); A-106, A-091–A-093 — fixed (reviewed); all
+  re-reviewed closed, their nits fixed (`2920c30`). A-089 skipped (frontend only, open). Gates at 2920c30: ruff, format 186,
+  mypy 166, pytest 1970 (+1 skip), alembic 0001→0017 + check; eslint, vitest 683/58, both builds. No migration, nothing to
+  run on live. After deploying: an uptime monitor on `/api/v1/health` must poll ≤ 30/min. Merge into `agent-system` is
+  the owner's.
 
 ## Stage 2 — Done
 Last session of Stage 2:

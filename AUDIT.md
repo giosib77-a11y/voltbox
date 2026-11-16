@@ -419,6 +419,31 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   არ გაშვებულა: ნამდვილი ბრაუზერი (`IMAGE_ANIMATED`-ის ტექსტი ადმინ პანელში, A-104-ის APNG), ნამდვილი ტელეფონის/კამერის
   ფაილები, Render (გაზომვა Docker Desktop-ის WSL2-ზეა), e2e, ლაივ ბაზა.
 
+**`/auto` → `/fix A-103 A-104 A-105 A-106 A-088 A-089 A-090 A-091 A-092 A-093 A-094 A-095` 2026-11-16** (ბრენჩი
+`fix/a103-a106-a088-a095`, `agent-system`-იდან, `4213a95`). ახალი აუდიტი არ გაშვებულა; მფლობელმა ყველა წინასწარ დაამტკიცა
+(A-103 — ვარიანტი ბ; A-094 — `/health` 30/წთ, `/health/live` ლიმიტის გარეშე; A-088 — keyboard-ის წესიც). ამ რიგით გავიდა,
+pytest ერთდროულად მხოლოდ ერთი; ძველ კოდზე ჩავარდნა ორკესტრატორმა `git stash`-ით გაიმეორა ყველა კოდის ID-ზე.
+- A-103 — accepted, `f4be0ad` (PROJECT.md Accepted Risks; კოდი უცვლელი); code-reviewer — დახურულია.
+- A-104 — fixed (verified), `05490ef`; security-auditor — დახურულია.
+- A-105 — fixed (verified), `f9698f1` (წესი წაიშალა — AUDIT-ის პირობა არასდროს შესრულდებოდა); code-reviewer — დახურულია.
+- A-106 — fixed (reviewed), `113c2e1`; code-reviewer — დახურულია.
+- A-088 — fixed (verified), `218847b` (+ Decision Log); security-auditor — დახურულია.
+- **A-089 — გამოტოვებულია:** მხოლოდ frontend-ს ეხება (backend `details`-ს უკვე აბრუნებს), მფლობელის პირობით. ღიაა.
+- A-090 — fixed (verified), `9c5db85` (mutation-ით); code-reviewer — დახურულია.
+- A-091 — fixed (reviewed), `12b97dc`; A-092 — fixed (reviewed), `c189273`; A-093 — fixed (reviewed), `5a508a9` (backend-ის
+  ტესტის კომენტარია, backend-dev-მა გაასწორა); code-reviewer — სამივე დახურულია.
+- A-094 — fixed (verified), `dc98253` (+ Decision Log); security-auditor — დახურულია.
+- A-095 — fixed (verified), `b9795e0`; code-reviewer — დახურულია.
+- re-review: 0 critical / 0 should-fix. nit-ები ამ ბრენჩის საკუთარ ტექსტში (Pillow-ის `acTL` მექანიზმის აღწერა, A-103-ის
+  კომენტარი, ტესტის სახელი, §10-ის 2 → 4–5 მოთხოვნა და `curl -4`) — გასწორდა, `2920c30`.
+- ღიად დარჩა: A-089 (nit, frontend); A-094-ის „შესამოწმებელი" (slowapi-ის Redis hit-ს ჩვენი socket timeout არ აქვს;
+  `/health`-იც ახლა Redis-ს ეხება, `/health/live` — არა).
+- pytest: 1866 (baseline `72361f8`) → **1970 passed, 1 skipped**.
+- საბოლოო შემოწმება (`2920c30`, tester): ruff ✅ · format 186 ✅ · mypy 166 ✅ · **pytest 1970 passed, 1 skipped** · alembic
+  0001→0017 + check ✅ (ცარიელ `voltbox_final_check`-ზე, შემდეგ წაიშალა) · eslint ✅ · **vitest 683 / 58** (baseline-ის
+  ტოლი; frontend არ შეცვლილა) · build `http` ✅ · build `mock` ✅. დამოკიდებულებები და Dockerfile არ შეცვლილა, image არ აწყობილა.
+  არ გაშვებულა: ნამდვილი ბრაუზერი (APNG-ის ჩვენება), §10-ის პროცედურა ცოცხალზე, Render, e2e, ლაივ ბაზა.
+
 ### Should-fix
 
 #### A-030 · should-fix · refresh-ის 429 ან 5xx პასუხი მომხმარებელს სისტემიდან აგდებს
