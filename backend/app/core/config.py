@@ -13,6 +13,8 @@ from urllib.parse import urlsplit
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.db.local_url import is_local_database_url
+
 #: `backend/.env` normally points at the live Supabase project, and `Settings`
 #: reads it from the working directory - so any process started in `backend/`
 #: (a test run, a probe, a one-off script) would load the live URL and keys.
@@ -318,9 +320,14 @@ class Settings(BaseSettings):
 
     @property
     def requires_ssl(self) -> bool:
-        """managed Postgres (Supabase) TLS-ს ითხოვს, ლოკალური კონტეინერი — არა."""
-        url = self.database_url.get_secret_value()
-        return not any(host in url for host in ("localhost", "127.0.0.1"))
+        """managed Postgres (Supabase) TLS-ს ითხოვს, ლოკალური კონტეინერი — არა.
+
+        Only the parsed host decides (A-081): a substring test on the whole URL
+        let `localhost` in a password, user or database name switch TLS off for
+        a remote server. Anything the parser cannot place on this machine - an
+        unparseable URL, no host, a `host=`/`hostaddr=` override - requires TLS.
+        """
+        return not is_local_database_url(self.database_url.get_secret_value())
 
 
 @lru_cache

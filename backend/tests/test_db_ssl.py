@@ -225,3 +225,65 @@ class TestLocalDatabase:
         with caplog.at_level(logging.DEBUG, logger="voltbox.db"):
             db_ssl.build_connect_args()
         assert _db_warnings(caplog) == []
+
+
+REMOTE_HOST = "db.example-ref.supabase.co"
+
+
+class TestRequiresSsl:
+    """A-081: only the host decides, not any `localhost` anywhere in the URL."""
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "postgresql://voltbox:voltbox@localhost:55432/voltbox",
+            "postgresql+asyncpg://voltbox:voltbox@127.0.0.1:55432/voltbox",
+            "postgresql://voltbox:voltbox@[::1]:55432/voltbox",
+            "postgresql://voltbox:voltbox@LOCALHOST/voltbox",
+            "postgresql://voltbox@localhost/voltbox",
+        ],
+    )
+    def test_a_local_host_does_not_require_tls(self, url: str) -> None:
+        assert _settings(mode="require", url=url).requires_ssl is False
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            # the word in the password, the user, the database name, the query
+            f"postgresql://postgres:localhost1234@{REMOTE_HOST}:5432/postgres",
+            f"postgresql://postgres:127.0.0.1@{REMOTE_HOST}:5432/postgres",
+            f"postgresql://localhost:pw@{REMOTE_HOST}:5432/postgres",
+            f"postgresql://postgres:pw@{REMOTE_HOST}:5432/localhost",
+            f"postgresql://postgres:pw@{REMOTE_HOST}:5432/postgres?application_name=localhost",
+            f"postgresql+asyncpg://postgres:localhost1234@{REMOTE_HOST}:5432/postgres",
+            # the password holds `@`, `:`, `/` or percent-encoding next to the word
+            f"postgresql://postgres:p%40localhost%3A1@{REMOTE_HOST}:5432/postgres",
+            f"postgresql://postgres:p@localhost:1@{REMOTE_HOST}:5432/postgres",
+            f"postgresql://postgres:localhost:127.0.0.1@{REMOTE_HOST}:5432/postgres",
+            # a remote host that merely starts or ends with the word
+            "postgresql://postgres:pw@localhost.evil.example:5432/postgres",
+            "postgresql://postgres:pw@notlocalhost:5432/postgres",
+            # a local-looking host that the query string redirects
+            "postgresql://postgres:pw@localhost/postgres?host=db.example.com",
+            "postgresql://postgres:pw@localhost/postgres?hostaddr=203.0.113.7",
+            # no host, or a URL that cannot be read: fail safe, TLS on
+            "postgresql:///postgres?application_name=localhost",
+            "not a url, but it mentions localhost",
+            "",
+        ],
+    )
+    def test_everything_else_requires_tls(self, url: str) -> None:
+        assert _settings(mode="require", url=url).requires_ssl is True
+
+    def test_a_remote_url_with_localhost_in_the_password_gets_tls(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The scenario of the finding: verify-full with no CA must refuse, not
+        # open a plaintext connection to the remote database.
+        url = f"postgresql://postgres:localhost1234@{REMOTE_HOST}:5432/postgres"
+        _use(monkeypatch, mode="require", url=url)
+        context = _context(db_ssl.build_connect_args())
+        assert context.verify_mode == ssl.CERT_NONE
+        _use(monkeypatch, mode="verify-full", url=url)
+        with pytest.raises(RuntimeError, match="DB_SSL_ROOT_CERT"):
+            db_ssl.build_connect_args()
