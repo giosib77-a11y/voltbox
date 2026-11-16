@@ -754,6 +754,28 @@ class TestAnUploadIsStoredAtASaneSize:
         assert [save["format"] for save in saves] == ["PNG"]
         assert not saves[0].get("optimize")
 
+    def test_a_webp_is_not_saved_with_the_slowest_method(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """libwebp's `method=6` took 2.2-4.0 s on a 1600px WebP with partly
+        transparent pixels, against 0.2-0.7 s for methods 4 and 5, for a file 2-3%
+        smaller; the encoder runs under Semaphore(1), so every other upload waited
+        that long. The measurement is in `shrink_to_fit`."""
+        big = image_bytes("WEBP", (1700, 1700), mode="RGBA", lossless=True, method=0)
+        saves: list[dict[str, object]] = []
+        real_save = Image.Image.save
+
+        def spy(self: Image.Image, fp: object, format: str | None = None, **params: object) -> None:
+            saves.append({"format": format, **params})
+            real_save(self, fp, format=format, **params)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(Image.Image, "save", spy)
+
+        shrink_to_fit(big, "WEBP")
+
+        assert [save["format"] for save in saves] == ["WEBP"]
+        assert saves[0]["method"] == 5
+
 
 DROPPED_PNG_CHUNKS = [b"eXIf", b"tEXt", b"zTXt", b"iTXt", b"tIME"]
 

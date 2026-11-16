@@ -114,7 +114,11 @@ _MIB = 1024 * 1024
 #: Each pair is the most expensive variant of its path, because the ceiling is
 #: set by the worst file the validation accepts, not by the average upload. The
 #: fixed part is mostly the re-encode of the 1600px result, which is why WebP -
-#: saved with `method=6` - carries most of it, and it is rounded up well past the
+#: saved with `method=5` - carries most of it. The Linux numbers were taken with
+#: `method=6`, which holds more while it encodes: on Windows the same WebP case
+#: fell from 90 to 58 MiB and a lossy RGBA one from 97 to 82 on the switch, so
+#: the WEBP pair is now an upper bound that has not been re-measured on Linux and
+#: is deliberately left as it was. It is rounded up well past the
 #: measurement on purpose: the peak does not grow smoothly with the pixel count.
 #: Measured on Linux, a 2250x1688 WebP peaks 9 MiB above a 2190x1643 one, which
 #: is the allocator handing out whole blocks. The margin lives in the fixed part
@@ -643,7 +647,23 @@ def shrink_to_fit(data: bytes, image_format: str) -> bytes:
             # spends on one upload.
             upright.save(buffer, format="PNG", icc_profile=profile)
         else:
-            upright.save(buffer, format="WEBP", quality=JPEG_QUALITY, method=6, icc_profile=profile)
+            # `method=5`, not libwebp's slowest (6). Measured on Windows 11, AMD
+            # Ryzen 7 4700U, Python 3.14.5, Pillow 13.0.0 (libwebp 1.6.0), best of
+            # 3-7, quality 82, a 1600x1186 result - the largest WebP the budget
+            # admits is 1601x1187:
+            #   photo RGB    m4 344 ms / 163.6 kB   m5 361 / 162.2   m6 431 / 159.9
+            #   RGBA product m4 498 ms /  101.8 kB  m5 376 / 102.1   m6 3615 / 98.3
+            # Across five alpha shapes m6 took 2.2-4.0 s where m4 and m5 took
+            # 0.18-0.73 s: any partly transparent pixel makes m6 8-14x slower, for
+            # a file 2-3% smaller than m5's. The encoder runs under Semaphore(1),
+            # so that is seconds in which every other upload waits. On a WebP with
+            # no transparency m5 is 16% faster than m6 for a file 1.4% larger, so
+            # m5 keeps nearly all of m6's size win and none of its worst case; m4
+            # is only 5% faster than m5 on photos and no faster on RGBA. What still
+            # holds: the encode is the largest part of a WebP upload's time (about
+            # 80%), so its cost is still a few hundred ms - not free. Linux
+            # timings were not taken; libwebp is the same code on both.
+            upright.save(buffer, format="WEBP", quality=JPEG_QUALITY, method=5, icc_profile=profile)
         shrunk = buffer.getvalue()
 
     # An image that was turned upright keeps its re-encode whatever the size: the
