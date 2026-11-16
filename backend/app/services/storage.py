@@ -114,12 +114,14 @@ _MIB = 1024 * 1024
 #: Each pair is the most expensive variant of its path, because the ceiling is
 #: set by the worst file the validation accepts, not by the average upload. The
 #: fixed part is mostly the re-encode of the 1600px result, which is why WebP -
-#: saved with `method=5` - carries most of it. The Linux numbers were taken with
-#: `method=6`, which holds more while it encodes: on Windows the same WebP case
-#: fell from 90 to 58 MiB and a lossy RGBA one from 97 to 82 on the switch, so
-#: the WEBP pair is now an upper bound that has not been re-measured on Linux and
-#: is deliberately left as it was. It is rounded up well past the
-#: measurement on purpose: the peak does not grow smoothly with the pixel count.
+#: saved with `method=5` - carries most of it. The WEBP pair was measured with
+#: `method=6`, which holds more while it encodes (on Windows the same WebP case
+#: fell from 90 to 58 MiB and a lossy RGBA one from 97 to 82 on the switch), and
+#: was re-measured with `method=5` on Linux (the production image, Docker
+#: Desktop's WSL2 VM, Pillow 13.0.0, libwebp 1.6.0): the limit stayed. See the
+#: WEBP entry for the numbers and why a lower cost was not justified. It is also
+#: rounded up well past the measurement on purpose: the peak does not grow
+#: smoothly with the pixel count.
 #: Measured on Linux, a 2250x1688 WebP peaks 9 MiB above a 2190x1643 one, which
 #: is the allocator handing out whole blocks. The margin lives in the fixed part
 #: because that is where such a jump is largest relative to the total.
@@ -155,8 +157,25 @@ DECODE_COST = {
     # only then fills its own bitmap. Several times a JPEG's pixel for the same
     # picture, which is why a WebP is held to 1.9 megapixels and a photo to 13.3.
     # The fixed part carries the whole correction: on Linux, on the squarest
-    # shape, the old 2.62 megapixel limit peaked at 120.0 MiB. 1601x1187 peaks
-    # at 91.4.
+    # shape, the old 2.62 megapixel limit peaked at 120.0 MiB. 1601x1187 peaked
+    # at 91.4 with `method=6`.
+    #
+    # Re-measured with `method=5`, on Linux, 1601x1187 (the largest the budget
+    # admits; three runs, within 0.5 MiB of each other):
+    #   RGBA flat, lossless (TestDecodeMemoryIsBounded's case)  51 MiB
+    #   RGBA flat, lossy 52 - RGB flat, lossy 40
+    #   RGBA photo with a soft-edged cut-out mask               82.5
+    #   RGBA with noise in the alpha channel                    109
+    #   RGBA noise, lossless                                    113
+    # The flat figure alone would admit about 3.7 megapixels, but it is not what
+    # sets the limit: decoding takes 47-55 MiB whatever the file holds, and the
+    # re-encode adds 4 MiB for a flat picture, 36 for a cut-out and 58 for noise,
+    # because libwebp's alpha encoder allocates by what it finds in the plane.
+    # A cut-out passes the budget at about 2.3 megapixels (98.5 MiB; 107.8 at
+    # 2.6), so there is no room to admit more, and the pair is kept. What still
+    # holds: a cut-out like that stays 17 MiB under the budget at 1.9 megapixels, and
+    # an RGB one 60 MiB under. What does not: alpha made of noise is 9-13 MiB over
+    # it at the limit, and the flat test fixture cannot show that.
     "WEBP": (71 * _MIB, 16),
 }
 
