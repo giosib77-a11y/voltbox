@@ -364,6 +364,29 @@ async def test_a_damaged_file_of_an_allowed_format_is_not_called_another_format(
     assert response.json()["error"]["code"] == "INVALID_IMAGE"
 
 
+@pytest.mark.parametrize("cut", [1, 3, 5, 8, 11])
+async def test_a_png_cut_inside_its_last_chunk_is_a_400_not_a_500(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    product_id: str,
+    storage: InMemoryStorage,
+    cut: int,
+) -> None:
+    """A partly downloaded file ends wherever the connection dropped.
+
+    Cutting 5 or 8 bytes leaves IEND's length and an incomplete chunk header, and
+    Pillow answers that one with a `SyntaxError` ("broken PNG file") where every
+    other cut raises an `OSError` - the handler once let it through as a 500.
+    """
+    data = image_bytes("PNG", size=(64, 64))[:-cut]
+
+    response = await _upload(client, headers, product_id, data=data)
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_IMAGE"
+    assert storage.objects == {}
+
+
 #: The first box of an iPhone photo, and of an HEIC whose major brand is the
 #: generic HEIF one. Pillow cannot read past either.
 HEIC_HEADERS = {

@@ -314,7 +314,13 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
         raise ValidationError(
             "The image resolution is too large", code="IMAGE_TOO_MANY_PIXELS"
         ) from exc
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
+    # SyntaxError is Pillow's own answer for a PNG that ends inside a chunk
+    # header ("broken PNG file"; 5 or 8 bytes cut off the end of the file - any
+    # other cut is an OSError) and it is neither an OSError nor a ValueError, so
+    # a partly downloaded upload used to reach the client as a 500. The tuple
+    # stays closed: anything Pillow raises that is not a statement about these
+    # bytes is still a bug, not a refusal.
+    except (UnidentifiedImageError, OSError, ValueError, SyntaxError) as exc:
         if _is_heic(data):
             raise _unsupported_format("HEIC", declared_type) from exc
         if (announced := _announced_format(data)) is not None:
