@@ -13,7 +13,7 @@ import pytest
 from app.db.session import engine
 from app.services.search import MAX_QUERY_TOKENS, _parse_query
 from app.services.search_text import normalize, stem, tokenize
-from app.services.translit import fix_layout, to_latin
+from app.services.translit import fix_layout, has_georgian, to_latin
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -274,6 +274,16 @@ def statements() -> Iterator[list[tuple[str, str]]]:
         event.remove(engine.sync_engine, "before_cursor_execute", record)
 
 
+def _spellings(word: str) -> list[str]:
+    """A word as the search can send it: as typed, then the forms of the layout candidate.
+
+    `search_products` retries a query with `fix_layout` applied to all of it, and the
+    candidate then goes through `_parse_query` and `_enrich` (which adds `to_latin`).
+    """
+    layout = fix_layout(word)
+    return [word, layout, to_latin(layout)]
+
+
 def test_a_query_within_the_cap_is_read_whole() -> None:
     assert len(CAP_WORDS.split()) == MAX_QUERY_TOKENS
     tokens, normalized = _parse_query(CAP_WORDS)
@@ -284,12 +294,13 @@ def test_a_query_within_the_cap_is_read_whole() -> None:
 
 def test_a_full_product_name_is_read_whole() -> None:
     # A-074: 8 typed words, 12 tokens once "100W", "2მ" and "USB-C" are split; the old
-    # cap of 8 cut it after "usb c usb c 100 w", so "w კაბელი 2 m" never reached the DB.
+    # cap of 8 cut it after "usb c usb c 100", so "w კაბელი 2 m" never reached the DB.
     name = "Baseus Flash Series USB-C — USB-C 100W კაბელი 2მ"
     words = normalize(name).split()
     tokens, normalized = _parse_query(name)
 
     assert len(words) == 12
+    assert words[:8] == ["baseus", "flash", "series", "usb", "c", "usb", "c", "100"]
     assert tokens == words
     assert normalized == normalize(name)
     assert tokens[-4:] == ["w", "კაბელი", "2", "m"]
@@ -352,30 +363,66 @@ async def test_a_hundred_one_letter_words_is_a_normal_request(
 async def test_the_sql_of_a_long_query_has_at_most_max_query_tokens_word_conditions(
     client: httpx.AsyncClient, searchable: None, statements: list[tuple[str, str]], route: str
 ) -> None:
-    # 30 distinct letter-only words nothing matches
-    words = [f"zq{chr(97 + n // 26)}{chr(97 + n % 26)}x" for n in range(30)]
+    # 30 distinct letter-only words nothing matches. The varying letters are ones whose
+    # round trip through the layout and `to_latin` is one-to-one (not q/k, w/c, p/f), so
+    # no word's converted form equals another word's.
+    letters = "abdeilmnorsuvz"
+    words = [f"zq{letters[n // len(letters)]}{letters[n % len(letters)]}x" for n in range(30)]
+    # Premise: the layout candidate's forms differ from the word, and no two words share
+    # a spelling; otherwise the check below could not tell a candidate that skipped the
+    # cap from one that did not.
+    for word in words:
+        layout, back = _spellings(word)[1:]
+        assert layout and has_georgian(layout)
+        assert back not in (word, layout)
+    every = [spelling for word in words for spelling in _spellings(word)]
+    assert len(set(every)) == len(every)
     statements.clear()
 
     await _found(client, route, " ".join(words))
 
-    # Words that reach the database in each statement: the products query, its count
-    # and the facets (which repeat the condition) all carry the same cap at most.
-    sent = [{word for word in words if word in params} for _, params in statements]
+    # Words that reach the database in each statement, in any of their spellings: the
+    # products query, its count and the facets (which repeat the condition) all carry
+    # the same cap at most, and the layout candidate's forms count toward it too.
+    def reached(word: str, params: str) -> bool:
+        return any(spelling in params for spelling in _spellings(word))
+
+    sent = [{word for word in words if reached(word, params)} for _, params in statements]
     assert max(len(found) for found in sent) == MAX_QUERY_TOKENS
-    assert not any(word in params for _, params in statements for word in words[MAX_QUERY_TOKENS:])
+    assert not any(
+        reached(word, params) for _, params in statements for word in words[MAX_QUERY_TOKENS:]
+    )
+    if route == "search":
+        # `/search` retries with the layout fixed; `/products?q=` has no such stage.
+        assert any(
+            fix_layout(word) in params
+            for _, params in statements
+            for word in words[:MAX_QUERY_TOKENS]
+        )
 
 
 async def test_the_typo_stage_does_not_receive_the_whole_query(
     client: httpx.AsyncClient, searchable: None, statements: list[tuple[str, str]]
 ) -> None:
     junk = [f"junk{n}" for n in range(MAX_QUERY_TOKENS + 4)]
+    # Premise: a junk word's layout form is Georgian, so it cannot be mistaken for the word.
+    assert all(has_georgian(fix_layout(word)) for word in junk)
     statements.clear()
 
     await _found(client, "search", " ".join(["samsnug", *junk]))
 
     assert any("word_similarity" in sql for sql, _ in statements)
-    # "samsnug" is the first token, so junk[MAX_QUERY_TOKENS - 1] is the first one cut.
-    assert not any(junk[MAX_QUERY_TOKENS - 1] in params for _, params in statements)
+    # The layout candidate was sent, and carried the words up to the cap.
+    assert any(fix_layout("samsnug") in params for _, params in statements)
+    assert any(fix_layout(junk[MAX_QUERY_TOKENS - 2]) in params for _, params in statements)
+    # "samsnug" is the first token, so junk[MAX_QUERY_TOKENS - 1] is the first one cut -
+    # in the typed form and in the layout candidate's.
+    assert not any(
+        spelling in params
+        for _, params in statements
+        for word in junk[MAX_QUERY_TOKENS - 1 :]
+        for spelling in _spellings(word)
+    )
 
 
 async def test_suggestion_payload_is_lightweight(
