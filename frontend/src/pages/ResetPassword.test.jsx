@@ -150,4 +150,29 @@ describe('the reset page', () => {
     expect(await screen.findByText('ეს პაროლი ძალიან მარტივია — აირჩიეთ სხვა.')).toBeInTheDocument();
     expect(screen.getByLabelText(/^ახალი პაროლი/)).toHaveAttribute('aria-invalid', 'true');
   });
+
+  it('tells an administrator the 12-character rule instead of calling the password too common', async () => {
+    serve({
+      reset: () =>
+        reply(
+          {
+            error: {
+              code: 'ADMIN_PASSWORD_TOO_SHORT',
+              message: "An administrator's password must be at least 12 characters",
+              details: [{ field: 'newPassword', message: 'too short' }],
+            },
+          },
+          400,
+        ),
+    });
+    renderPage();
+
+    choose('strong-pw-11');
+
+    expect(
+      await screen.findByText('ადმინისტრატორის პაროლი უნდა იყოს მინიმუმ 12 სიმბოლო.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('ეს პაროლი ძალიან მარტივია — აირჩიეთ სხვა.')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^ახალი პაროლი/)).toHaveAttribute('aria-invalid', 'true');
+  });
 });

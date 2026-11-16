@@ -93,8 +93,15 @@ export default function ResetPassword() {
         setLinkDead(true);
         return;
       }
-      // The one rule the server checks and this page does not: a password
-      // from the list of the most common ones.
+      // An administrator's password needs 12 characters, which this page cannot
+      // know (the account is unknown until the server looks the token up). The
+      // client has already turned the code into its localised text.
+      if (error?.details?.code === 'ADMIN_PASSWORD_TOO_SHORT') {
+        setErrors({ newPassword: error.message });
+        return;
+      }
+      // Rules the server checks and this page does not: a password from the
+      // list of the most common ones, or a repeated / sequential one.
       const fields = error?.details?.details;
       if (Array.isArray(fields) && fields.some((f) => f?.field === 'newPassword')) {
         setErrors({ newPassword: t('auth.tooCommon') });
