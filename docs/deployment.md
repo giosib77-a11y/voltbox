@@ -247,11 +247,12 @@ Supabase-ის სერტიფიკატს საკუთარი CA �
 არის, ამიტომ `verify-full`-ს CA-ს ფაილი სჭირდება. დეპლოიზე (`APP_ENV` =
 `production`/`staging`) `require`-ზე გაშვებისას ლოგში იწერება WARNING
 (logger `voltbox.db`): „encrypted but the server is not authenticated“. ის იწერება
-`app/db/session.py`-ის import-ისას, ანუ ყოველ worker-პროცესზე ცალკე (2 worker — 2
-ხაზი), და აპის JSON-ლოგირების გამართვამდე (`configure_logging` lifespan-შია,
-`app/main.py`) — ამიტომ ხაზი შეიძლება JSON-ის გარეშე, უბრალო ტექსტად გამოჩნდეს.
-შემოწმება ამიტომ ასეა: ლოგში ჩანს ხაზი, რომელიც შეიცავს `not authenticated`-ს, /
-აღარ ჩანს. სერვისი ამით არ ჩერდება — გაშვებამდე ის უნდა გაქრეს.
+აპის გაშვებისას (lifespan, `configure_logging`-ის შემდეგ: `app/main.py` →
+`log_tls_mode`), ყოველ worker-პროცესზე ერთხელ (2 worker — 2 ხაზი), აპის JSON
+ლოგერით. `DB_SSL_MODE=disable`-ზე არალოკალურ ბაზასთან დეპლოიზე ცალკე WARNING
+იწერება — „The database connection is unencrypted“ (`not authenticated`-ს არ
+შეიცავს). შემოწმება ასეა: ლოგში ჩანს ხაზი, რომელიც შეიცავს `not authenticated`-ს
+ან `unencrypted`-ს, / `verify-full`-ზე გადასვლის შემდეგ არცერთი აღარ ჩანს. სერვისი ამით არ ჩერდება — გაშვებამდე ის უნდა გაქრეს.
 
 გადართვა (მფლობელის ხელით, Render-ის პანელში; `render.yaml` არ იცვლება):
 

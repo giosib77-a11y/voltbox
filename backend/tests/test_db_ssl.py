@@ -16,6 +16,7 @@ from typing import Any
 
 import certifi
 import pytest
+from app import main as app_main
 from app.core.config import Settings
 from app.db import ssl as db_ssl
 
@@ -101,7 +102,7 @@ class TestRequire:
     ) -> None:
         _use(monkeypatch, mode="require", app_env="production")
         with caplog.at_level(logging.WARNING, logger="voltbox.db"):
-            db_ssl.build_connect_args()
+            db_ssl.log_tls_mode()
         warnings = _db_warnings(caplog)
         assert len(warnings) == 1
         message = warnings[0].getMessage()
@@ -114,7 +115,7 @@ class TestRequire:
     ) -> None:
         _use(monkeypatch, mode="require", app_env="staging")
         with caplog.at_level(logging.WARNING, logger="voltbox.db"):
-            db_ssl.build_connect_args()
+            db_ssl.log_tls_mode()
         assert len(_db_warnings(caplog)) == 1
 
     def test_the_warning_does_not_name_the_database_url(
@@ -122,7 +123,7 @@ class TestRequire:
     ) -> None:
         _use(monkeypatch, mode="require", app_env="production")
         with caplog.at_level(logging.DEBUG, logger="voltbox.db"):
-            db_ssl.build_connect_args()
+            db_ssl.log_tls_mode()
         assert REMOTE_PASSWORD not in caplog.text
         assert "example-ref" not in caplog.text
 
@@ -131,13 +132,80 @@ class TestRequire:
     ) -> None:
         _use(monkeypatch, mode="require", app_env="development")
         with caplog.at_level(logging.DEBUG, logger="voltbox.db"):
-            db_ssl.build_connect_args()
+            db_ssl.log_tls_mode()
         assert _db_warnings(caplog) == []
 
     def test_deployed_with_a_ca_says_nothing(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, ca_file: Path
     ) -> None:
         _use(monkeypatch, mode="require", root_cert=str(ca_file), app_env="production")
+        with caplog.at_level(logging.DEBUG, logger="voltbox.db"):
+            db_ssl.log_tls_mode()
+        assert _db_warnings(caplog) == []
+
+    def test_building_the_connect_args_is_silent(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # session.py calls it at import, before configure_logging: a line written
+        # there would come out as plain text. The warning belongs to the lifespan.
+        _use(monkeypatch, mode="require", app_env="production")
+        with caplog.at_level(logging.DEBUG, logger="voltbox.db"):
+            db_ssl.build_connect_args()
+        assert _db_warnings(caplog) == []
+
+
+class TestDisableWarning:
+    """A-086: `disable` on a deployed environment is weaker than `require`, and said nothing."""
+
+    @pytest.mark.parametrize("app_env", ["production", "staging"])
+    def test_deployed_warns_that_the_connection_is_unencrypted(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, app_env: str
+    ) -> None:
+        _use(monkeypatch, mode="disable", app_env=app_env)
+        with caplog.at_level(logging.DEBUG, logger="voltbox.db"):
+            db_ssl.log_tls_mode()
+        [record] = _db_warnings(caplog)
+        message = record.getMessage()
+        assert "unencrypted" in message
+        assert "DB_SSL_MODE=verify-full" in message
+        assert "DB_SSL_ROOT_CERT" in message
+        assert "docs/deployment.md" in message
+        # The owner's check for the `require` line must not match this one.
+        assert "not authenticated" not in message
+        assert REMOTE_PASSWORD not in caplog.text
+        assert "example-ref" not in caplog.text
+
+    def test_a_ca_does_not_silence_it(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, ca_file: Path
+    ) -> None:
+        # `disable` wins over DB_SSL_ROOT_CERT: no TLS is used at all.
+        _use(monkeypatch, mode="disable", root_cert=str(ca_file), app_env="production")
+        assert db_ssl.build_connect_args() == {}
+        with caplog.at_level(logging.DEBUG, logger="voltbox.db"):
+            db_ssl.log_tls_mode()
+        assert len(_db_warnings(caplog)) == 1
+
+    def test_not_deployed_says_nothing(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        _use(monkeypatch, mode="disable", app_env="development")
+        with caplog.at_level(logging.DEBUG, logger="voltbox.db"):
+            db_ssl.log_tls_mode()
+        assert _db_warnings(caplog) == []
+
+    def test_a_local_database_says_nothing_even_when_deployed(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # Nothing leaves the machine; the compose setup is `disable` + a local host.
+        _use(monkeypatch, mode="disable", url=LOCAL_URL, app_env="production")
+        with caplog.at_level(logging.DEBUG, logger="voltbox.db"):
+            db_ssl.log_tls_mode()
+        assert _db_warnings(caplog) == []
+
+    def test_building_the_connect_args_is_silent(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        _use(monkeypatch, mode="disable", app_env="production")
         with caplog.at_level(logging.DEBUG, logger="voltbox.db"):
             db_ssl.build_connect_args()
         assert _db_warnings(caplog) == []
@@ -207,6 +275,7 @@ class TestVerifyFull:
         _use(monkeypatch, mode="verify-full", root_cert=str(ca_file), app_env="production")
         with caplog.at_level(logging.DEBUG, logger="voltbox.db"):
             db_ssl.build_connect_args()
+            db_ssl.log_tls_mode()
         assert _db_warnings(caplog) == []
 
 
@@ -224,7 +293,28 @@ class TestLocalDatabase:
         _use(monkeypatch, mode="require", url=LOCAL_URL, app_env="production")
         with caplog.at_level(logging.DEBUG, logger="voltbox.db"):
             db_ssl.build_connect_args()
+            db_ssl.log_tls_mode()
         assert _db_warnings(caplog) == []
+
+
+class _StubEngine:
+    async def dispose(self) -> None:
+        return None
+
+
+class TestLifespan:
+    async def test_the_warning_is_written_after_logging_is_configured(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Before A-086 it was written while session.py was imported, ahead of
+        # configure_logging, so it came out as plain text.
+        calls: list[str] = []
+        monkeypatch.setattr(app_main, "configure_logging", lambda: calls.append("logging"))
+        monkeypatch.setattr(app_main, "log_tls_mode", lambda: calls.append("tls"))
+        monkeypatch.setattr(app_main, "engine", _StubEngine())
+        async with app_main.lifespan(app_main.app):
+            pass
+        assert calls[:2] == ["logging", "tls"]
 
 
 REMOTE_HOST = "db.example-ref.supabase.co"

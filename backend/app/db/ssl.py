@@ -5,11 +5,14 @@ Supabase-ის სერტიფიკატი მათი საკუთ�
 პროექტის CA ხელით გვაქვს ჩამოტვირთული.
 
 რეჟიმები (`DB_SSL_MODE`):
-  disable      — TLS გამორთულია (მხოლოდ ლოკალური კონტეინერისთვის)
+  disable      — TLS გამორთულია (მხოლოდ ლოკალური კონტეინერისთვის).
+                 დეპლოიზე (`is_deployed`) არალოკალურ ბაზასთან — warning
+                 „unencrypted“ (`log_tls_mode`).
   require      — ტრაფიკი დაშიფრულია, სერვერი არ მოწმდება.
                  ესაა Supabase-ის საკუთარი connection string-ის ნაგულისხმევი
                  (`?sslmode=require`) და პლატფორმის რეკომენდებული მინიმუმი.
-                 დეპლოიზე (`is_deployed`) ამ რეჟიმში გაშვებისას ერთი warning იწერება.
+                 დეპლოიზე (`is_deployed`) CA-ს გარეშე — warning „not authenticated“
+                 (`log_tls_mode`, lifespan-იდან, ყოველ worker-ზე ერთხელ).
   verify-full  — დაშიფვრა + სერვერის ავთენტიფიკაცია (სერტიფიკატი CA-ს უნდა
                  ემთხვეოდეს და hostname-ს უნდა ფარავდეს). მოითხოვს `DB_SSL_ROOT_CERT`-ს:
                  Dashboard → Settings → Database → SSL Configuration → Download.
@@ -68,18 +71,39 @@ def build_connect_args() -> dict[str, Any]:
             "certificate from Supabase → Settings → Database → SSL Configuration."
         )
 
-    if settings.is_deployed:
-        # A warning, not a refusal: production keeps starting exactly as it did.
-        # The encryption still holds; what is missing is proof of who answers.
-        # Called once per process (session.py at import, alembic/env.py per run).
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return {"ssl": context}
+
+
+def log_tls_mode() -> None:
+    """Warn, on a deployed environment, when the database link is weaker than `verify-full`.
+
+    A warning, not a refusal: production keeps starting exactly as it did. It is
+    called from the lifespan (app/main.py), after `configure_logging`, so the line
+    goes through the JSON logger; at import time (session.py) it came out as plain
+    text. It runs once per worker process. `build_connect_args` itself stays
+    silent - alembic/env.py calls it too and the check does not belong to a
+    migration run. A local database host never uses TLS (`requires_ssl`), so it
+    is not a finding. Neither line names the database URL.
+    """
+    if not settings.is_deployed or not settings.requires_ssl:
+        return
+
+    if settings.db_ssl_mode == "disable":
+        # Even with DB_SSL_ROOT_CERT set: `disable` wins in build_connect_args.
+        logger.warning(
+            "The database connection is unencrypted (DB_SSL_MODE=disable) to a "
+            "non-local host. Set DB_SSL_MODE=verify-full and DB_SSL_ROOT_CERT to "
+            "the Supabase CA file - docs/deployment.md, section 'ბაზასთან TLS'."
+        )
+    elif settings.db_ssl_mode == "require" and not settings.db_ssl_root_cert:
+        # The encryption holds; what is missing is proof of who answers.
+        # The owner's check looks for 'not authenticated' - keep that phrase.
         logger.warning(
             "The database connection is encrypted but the server is not "
             "authenticated (DB_SSL_MODE=require). Set DB_SSL_MODE=verify-full and "
             "DB_SSL_ROOT_CERT to the Supabase CA file - docs/deployment.md, "
             "section 'ბაზასთან TLS'."
         )
-
-    context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    return {"ssl": context}
