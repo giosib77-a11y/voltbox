@@ -21,6 +21,7 @@ from app.core.rate_limit import (
     RESET_EMAIL_ADDRESS_LIMIT,
     hit_per_address,
     limiter,
+    seconds_until_address_resets,
 )
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -171,8 +172,9 @@ async def me(user: CurrentUser) -> UserOut:
 # The two routes below check the current password, which a stolen access token is
 # enough to reach, so they are limited like sign-in and a wrong guess is counted
 # on the account like one (see `auth_service._wrong_current_password`). Without
-# that they guess the password at the default 60 a minute with no lock, and a
-# hit changes it. What still holds: a right password is not counted.
+# that they guess the password at the default limit (300 a minute per client, shared
+# with every other route that has none of its own) with no lock, and a hit
+# changes it. What still holds: a right password is not counted.
 #
 # The count has to outlive the request, and `get_db` rolls back on an exception -
 # see `login`. Only these two refusals commit; any other error still rolls back
@@ -249,6 +251,13 @@ async def forgot_password(
             "Too many password reset requests for this address",
             code="TOO_MANY_RESET_REQUESTS",
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            headers={
+                "Retry-After": str(
+                    seconds_until_address_resets(
+                        RESET_EMAIL_ADDRESS_LIMIT, scope="password-reset", address=payload.email
+                    )
+                )
+            },
         )
 
     issued = await auth_service.issue_password_reset(db, email=payload.email)

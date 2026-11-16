@@ -42,6 +42,8 @@ co-located Redis and is the reason this must not point at a distant one.
 
 import hashlib
 import logging
+import time
+from math import ceil
 
 from limits import parse
 from limits.storage import MemoryStorage
@@ -194,7 +196,12 @@ async def enforce_default_limit(request: Request) -> None:
 
     What is not counted: HEALTH_PATHS; a CORS preflight, which CORSMiddleware
     answers before the router and never reaches here; and a path that matches no
-    route (404), which costs one dictionary lookup and no database work.
+    route (404), which costs one dictionary lookup and no database work. Nor is
+    a body FastAPI cannot parse (malformed JSON or multipart, 400; an oversized
+    one, 413): FastAPI reads and parses the body before it solves dependencies,
+    so that request is answered before this function runs. A body that parses
+    but fails schema validation (400) is counted, since the schema is checked
+    while the dependencies are solved.
     """
     if not limiter.enabled or request.scope["path"] in HEALTH_PATHS:
         return
@@ -225,9 +232,34 @@ def hit_per_address(limit: str, *, scope: str, address: str) -> bool:
     if not limiter.enabled:
         return True
     item = parse(limit)
-    key = hashlib.sha256(address.strip().lower().encode("utf-8")).hexdigest()
+    key = _address_key(address)
     try:
         return limiter.limiter.hit(item, scope, key)
     except Exception:  # the store's own errors are not one type across backends
         logger.warning("Rate limit storage unreachable - counting %s in process memory", scope)
         return _address_fallback.hit(item, scope, key)
+
+
+def _address_key(address: str) -> str:
+    return hashlib.sha256(address.strip().lower().encode("utf-8")).hexdigest()
+
+
+def seconds_until_address_resets(limit: str, *, scope: str, address: str) -> int:
+    """Whole seconds until `hit_per_address` counts `address` afresh; always >= 1.
+
+    Asked of the store the way `main._retry_after_seconds` asks it for an IP
+    limit. A store that cannot answer is tried through the in-process fallback
+    (where a hit went while the store was down), and if that has nothing either
+    the answer is the length of the whole window: possibly too long, never too
+    short, and still a number.
+    """
+    item = parse(limit)
+    window = max(1, int(item.get_expiry()))
+    key = _address_key(address)
+    for counter in (limiter.limiter, _address_fallback):
+        try:
+            reset_at = float(counter.get_window_stats(item, scope, key)[0])
+            return max(1, min(window, ceil(reset_at - time.time())))
+        except Exception:  # not one error type across backends, as in `hit_per_address`
+            logger.warning("Rate limit window stats unavailable for %s", scope, exc_info=True)
+    return window

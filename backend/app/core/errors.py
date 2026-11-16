@@ -39,11 +39,16 @@ class AppError(Exception):
         details: Any = None,
         status_code: int | None = None,
         after_response: Callable[[], Awaitable[None]] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.message = message or self.message
         self.code = code or self.code
         self.details = details
         self.status_code = status_code or self.status_code
+        # Response headers this refusal carries - `Retry-After` on a 429 that
+        # `slowapi` did not raise. Values are strings; `_finish` adds the
+        # request id and security headers around them and never replaces one.
+        self.headers = headers
         # Work to run once this refusal has been sent. A FastAPI `BackgroundTasks`
         # added before a raise is dropped - the handler builds a new response and
         # the tasks hang on the one that never was - so a refusal that has to
@@ -113,6 +118,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         response = JSONResponse(
             status_code=exc.status_code,
             content=error_body(exc.code, exc.message, exc.details),
+            headers=exc.headers,
             background=BackgroundTask(exc.after_response) if exc.after_response else None,
         )
         return _finish(response, request)

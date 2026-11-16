@@ -151,13 +151,17 @@ def _password_check_locked(locked_until: datetime | None) -> AppError:
     Not a 401, deliberately: the storefront reads every 401 as an expired access
     token, refreshes, and signs the user out when that fails. The caller here
     holds a valid session and is being refused one thing, so it is a 429 with
-    the code and details the sign-in refusal has.
+    the code and details the sign-in refusal has. A 429, so it also carries
+    `Retry-After`, the body's seconds but never 0 (an HTTP client reads 0 as
+    "retry at once"). The sign-in refusal stays a 401 without the header.
     """
+    details = _retry_after(locked_until)
     return AppError(
         "Too many failed password attempts",
         code="TOO_MANY_LOGIN_ATTEMPTS",
-        details=_retry_after(locked_until),
+        details=details,
         status_code=429,
+        headers={"Retry-After": str(max(1, details["retryAfterSeconds"]))},
     )
 
 

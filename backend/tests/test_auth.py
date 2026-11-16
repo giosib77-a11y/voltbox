@@ -1058,6 +1058,8 @@ async def test_wrong_current_passwords_lock_the_account_for_change_password(
     body = refused.json()["error"]
     assert body["code"] == "TOO_MANY_LOGIN_ATTEMPTS"
     assert body["details"]["retryAfterSeconds"] > 0
+    # The same seconds as a header, as every other 429 this API sends has.
+    assert refused.headers["Retry-After"] == str(body["details"]["retryAfterSeconds"])
 
     # The password was not changed, and the lock holds for sign-in as well.
     login = await client.post(
@@ -1066,6 +1068,8 @@ async def test_wrong_current_passwords_lock_the_account_for_change_password(
     )
     assert login.status_code == 401
     assert login.json()["error"]["code"] == "TOO_MANY_LOGIN_ATTEMPTS"
+    # A 401, not a 429: the header belongs to 429s, the body carries the seconds.
+    assert "Retry-After" not in login.headers
     # The access token still works: the lock is not a sign-out.
     assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 200
 
@@ -1091,6 +1095,7 @@ async def test_wrong_current_passwords_lock_the_account_for_an_email_change(
     body = refused.json()["error"]
     assert body["code"] == "TOO_MANY_LOGIN_ATTEMPTS"
     assert body["details"]["retryAfterSeconds"] > 0
+    assert refused.headers["Retry-After"] == str(body["details"]["retryAfterSeconds"])
     me = await client.get("/api/v1/auth/me", headers=headers)
     assert me.json()["email"] == REGISTRATION["email"]
 
@@ -1221,6 +1226,18 @@ async def test_a_lock_landing_during_the_hash_refuses_the_right_password_change(
         json={"email": REGISTRATION["email"], "password": REGISTRATION["password"]},
     )
     assert login.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "locked_until", [None, datetime(2000, 1, 1, tzinfo=UTC)], ids=["none", "past"]
+)
+def test_the_lock_refusal_never_says_retry_after_zero(locked_until: datetime | None) -> None:
+    """A lock that has just run out reads 0 in the body; the header is never 0."""
+    error = auth_service._password_check_locked(locked_until)
+
+    assert error.status_code == 429
+    assert error.details == {"retryAfterSeconds": 0}
+    assert error.headers == {"Retry-After": "1"}
 
 
 async def test_a_lock_landing_during_the_hash_refuses_the_right_email_change(
