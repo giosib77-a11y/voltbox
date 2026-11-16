@@ -1721,6 +1721,197 @@ def three_frames() -> list[Image.Image]:
     ]
 
 
+#: Small, and above MAX_STORED_EDGE: a small animation used to keep every frame
+#: and a large one used to become its first frame on the re-encode (A-101).
+ANIMATION_SIZES = {"small": (64, 48), "large": (1700, 40)}
+
+
+def animated_png(size: tuple[int, int], frames: int) -> bytes:
+    base = patterned(size)
+    images = [
+        base,
+        base.transpose(Image.Transpose.FLIP_LEFT_RIGHT),
+        base.transpose(Image.Transpose.ROTATE_180),
+    ][:frames]
+    return encode(images[0], "PNG", save_all=True, append_images=images[1:])
+
+
+def animated_webp(size: tuple[int, int], frames: int) -> bytes:
+    base = patterned(size)
+    images = [
+        base,
+        base.transpose(Image.Transpose.FLIP_LEFT_RIGHT),
+        base.transpose(Image.Transpose.ROTATE_180),
+    ][:frames]
+    return encode(images[0], "WEBP", save_all=True, append_images=images[1:], lossless=True)
+
+
+def one_frame_apng(size: tuple[int, int]) -> bytes:
+    """An APNG whose `acTL` says one frame: the first frame of a written animation,
+    nothing after it. Pillow reports `n_frames == 1` for it."""
+    kept: list[bytes] = []
+    frame_controls = 0
+    for chunk in png_chunks(animated_png(size, 2)):
+        kind = chunk[4:8]
+        if kind == b"acTL":
+            chunk = png_chunk(b"acTL", struct.pack(">II", 1, 0))
+        elif kind == b"fcTL":
+            frame_controls += 1
+        if frame_controls > 1 and kind != b"IEND":
+            continue
+        kept.append(chunk)
+    return b"\x89PNG\r\n\x1a\n" + b"".join(kept)
+
+
+def one_frame_animated_webp(size: tuple[int, int]) -> bytes:
+    """A `VP8X`-animated WebP (`ANIM` and one `ANMF`): what a tool exports for a
+    "single frame animation"."""
+    written = animated_webp(size, 2)
+    parts = riff_chunks(written, 12, len(written))
+    frame = next(p for f, p in parts if f == b"ANMF")
+    return webp_from_chunks([*[(f, p) for f, p in parts if f != b"ANMF"], (b"ANMF", frame)])
+
+
+class TestAnimatedImagesAreRefused:
+    """A product photo does not need to move, and the two animated paths disagreed
+    about what is stored (A-101): one that fits kept every frame, one that was
+    reduced became its first frame. Both are refused instead - from what Pillow
+    reads at open, so nothing is decoded to find out."""
+
+    @pytest.mark.parametrize("size", ANIMATION_SIZES.values(), ids=ANIMATION_SIZES)
+    @pytest.mark.parametrize("frames", [2, 3])
+    @pytest.mark.parametrize("fmt", ["png", "webp"])
+    async def test_an_animation_is_a_400_and_stores_nothing(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        product_id: str,
+        storage: InMemoryStorage,
+        fmt: str,
+        frames: int,
+        size: tuple[int, int],
+    ) -> None:
+        build = animated_png if fmt == "png" else animated_webp
+        data = build(size, frames)
+        with Image.open(io.BytesIO(data)) as probe:
+            assert probe.n_frames == frames  # type: ignore[attr-defined]
+
+        response = await _upload(
+            client, headers, product_id, data=data, filename=f"p.{fmt}", content_type=f"image/{fmt}"
+        )
+
+        assert response.status_code == 400, response.text
+        assert response.json()["error"]["code"] == "IMAGE_ANIMATED"
+        assert storage.objects == {}
+
+    async def test_a_long_animation_is_refused_too(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        product_id: str,
+        storage: InMemoryStorage,
+    ) -> None:
+        written = animated_webp((64, 48), 3)
+        parts = riff_chunks(written, 12, len(written))
+        frame = next(p for f, p in parts if f == b"ANMF")
+        head = [(f, p) for f, p in parts if f != b"ANMF"]
+        original = webp_from_chunks([*head, *[(b"ANMF", frame)] * 3_000])
+
+        response = await _upload(
+            client, headers, product_id, data=original, filename="p.webp", content_type="image/webp"
+        )
+
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "IMAGE_ANIMATED"
+        assert storage.objects == {}
+
+    async def test_an_animation_that_is_also_too_large_is_told_it_is_animated(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        product_id: str,
+        storage: InMemoryStorage,
+    ) -> None:
+        """Exporting a smaller one would still be refused, so that is the answer
+        that helps - not the resolution one."""
+        png = header_only_png(8_000, 8_000)
+        data = png_after_header(png, png_chunk(b"acTL", struct.pack(">II", 2, 0)))
+        with pytest.raises(ValidationError) as resolution:
+            validate_image(header_only_png(8_000, 8_000), None)
+        assert resolution.value.code == "IMAGE_TOO_MANY_PIXELS"  # the premise
+
+        response = await _upload(client, headers, product_id, data=data)
+
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "IMAGE_ANIMATED"
+        assert storage.objects == {}
+
+    async def test_a_cut_animation_is_unreadable_not_animated(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        product_id: str,
+        storage: InMemoryStorage,
+    ) -> None:
+        """The check comes after the structure has been verified: a file that is
+        not a whole image is INVALID_IMAGE, whatever it announced."""
+        response = await _upload(client, headers, product_id, data=animated_png((64, 48), 2)[:-11])
+
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "INVALID_IMAGE"
+        assert storage.objects == {}
+
+    @pytest.mark.parametrize("size", ANIMATION_SIZES.values(), ids=ANIMATION_SIZES)
+    async def test_an_apng_of_one_frame_is_still_stored(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        product_id: str,
+        storage: InMemoryStorage,
+        size: tuple[int, int],
+    ) -> None:
+        """Nothing moves, so there is nothing to refuse. It still walks the
+        byte-level allowlist (acTL, fcTL, fdAT are kept chunks)."""
+        original = one_frame_apng(size)
+        assert b"acTL" in png_chunk_types(original)
+        with Image.open(io.BytesIO(original)) as probe:
+            assert probe.n_frames == 1  # type: ignore[attr-defined]
+
+        response = await _upload(client, headers, product_id, data=original)
+
+        assert response.status_code == 201, response.text
+        stored = only_object(storage)
+        assert pixels(stored)[1][0] <= size[0]  # it decodes
+        if size[0] <= MAX_STORED_EDGE:
+            assert stored == original  # walked, and nothing in it to strip
+
+    @pytest.mark.parametrize("size", ANIMATION_SIZES.values(), ids=ANIMATION_SIZES)
+    async def test_an_animated_webp_of_one_frame_is_still_stored(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        product_id: str,
+        storage: InMemoryStorage,
+        size: tuple[int, int],
+    ) -> None:
+        original = one_frame_animated_webp(size)
+        top = riff_chunks(original, 12, len(original))
+        assert [f for f, _ in top].count(b"ANMF") == 1
+        assert top[0][1][0] & 0x02  # VP8X says animated
+        with Image.open(io.BytesIO(original)) as probe:
+            assert probe.n_frames == 1  # type: ignore[attr-defined]
+
+        response = await _upload(
+            client, headers, product_id, data=original, filename="p.webp", content_type="image/webp"
+        )
+
+        assert response.status_code == 201, response.text
+        stored = only_object(storage)
+        assert pixels(stored)[1][0] <= size[0]  # it decodes
+        if size[0] <= MAX_STORED_EDGE:
+            assert stored == original
+
+
 class TestOnlyChunksKnownToBeHarmlessAreStored:
     """An allowlist, not a denylist: the chunks that can carry an identity are an
     open set, the ones that say how to show the picture are a short closed one."""
@@ -1764,7 +1955,10 @@ class TestOnlyChunksKnownToBeHarmlessAreStored:
         assert shrink_to_fit(clean, "PNG") == clean
 
     def test_an_animated_png_keeps_every_frame(self) -> None:
-        """`validate_image` accepts an APNG, so the strip must not flatten one."""
+        """The strip walks the animation chunks and must not flatten them. Called
+        on `shrink_to_fit` directly: `validate_image` refuses a file of three frames
+        (A-101), so this is the walker guarantee, which the one-frame APNG that does
+        get through relies on (`TestAnimatedImagesAreRefused`)."""
         first, *rest = three_frames()
         written = encode(first, "PNG", save_all=True, append_images=rest)
         assert {b"acTL", b"fcTL", b"fdAT"} <= set(png_chunk_types(written))
@@ -1836,7 +2030,9 @@ class TestOnlyChunksKnownToBeHarmlessAreStored:
 
     def test_an_animated_webp_keeps_its_frames_and_loses_what_is_inside_them(self) -> None:
         """An `ANMF` payload is a 16-byte frame header and then chunks of its own:
-        the spec lets a frame carry unknown ones, so they are filtered there too."""
+        the spec lets a frame carry unknown ones, so they are filtered there too.
+        The walker is called directly: `validate_image` refuses three frames now
+        (A-101), and one `ANMF` is walked the same way."""
         first, *rest = three_frames()
         written = encode(first, "WEBP", save_all=True, append_images=rest, lossless=True)
         top = riff_chunks(written, 12, len(written))
@@ -1921,9 +2117,14 @@ class TestOnlyChunksKnownToBeHarmlessAreStored:
         frames = [p for f, p in parts if f == b"ANMF"]
         if shape == "inside the frames":
             # Each frame is under any sane cap on its own: only the sum is over.
+            # Three frames: `validate_image` refuses it as animated (A-101), so
+            # this shape reaches the walkers directly, not the upload.
             each = self.EMPTY_CHUNKS // len(frames) + 1
             padded = [(f, p + empty * each if f == b"ANMF" else p) for f, p in parts]
             return webp_from_chunks(padded)
+        if shape == "inside the one frame":
+            top = [(f, p) for f, p in parts if f != b"ANMF"]
+            return webp_from_chunks([*top, (b"ANMF", frames[0] + empty * self.EMPTY_CHUNKS)])
         # Half in one frame, half at the top: neither level is over on its own.
         assert shape == "split between the levels"
         top = [(f, p) for f, p in parts if f != b"ANMF"]
@@ -1931,11 +2132,13 @@ class TestOnlyChunksKnownToBeHarmlessAreStored:
         body = [(b"ANMF", frames[0] + empty * half)] + [(b"zzzz", b"")] * half
         return webp_from_chunks([*top, *body])
 
-    SHAPES: ClassVar[list[str]] = [
+    #: The shapes of one frame (or none) are what an upload can carry now.
+    UPLOADABLE_SHAPES: ClassVar[list[str]] = [
         "after the picture",
-        "inside the frames",
+        "inside the one frame",
         "split between the levels",
     ]
+    SHAPES: ClassVar[list[str]] = [*UPLOADABLE_SHAPES, "inside the frames"]
 
     @pytest.mark.parametrize("shape", SHAPES)
     def test_a_webp_padded_with_empty_chunks_is_refused_by_count(self, shape: str) -> None:
@@ -1943,14 +2146,20 @@ class TestOnlyChunksKnownToBeHarmlessAreStored:
         not something the premise of the test gets from a broken file."""
         hostile = self._padded_webp(shape)
         assert len(hostile) < settings.max_image_bytes
-        assert validate_image(hostile, "image/webp")[0] == "WEBP"
+        if shape in self.UPLOADABLE_SHAPES:
+            assert validate_image(hostile, "image/webp")[0] == "WEBP"
+        else:
+            # Three frames: refused by `validate_image` as animated, so the premise
+            # is Pillow's own parser, which is what the walk has to be cheaper than.
+            with Image.open(io.BytesIO(hostile), formats=["WEBP"]) as probe:
+                probe.verify()
 
         for walk in (storage_module._strip_webp, lambda data: shrink_to_fit(data, "WEBP")):
             with pytest.raises(ValidationError) as refused:
                 walk(hostile)
             assert refused.value.code == "INVALID_IMAGE"
 
-    @pytest.mark.parametrize("shape", SHAPES)
+    @pytest.mark.parametrize("shape", UPLOADABLE_SHAPES)
     async def test_an_upload_padded_with_empty_chunks_is_a_400_and_stores_nothing(
         self,
         shape: str,
@@ -1993,15 +2202,12 @@ class TestOnlyChunksKnownToBeHarmlessAreStored:
             storage_module._strip_webp(clean)
         assert refused.value.code == "INVALID_IMAGE"
 
-    async def test_a_long_animation_is_still_stored_whole(
-        self,
-        client: httpx.AsyncClient,
-        headers: dict[str, str],
-        storage: InMemoryStorage,
-        product_id: str,
-    ) -> None:
+    def test_the_walk_still_keeps_a_long_animation_whole(self) -> None:
         """One `ANMF` per frame and a picture chunk inside it: 3 000 frames are
-        6 000 chunks, a tenth of the cap, and nothing of the animation is lost."""
+        6 000 chunks, a tenth of the cap, and nothing of the animation is lost.
+        This used to be an upload that was stored; `validate_image` refuses it now
+        (A-101, `test_a_long_animation_is_refused_too`), so what stays pinned is the
+        walker's own guarantee that the cap is far above a real animation."""
         parts = self._animation()
         frame = next(p for f, p in parts if f == b"ANMF")
         head = [(f, p) for f, p in parts if f != b"ANMF"]
@@ -2009,7 +2215,7 @@ class TestOnlyChunksKnownToBeHarmlessAreStored:
         with Image.open(io.BytesIO(original)) as probe:
             assert probe.n_frames == 3_000  # type: ignore[attr-defined]
 
-        stored = await self._store(client, headers, storage, product_id, original, "webp")
+        stored = storage_module._strip_webp(original)
 
         assert stored == original  # nothing in it to strip
         with Image.open(io.BytesIO(stored)) as saved:

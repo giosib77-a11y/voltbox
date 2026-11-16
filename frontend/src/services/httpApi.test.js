@@ -330,6 +330,19 @@ describe('error messages the shopper sees', () => {
     });
   });
 
+  it('says an animated image is not accepted and what to upload instead', async () => {
+    global.fetch = vi.fn(async () =>
+      reply(
+        { error: { code: 'IMAGE_ANIMATED', message: 'Animated images are not accepted' } },
+        400,
+      ),
+    );
+
+    await expect(request('/admin/products/p1/images', { method: 'POST' })).rejects.toMatchObject({
+      message: 'ანიმირებული სურათი არ მიიღება — ატვირთეთ ერთკადრიანი JPEG, PNG ან WebP.',
+    });
+  });
+
   it('says how many are left when stock runs out mid-checkout', async () => {
     // Racing another shopper for the last units is the ordinary way to meet
     // this, and "Not enough stock" does not say what to do about it.

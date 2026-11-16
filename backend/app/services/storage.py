@@ -301,6 +301,10 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
             allowed = image_format in ALLOWED_FORMATS
             pixel_budget = _max_pixels(probe, image_format) if allowed else 0
             orientation = _exif_orientation(probe, data)
+            # Read at open, like the size: Pillow takes an APNG's from its `acTL`
+            # and a WebP's from the demuxer's header, and no frame is decoded.
+            # JPEG has no such attribute - one picture.
+            frames = getattr(probe, "n_frames", 1)
             probe.verify()
     except Image.DecompressionBombError as exc:
         # Pillow has a guard of its own: it warns above MAX_IMAGE_PIXELS
@@ -329,6 +333,24 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
 
     if not allowed:
         raise _unsupported_format(image_format or "unknown", declared_type)
+
+    # A product photo does not move, and animation was the one thing the two ways
+    # of storing an image disagreed about: one that fits kept every frame (the
+    # byte-level strip), one that was reduced became its first frame (the
+    # re-encode). Refused rather than reconciled.
+    #
+    # After `verify()` and the format check, so a file that is not a whole image
+    # is still INVALID_IMAGE and HEIC (never opened here) still names its format;
+    # before the pixel limit, because an animation is refused at any size - telling
+    # the admin to export a smaller one would only lead to this refusal next.
+    #
+    # What still holds: one frame is accepted, including an APNG whose `acTL` says
+    # one and a `VP8X`-animated WebP with one `ANMF`. Such a file keeps its
+    # animation chunks, which is why `_PNG_KEPT` and `_WEBP_KEPT` still list them
+    # and the strip still walks them (acTL/fcTL/fdAT, ANIM/ANMF) - the walkers
+    # have to hold for exactly these files.
+    if frames > 1:
+        raise ValidationError("Animated images are not accepted", code="IMAGE_ANIMATED")
 
     # A decompression bomb is small on disk and enormous once decoded, and the
     # decode is what allocates - so the limit is memory, converted into a pixel
@@ -553,9 +575,10 @@ def _strip_jpeg(data: bytes) -> bytes:
 #:
 #: Critical: IHDR, PLTE, IDAT, IEND. Colour and transparency: tRNS, gAMA, cHRM,
 #: sRGB, iCCP (the ICC profile - it changes how the colours look), sBIT, bKGD,
-#: cICP, mDCV, cLLI. Size on screen: pHYs. Animation (APNG - `validate_image`
-#: accepts one, so the strip must not turn it into something else): acTL, fcTL,
-#: fdAT. What is not here is dropped, including text (tEXt, zTXt, iTXt), eXIf,
+#: cICP, mDCV, cLLI. Size on screen: pHYs. Animation (acTL, fcTL, fdAT):
+#: `validate_image` refuses an APNG of more than one frame, but one whose `acTL`
+#: says one is accepted and must not be turned into something else by the strip.
+#: What is not here is dropped, including text (tEXt, zTXt, iTXt), eXIf,
 #: tIME and every chunk this list has not heard of.
 _PNG_KEPT = frozenset(
     {
@@ -588,8 +611,10 @@ def _strip_png(data: bytes) -> bytes:
     Every chunk is length, type, data, CRC, and a kept one is copied whole - the
     CRC with it, so nothing is recomputed. The walk ends after IEND, and what
     follows it is dropped. What still holds: the pixel data is never touched, so
-    the result decodes to the same pixels (an APNG keeps all its frames), and a
-    file made only of kept chunks comes back byte for byte.
+    the result decodes to the same pixels (an APNG keeps every frame it has -
+    `validate_image` lets one through only with a single frame, but this walk does
+    not depend on that), and a file made only of kept chunks comes back byte for
+    byte.
     """
     size = len(data)
     if data[:8] != _PNG_SIGNATURE:
@@ -612,11 +637,11 @@ def _strip_png(data: bytes) -> bytes:
 
 #: The WebP chunks that are stored, by FourCC (`VP8 ` has a trailing space): the
 #: image data (VP8, VP8L, ALPH), the header that announces what follows (VP8X),
-#: the animation (ANIM, ANMF - `validate_image` accepts an animated WebP) and the
-#: ICC profile (ICCP - it changes how the colours look). An allowlist for the same
-#: reason as `_PNG_KEPT`: EXIF and `XMP ` are the two chunks the format names as
-#: metadata, but `C2PA` and any other FourCC a tool invents would have passed a
-#: list of those two.
+#: the animation (ANIM, ANMF - `validate_image` accepts an animated WebP only with
+#: one frame) and the ICC profile (ICCP - it changes how the colours look). An
+#: allowlist for the same reason as `_PNG_KEPT`: EXIF and `XMP ` are the two
+#: chunks the format names as metadata, but `C2PA` and any other FourCC a tool
+#: invents would have passed a list of those two.
 _WEBP_KEPT = frozenset({b"VP8X", b"VP8 ", b"VP8L", b"ALPH", b"ANIM", b"ANMF", b"ICCP"})
 
 #: What an `ANMF` frame may contain after its 16-byte frame header: the frame's own

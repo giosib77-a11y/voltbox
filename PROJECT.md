@@ -358,6 +358,28 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-11-16 — Animated images are refused; a damaged image is a 400, never a 500 (A-096, A-097, A-101)
+- Decision (owner-approved beforehand):
+  - **Animation is not needed for a product photo** (A-101). `validate_image` refuses any image Pillow counts
+    more than one frame in (`n_frames`, read at open, no frame decoded) — APNG and animated WebP, at any size —
+    with 400 `IMAGE_ANIMATED` (words in `ka.json`/`en.json`; the admin upload shows it like the other image
+    errors through the generic `apiErrors.<code>` lookup). It sits after `verify()` and the format check (a broken
+    file is still `INVALID_IMAGE`, HEIC still `UNSUPPORTED_IMAGE_FORMAT`) and before the pixel limit. Why refuse
+    rather than keep animation: the two storage paths disagreed — a file that fits kept every frame, a reduced one
+    became its first frame.
+  - A file Pillow cannot read is `INVALID_IMAGE` whichever step finds it (A-096, A-097): `SyntaxError` joins
+    `validate_image`'s except (a PNG cut inside its last chunk header), and `shrink_to_fit` turns a closed list of
+    Pillow's bad-bytes errors (`OSError`, `ValueError`, `SyntaxError`, `IndexError`) into `INVALID_IMAGE` around
+    only the two calls that decode (`thumbnail`, `transpose`). Ours: the list is closed and the encoder is outside
+    the wrap, so a bug in our code is still a 500.
+- What still holds: a one-frame APNG (`acTL` = 1) or one-frame animated WebP is accepted and keeps its animation
+  chunks, which is why the A-058 allowlists still list acTL/fcTL/fdAT and ANIM/ANMF. An APNG whose default image is
+  not its first frame counts as two frames in Pillow and is refused (conservative). `MAX_IMAGE_DECODE_BYTES`,
+  `DECODE_COST` and `Semaphore(1)` are unchanged. The bad-bytes list was measured on the Pillow in `.venv`; another
+  Pillow version may raise another type for some other malformed chunk.
+- How it changes: allowing animation again means deciding what a reduced one becomes (all frames re-encoded, with
+  its own decode cost) before removing the check.
+
 ### 2026-11-16 — Image strippers are allowlists; WebP method 5; order-number zone from settings (A-055–A-059, A-075, A-077–A-079)
 - Decision (all approved by the owner beforehand; values that were left to us are marked):
   - Stored images keep only chunks known to be harmless (A-058): PNG — 18 decode/colour/pHYs/APNG chunks; WebP —
