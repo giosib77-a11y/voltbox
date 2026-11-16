@@ -39,6 +39,10 @@ from app.services.inventory import MAX_STOCK, adjust_stock
 from app.services.search import build_search_text
 
 REQUIRED = ("slug", "name", "category", "brand", "price")
+# Boolean fields of a row and the value a missing one takes.
+FLAGS = {"isActive": True, "isFeatured": False, "isNew": False}
+# products.reviews_count is an int4.
+MAX_REVIEWS_COUNT = 2_147_483_647
 
 
 class ProductImportError(Exception):
@@ -83,6 +87,17 @@ def to_int(value: Any, field: str, slug: str) -> int:
     raise ProductImportError(f"{slug}: `{field}` არ არის მთელი რიცხვი: {value!r}")
 
 
+def to_flag(value: Any, field: str, slug: str) -> bool:
+    """A JSON `true`/`false`, or a ProductImportError naming the field.
+
+    `bool("false")` is True, so a text, a number or `null` would silently turn a
+    hidden product on (or a plain one into a featured one).
+    """
+    if not isinstance(value, bool):
+        raise ProductImportError(f"{slug}: `{field}` უნდა იყოს true ან false: {value!r}")
+    return value
+
+
 def validate(row: dict[str, Any], index: int) -> None:
     slug = row.get("slug") or f"#{index}"
     for field in REQUIRED:
@@ -119,6 +134,15 @@ def validate(row: dict[str, Any], index: int) -> None:
     rating = to_decimal(row.get("rating", 0), "rating", slug) or Decimal("0")
     if not (0 <= rating <= 5):
         raise ProductImportError(f"{slug}: `rating` უნდა იყოს 0-დან 5-მდე")
+    # products.reviews_count is an int4 and no API or admin schema caps it (the
+    # admin cannot set it at all), so the column's own limit is the ceiling.
+    reviews_count = to_int(row.get("reviewsCount", 0), "reviewsCount", slug)
+    if not 0 <= reviews_count <= MAX_REVIEWS_COUNT:
+        raise ProductImportError(
+            f"{slug}: `reviewsCount` ({reviews_count}) უნდა იყოს 0-დან {MAX_REVIEWS_COUNT}-მდე"
+        )
+    for field, default in FLAGS.items():
+        to_flag(row.get(field, default), field, slug)
 
 
 async def resolve_category(db: AsyncSession, slug: str) -> Category:
@@ -170,10 +194,10 @@ async def import_one(db: AsyncSession, row: dict[str, Any], *, allow_create_bran
     product.specs = dict(row.get("specs", {}))
     product.tags = list(row.get("tags", []))
     product.rating = to_decimal(row.get("rating", 0), "rating", slug) or Decimal("0")
-    product.reviews_count = int(row.get("reviewsCount", 0))
-    product.is_active = bool(row.get("isActive", True))
-    product.is_featured = bool(row.get("isFeatured", False))
-    product.is_new = bool(row.get("isNew", False))
+    product.reviews_count = to_int(row.get("reviewsCount", 0), "reviewsCount", slug)
+    product.is_active = to_flag(row.get("isActive", FLAGS["isActive"]), "isActive", slug)
+    product.is_featured = to_flag(row.get("isFeatured", FLAGS["isFeatured"]), "isFeatured", slug)
+    product.is_new = to_flag(row.get("isNew", FLAGS["isNew"]), "isNew", slug)
 
     # ⚠️ ყველაზე მნიშვნელოვანი ნაბიჯი: ამის გარეშე პროდუქტი ბაზაში იქნება,
     # მაგრამ ძებნა მას ვერასდროს იპოვის
