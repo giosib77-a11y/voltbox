@@ -1685,6 +1685,142 @@ class TestOnlyChunksKnownToBeHarmlessAreStored:
 
         assert refused.value.code == "INVALID_IMAGE"
 
+    # --- the chunk cap (A-075) ---
+    # libwebp has no limit on how many chunks a file has, and `validate_image` is
+    # as fast on 5 MiB of empty 8-byte ones (3 ms, the demuxer is C) as on none; the
+    # walk is Python. More than the cap in total is refused, whichever level they
+    # are on. The counts below are literals, not `_MAX_WEBP_CHUNKS`, so a test of
+    # the cap does not follow the cap upwards.
+    EMPTY_CHUNKS = 70_000
+
+    @staticmethod
+    def _animation() -> list[tuple[bytes, bytes]]:
+        first, *rest = three_frames()
+        written = encode(first, "WEBP", save_all=True, append_images=rest, lossless=True)
+        return riff_chunks(written, 12, len(written))
+
+    def _padded_webp(self, shape: str) -> bytes:
+        empty = riff_chunk(b"zzzz", b"")
+        assert len(empty) == 8
+        if shape == "after the picture":
+            written = encode(patterned((64, 48)), "WEBP", lossless=True)
+            picture = riff_chunks(written, 12, len(written))
+            return webp_from_chunks([*picture, *[(b"zzzz", b"")] * self.EMPTY_CHUNKS])
+        parts = self._animation()
+        frames = [p for f, p in parts if f == b"ANMF"]
+        if shape == "inside the frames":
+            # Each frame is under any sane cap on its own: only the sum is over.
+            each = self.EMPTY_CHUNKS // len(frames) + 1
+            padded = [(f, p + empty * each if f == b"ANMF" else p) for f, p in parts]
+            return webp_from_chunks(padded)
+        # Half in one frame, half at the top: neither level is over on its own.
+        assert shape == "split between the levels"
+        top = [(f, p) for f, p in parts if f != b"ANMF"]
+        half = self.EMPTY_CHUNKS // 2
+        body = [(b"ANMF", frames[0] + empty * half)] + [(b"zzzz", b"")] * half
+        return webp_from_chunks([*top, *body])
+
+    SHAPES: ClassVar[list[str]] = [
+        "after the picture",
+        "inside the frames",
+        "split between the levels",
+    ]
+
+    @pytest.mark.parametrize("shape", SHAPES)
+    def test_a_webp_padded_with_empty_chunks_is_refused_by_count(self, shape: str) -> None:
+        """The file is one libwebp accepts: the refusal is the walk's, by count, and
+        not something the premise of the test gets from a broken file."""
+        hostile = self._padded_webp(shape)
+        assert len(hostile) < settings.max_image_bytes
+        assert validate_image(hostile, "image/webp")[0] == "WEBP"
+
+        for walk in (storage_module._strip_webp, lambda data: shrink_to_fit(data, "WEBP")):
+            with pytest.raises(ValidationError) as refused:
+                walk(hostile)
+            assert refused.value.code == "INVALID_IMAGE"
+
+    @pytest.mark.parametrize("shape", SHAPES)
+    async def test_an_upload_padded_with_empty_chunks_is_a_400_and_stores_nothing(
+        self,
+        shape: str,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+    ) -> None:
+        response = await _upload(
+            client,
+            headers,
+            product_id,
+            data=self._padded_webp(shape),
+            filename="p.webp",
+            content_type="image/webp",
+        )
+
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "INVALID_IMAGE"
+        assert not storage.objects
+
+    def test_the_chunk_cap_counts_every_chunk_and_not_one_too_many(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A file of exactly `n` chunks passes at `n` and is refused at `n - 1`, so
+        a legitimate file has nothing to fear from an off-by-one - and the chunks
+        inside a frame are counted along with the file's."""
+        parts = self._animation()
+        clean = webp_from_chunks(parts)
+        count = 8  # VP8X, ANIM, three ANMF, and the VP8L inside each
+        assert count == len(parts) + sum(
+            len(riff_chunks(p, 16, len(p))) for f, p in parts if f == b"ANMF"
+        )
+
+        monkeypatch.setattr(storage_module, "_MAX_WEBP_CHUNKS", count)
+        assert storage_module._strip_webp(clean) == clean
+
+        monkeypatch.setattr(storage_module, "_MAX_WEBP_CHUNKS", count - 1)
+        with pytest.raises(ValidationError) as refused:
+            storage_module._strip_webp(clean)
+        assert refused.value.code == "INVALID_IMAGE"
+
+    async def test_a_long_animation_is_still_stored_whole(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+    ) -> None:
+        """One `ANMF` per frame and a picture chunk inside it: 3 000 frames are
+        6 000 chunks, a tenth of the cap, and nothing of the animation is lost."""
+        parts = self._animation()
+        frame = next(p for f, p in parts if f == b"ANMF")
+        head = [(f, p) for f, p in parts if f != b"ANMF"]
+        original = webp_from_chunks([*head, *[(b"ANMF", frame)] * 3_000])
+        with Image.open(io.BytesIO(original)) as probe:
+            assert probe.n_frames == 3_000  # type: ignore[attr-defined]
+
+        stored = await self._store(client, headers, storage, product_id, original, "webp")
+
+        assert stored == original  # nothing in it to strip
+        with Image.open(io.BytesIO(stored)) as saved:
+            assert saved.n_frames == 3_000  # type: ignore[attr-defined]
+
+    def test_a_resized_webp_the_walk_refuses_is_stored_as_the_re_encode(self) -> None:
+        """What still holds from A-059: a WebP that was decoded anyway (it is above
+        the edge) has a clean re-encode, so the walk's refusal only costs the
+        comparison with the stripped original."""
+        written = encode(patterned((1700, 1000)), "WEBP", lossless=True, method=0)
+        picture = riff_chunks(written, 12, len(written))
+        padded = webp_from_chunks([*picture, *[(b"zzzz", b"")] * self.EMPTY_CHUNKS])
+        with pytest.raises(ValidationError):  # the premise: the walk refuses it
+            storage_module._strip_webp(padded)
+        assert validate_image(padded, "image/webp")[0] == "WEBP"
+
+        stored = shrink_to_fit(padded, "WEBP")
+
+        with Image.open(io.BytesIO(stored)) as saved:
+            assert max(saved.size) == MAX_STORED_EDGE
+        assert b"zzzz" not in stored
+
     def test_a_jpeg_keeps_jfif_and_loses_the_thumbnail_extension_and_foreign_segments(
         self,
     ) -> None:

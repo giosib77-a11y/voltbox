@@ -614,18 +614,39 @@ _WEBP_FRAME_HEADER = 16
 _WEBP_EXIF_FLAG = 0x08
 _WEBP_XMP_FLAG = 0x04
 
+#: The most chunks one walk consumes - the file's and those inside its `ANMF` frames
+#: together - before the file is refused. A legitimate WebP has a handful (measured:
+#: 1 for a plain lossless one, 3 with alpha, 5 for a three-frame animation, and an
+#: animation costs about 3 per frame, so one of 2 000 frames is about 6 000). But a
+#: file may be padded with zero-length unknown chunks of 8 bytes each, and libwebp
+#: accepts that after the image data and inside a frame, with no limit of its own:
+#: measured, 5 MiB of them (655 000 chunks) passes `validate_image` in 3-65 ms
+#: (`Image.open` + `verify()` costs the same, the demuxer is C), while this walk
+#: took 285 ms - up to 90 times what validation paid, on every such upload. At this
+#: cap the walk is bounded whatever the file size: 33 ms for 5 MiB of them, as 65 000
+#: chunks cost before the cap (32 ms). That is the same ceiling as
+#: `_MAX_JPEG_MARKERS`, and about 21 000 frames of animation at 3 chunks each -
+#: more than 5 MiB of real frames can hold.
+_MAX_WEBP_CHUNKS = 65_536
 
-def _webp_chunks(data: bytes, pos: int, end: int, *, in_frame: bool = False) -> bytes:
+
+def _webp_chunks(
+    data: bytes, pos: int, end: int, left: list[int], *, in_frame: bool = False
+) -> bytes:
     """The allowlisted chunks in `data[pos:end]`, each padded to an even length.
 
     The chunk list of the file, or - with `in_frame` - of one `ANMF` payload after
     its frame header. Only the file level contains frames, so the recursion is one
-    level deep and every byte is walked once.
+    level deep and every byte is walked once. `left` is the one-element budget of
+    chunks the whole file may still consume (`_MAX_WEBP_CHUNKS` at the start), shared
+    by both levels and by every frame, so a file cannot split its chunks between
+    them to stay under the cap.
     """
     kept = _WEBP_FRAME_KEPT if in_frame else _WEBP_KEPT
     body = bytearray()
     while pos < end:
-        if pos + 8 > end:
+        left[0] -= 1
+        if left[0] < 0 or pos + 8 > end:
             raise _unreadable()
         fourcc = data[pos : pos + 4]
         length = int.from_bytes(data[pos + 4 : pos + 8], "little")
@@ -640,7 +661,9 @@ def _webp_chunks(data: bytes, pos: int, end: int, *, in_frame: bool = False) -> 
             elif fourcc == b"ANMF":
                 if length < _WEBP_FRAME_HEADER:
                     raise _unreadable()
-                frame = _webp_chunks(data, pos + 8 + _WEBP_FRAME_HEADER, payload_end, in_frame=True)
+                frame = _webp_chunks(
+                    data, pos + 8 + _WEBP_FRAME_HEADER, payload_end, left, in_frame=True
+                )
                 payload = payload[:_WEBP_FRAME_HEADER] + frame
                 length = len(payload)
             body += fourcc + length.to_bytes(4, "little") + payload
@@ -668,7 +691,7 @@ def _strip_webp(data: bytes) -> bytes:
     riff_end = 8 + int.from_bytes(data[4:8], "little")
     if riff_end > len(data):
         raise _unreadable()
-    body = _webp_chunks(data, 12, riff_end)
+    body = _webp_chunks(data, 12, riff_end, [_MAX_WEBP_CHUNKS])
     return b"RIFF" + (4 + len(body)).to_bytes(4, "little") + b"WEBP" + body
 
 
