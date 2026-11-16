@@ -27,6 +27,9 @@ import { describe, expect, it } from 'vitest';
 
 import ka from './ka.json';
 import en from './en.json';
+// The admin's error texts, registered on top of ka by the admin chunk. The
+// storefront source asks for some of them by name (httpClient's image errors).
+import adminKa from '../admin/i18n/ka.json';
 
 const ROOT = process.cwd();
 const SRC = join(ROOT, 'src');
@@ -96,7 +99,15 @@ describe('the translation files', () => {
       const value = path.replace(/\[\d+\]$/, '').split('.').reduce((node, key) => node?.[key], tree);
       return value === '' || (Array.isArray(value) && value.some((item) => !item));
     });
-    expect([...empty(ka), ...empty(en)]).toEqual([]);
+    expect([...empty(ka), ...empty(en), ...empty(adminKa)]).toEqual([]);
+  });
+
+  it('keep the admin error texts out of the storefront files, and no code in both', () => {
+    // Admin-only texts in ka.json or en.json would ship in the storefront's
+    // entry chunk (or the English one) again.
+    const shared = Object.keys(ka.apiErrors);
+    expect(Object.keys(adminKa.apiErrors).filter((code) => shared.includes(code))).toEqual([]);
+    expect(Object.keys(adminKa)).toEqual(['apiErrors']);
   });
 });
 
@@ -110,9 +121,15 @@ describe('the keys the source asks for', () => {
     /\b(?:labelKey|titleKey|title|text):\s*'([a-z][\w]*\.[\w.]+)'/g,
   ];
 
-  const exists = (key) => {
-    const node = (suffix) => `${key}${suffix}`.split('.').reduce((at, part) => at?.[part], ka);
-    return node('') !== undefined || node('_one') !== undefined;
+  // The admin's keys count only for the one shared file that looks them up
+  // (httpClient's image errors): in any other storefront file they would show
+  // as a raw key, because the shop never loads the admin chunk.
+  const mayUseAdminKeys = (file) => file.endsWith(join('services', 'httpClient.js'));
+
+  const exists = (key, file) => {
+    const node = (suffix, tree) => `${key}${suffix}`.split('.').reduce((at, part) => at?.[part], tree);
+    const trees = mayUseAdminKeys(file) ? [ka, adminKa] : [ka];
+    return trees.some((tree) => node('', tree) !== undefined || node('_one', tree) !== undefined);
   };
 
   it('finds keys to check', () => {
@@ -128,7 +145,7 @@ describe('the keys the source asks for', () => {
       const text = withoutComments(readFileSync(file, 'utf8'));
       return KEY_PATTERNS.flatMap((pattern) => [...text.matchAll(pattern)])
         .map((match) => match[1])
-        .filter((key) => !exists(key))
+        .filter((key) => !exists(key, file))
         .map((key) => `${relative(ROOT, file)}: ${key}`);
     });
     expect(missing).toEqual([]);

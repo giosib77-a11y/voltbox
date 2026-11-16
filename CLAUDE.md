@@ -73,7 +73,7 @@ frontend — `frontend/`-იდან.
 - Commit message: Conventional Commits, subject აღწერს ქცევას (`fix(auth): a refresh rotating ... cannot outlive revoke_all`).
 - ფული — `Decimal`/`Numeric(12,2)`; ფასი და ჯამი მხოლოდ სერვერზე.
 - შეკვეთის სტატუსი იცვლება მხოლოდ `app/services/order_status.py`-ით; მარაგი — მხოლოდ `app/services/inventory.py`-ით.
-- ვალიდაციის შეცდომა 400-ია (არა 422), კოდით (`code=...`); ახალ კოდს ტექსტი სჭირდება `frontend/src/i18n/ka.json`-ში და `en.json`-ში.
+- ვალიდაციის შეცდომა 400-ია (არა 422), კოდით (`code=...`); ახალ კოდს ტექსტი სჭირდება `frontend/src/i18n/ka.json`-ში და `en.json`-ში; კოდი, რომელსაც მხოლოდ ადმინ პანელი ხვდება — მხოლოდ `frontend/src/admin/i18n/ka.json`-ში (ქართულად; ადმინის chunk-ს მოჰყვება, A-047; `backend/tests/test_error_messages.py` ამოწმებს).
 - storefront-ის ახალი ტექსტი — გასაღები ორივე i18n ფაილში; კომპონენტში ქართული ტექსტი პირდაპირ არა.
 - ტესტის საერთო კოდი — `tests/factories.py`.
 - გადაწყვეტილების მიზეზი — კომენტარში ან `PROJECT.md`-ის Decision Log-ში; შეზღუდვის აღწერისას ისიც თქვი, რა რჩება ძალაში.

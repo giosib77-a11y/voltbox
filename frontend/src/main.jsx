@@ -1,6 +1,6 @@
 // First: it reads the language from the address, and every module below may
 // translate as soon as it runs.
-import './i18n/index.js';
+import { mountWhenReady } from './i18n/index.js';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -14,17 +14,21 @@ import CartAccountSync from './context/CartAccountSync.jsx';
 
 import './index.css';
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <ErrorBoundary>
-      <ToastProvider>
-        <AuthProvider>
-          <CartProvider>
-            <CartAccountSync />
-            <App />
-          </CartProvider>
-        </AuthProvider>
-      </ToastProvider>
-    </ErrorBoundary>
-  </StrictMode>,
-);
+function mount() {
+  createRoot(document.getElementById('root')).render(
+    <StrictMode>
+      <ErrorBoundary>
+        <ToastProvider>
+          <AuthProvider>
+            <CartProvider>
+              <CartAccountSync />
+              <App />
+            </CartProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </ErrorBoundary>
+    </StrictMode>,
+  );
+}
+
+mountWhenReady(mount);

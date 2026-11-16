@@ -12,6 +12,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { i18n } from '../i18n/index.js';
+// The image errors below are the admin's; in the app the admin chunk registers
+// them (adminApi.js imports this), and these tests call `request` directly.
+import '../admin/adminTexts.js';
 import * as httpApi from './httpApi.js';
 import { request } from './httpClient.js';
 import {

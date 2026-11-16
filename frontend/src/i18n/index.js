@@ -5,7 +5,9 @@
  * paths, English under /en - and sets up i18next with that one language for
  * the life of the page.
  * Where it fits: imported first by main.jsx, so every module after it can call
- * `t`; App.jsx mounts the router under `basename(language)`.
+ * `t`; App.jsx mounts the router under `basename(language)`. An English page
+ * is rendered only after `languageReady` (the English chunk); a Georgian page
+ * never waits.
  *
  * Why the language never changes while a page is open: the switch is a plain
  * link to the same page in the other language, and following it loads the
@@ -20,8 +22,10 @@
 
 import i18next from 'i18next';
 
+// Georgian is the only language in the entry chunk. English is its own chunk,
+// fetched by `loadEnglish()` below and only on an English page; the admin
+// panel's error texts are another, registered by admin/adminTexts.js.
 import ka from './ka.json';
-import en from './en.json';
 
 export const DEFAULT_LANGUAGE = 'ka';
 export const LANGUAGES = ['ka', 'en'];
@@ -66,8 +70,8 @@ i18next.init({
   // i18n.test.js keeps the two files in step, so this is a backstop.
   fallbackLng: DEFAULT_LANGUAGE,
   supportedLngs: LANGUAGES,
-  resources: { ka: { translation: ka }, en: { translation: en } },
-  // Resources are bundled, so there is nothing to wait for: `t` works the
+  resources: { ka: { translation: ka } },
+  // Georgian is bundled, so there is nothing to wait for: `t` works the
   // moment this module has run.
   initAsync: false,
   // React escapes what it renders; escaping here as well would show &amp;.
@@ -105,6 +109,43 @@ function localizeStaticHead(language) {
 localizeStaticHead(pageLanguage);
 
 export const i18n = i18next;
+
+let englishLoading = null;
+
+/**
+ * Fetch the English texts and register them. Resolves at once if they are
+ * already there. A failed fetch rejects and may be tried again; until it
+ * succeeds `fallbackLng` shows the Georgian.
+ */
+export function loadEnglish() {
+  if (i18next.hasResourceBundle('en', 'translation')) return Promise.resolve();
+  englishLoading ||= import('./en.json')
+    .then((module) => {
+      i18next.addResourceBundle('en', 'translation', module.default, true, true);
+    })
+    .finally(() => {
+      englishLoading = null;
+    });
+  return englishLoading;
+}
+
+/**
+ * What main.jsx waits for before it renders: the English texts on an English
+ * page, and `null` on a Georgian one - which has nothing to wait for and
+ * renders at once, with no request and no extra tick.
+ */
+export const languageReady = pageLanguage === DEFAULT_LANGUAGE ? null : loadEnglish();
+
+/**
+ * Run `mount` (main.jsx's render) when the page's texts are there: at once -
+ * in this same tick, nothing awaited - when `ready` is null, and after the
+ * English chunk otherwise, whether it arrived or failed (a failed one renders
+ * in Georgian via `fallbackLng` rather than leaving a blank page).
+ */
+export function mountWhenReady(mount, ready = languageReady) {
+  if (ready) ready.then(mount, mount);
+  else mount();
+}
 
 /** Translate a key. Bound, so it can be passed around and imported by name. */
 export const t = (key, options) => i18next.t(key, options);

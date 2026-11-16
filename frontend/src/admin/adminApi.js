@@ -11,6 +11,7 @@
  */
 
 import { request } from '../services/httpClient.js';
+import './adminTexts.js';
 
 /** True when the build talks to a real backend. */
 export function isAdminAvailable() {

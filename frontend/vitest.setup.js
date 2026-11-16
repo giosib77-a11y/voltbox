@@ -34,8 +34,11 @@ import { cleanup } from '@testing-library/react';
 // The page's language comes from the address; jsdom's is `/`, so Georgian, as
 // every test written before English existed expects. A test that switches to
 // English is put back here.
-import { DEFAULT_LANGUAGE, i18n } from './src/i18n/index.js';
+import { DEFAULT_LANGUAGE, i18n, loadEnglish } from './src/i18n/index.js';
 
+// English is its own chunk in the app; every test file may switch to it, so it
+// is registered here, once per file, before the first test runs.
+await loadEnglish();
 
 afterEach(() => {
   cleanup();

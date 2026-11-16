@@ -220,7 +220,9 @@ Common to all API endpoints (existing, unchanged):
   string (`"125.00"`); timestamps are ISO 8601 with timezone (UTC).
 - **One error format** (`core/errors.py`), every 4xx/5xx:
   `{"error": {"code": "<STABLE_CODE>", "message": "<English, for logs>", "details": <object | array | null>}}`.
-  The UI shows the text for `code` from `frontend/src/i18n/ka.json` → `apiErrors.<CODE>`.
+  The UI shows the text for `code` from `frontend/src/i18n/ka.json` → `apiErrors.<CODE>`
+  (English: `en.json`, loaded only on `/en`); a code only the admin panel can meet has its text in
+  `frontend/src/admin/i18n/ka.json`, Georgian only, loaded with the admin chunk (A-047).
   Validation errors are 400 (never 422).
 - Every `/admin/*` endpoint: `Authorization: Bearer <access JWT>`; 401 `INVALID_TOKEN`
   without a valid token, 403 `ADMIN_REQUIRED` for a non-admin (role read from the DB).
@@ -259,9 +261,10 @@ Side effects:
   `order.purge` (`changes: {orderNumber, status, total, automatic: bool}`; actor = admin for
   `DELETE`, `NULL` with `automatic: true` for the 30-day purge). No customer name, phone or
   address goes into the audit row.
-- New error codes `ORDER_IN_TRASH` and `ORDER_NOT_IN_TRASH` have Georgian and English text
-  under `apiErrors` in `frontend/src/i18n/ka.json` and `en.json`
-  (`backend/tests/test_error_messages.py` enforces the Georgian one; `i18n.test.js` key parity).
+- New error codes `ORDER_IN_TRASH` and `ORDER_NOT_IN_TRASH`: `ORDER_IN_TRASH` (a customer can meet it on
+  cancel) has Georgian and English text under `apiErrors` in `frontend/src/i18n/ka.json` and `en.json`;
+  `ORDER_NOT_IN_TRASH` (admin only) is Georgian only, in `frontend/src/admin/i18n/ka.json` (A-047)
+  (`backend/tests/test_error_messages.py` enforces the Georgian text; `i18n.test.js` key parity).
 
 ## Integrations
 - **Supabase** — PostgreSQL (session pooler) and Storage (`product-images`,
@@ -368,6 +371,30 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-11-17 — English is its own chunk; admin-only error texts ship with the admin panel; field errors at their field (A-047, A-089)
+- Decision (owner-approved beforehand):
+  - **English loads only on `/en`** (A-047). `i18n/index.js` bundles Georgian alone; on an English page
+    `languageReady` is a dynamic `import('./en.json')` and `mountWhenReady` mounts the app after it (also after a
+    failure, then in Georgian via `fallbackLng`). On a Georgian page `languageReady` is null and the app mounts in
+    the same tick — no request, no await. Measured (gzip): the entry's `constants` chunk 22.92 → 12.95 kB
+    (http) / 22.89 → 12.92 kB (mock); `en` 9.01 kB, fetched only on `/en`.
+  - **A code only the admin panel can meet has its text in `frontend/src/admin/i18n/ka.json`**, Georgian only,
+    registered by `admin/adminTexts.js`, which `admin/adminApi.js` imports (every admin request goes through it).
+    38 codes moved. Why there: `ka.json` has no admin section — the panel's own words are literal in its
+    components, already lazy; what the shop's entry carried was the admin-only `apiErrors`.
+    `test_error_messages.py` checks every code in that file is raised only from admin modules (with a named
+    exception list), so a customer-facing code cannot be moved there by mistake.
+  - **A server refusal that belongs to a field shows at that field, without the generic toast** (A-089) — on
+    register, change-password and reset. The new-password reason (common / repetition or sequence / the
+    administrator's 12) is told apart by the server's English message, since both rules are one `value_error`
+    type; `test_password_policy.py` pins those words. A reason the page does not know gets a general refusal at
+    the field.
+- What still holds: on `/en` the English chunk is requested only after the entry runs (one more round trip, not
+  preloaded). The admin panel is Georgian only; `/en/admin` is not a route. `Profile.jsx`'s taken-email error
+  still shows only as a toast in http mode (nit, open).
+- Changes if: an admin English UI is wanted (the admin file then needs `en`), or the new-password rules get their
+  own codes/types (then the storefront matches `type`, not words).
+
 ### 2026-11-16 — A stored APNG is a static PNG; image, password and health-limit nits (A-103–A-106, A-088, A-090–A-095)
 - Decision (owner-approved beforehand):
   - **A stored PNG never keeps APNG chunks** (A-104). `_PNG_KEPT` no longer lists acTL, fcTL, fdAT (15 chunks
@@ -407,8 +434,8 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
   `manage_admin.py create-admin`), never at sign-in — a stored `1q2w3e4r!` still signs in (tested, customer and
   admin). The refusal is the same 400 `VALIDATION_ERROR`, no new code. Still not caught: word repetition
   (`passwordpassword`), leetspeak (`P@ssw0rd`), walks over three or more rows, walks that skip keys. The common
-  list is unchanged (sha256-pinned). The storefront still shows the generic text for a pattern refusal (A-089,
-  frontend, open).
+  list is unchanged (sha256-pinned). The storefront shows a pattern refusal at the password field since A-089
+  (2026-11-17 entry).
 - What still holds (images): an upright image at or below the edge is never decoded and is stripped byte for byte (a file
   the walk cannot read is still `INVALID_IMAGE` there); a decoded file is no longer walked, so one the walk would
   refuse is stored as its metadata-free re-encode, as A-059 already did. An APNG whose default image is not frame 0 is still refused (Pillow counts two frames), and
@@ -422,7 +449,7 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 - Decision (owner-approved beforehand; values that were left to us are marked):
   - **Animation is not needed for a product photo** (A-101). `validate_image` refuses any image Pillow counts
     more than one frame in (`n_frames`, read at open, no frame decoded) — APNG and animated WebP, at any size —
-    with 400 `IMAGE_ANIMATED` (words in `ka.json`/`en.json`; the admin upload shows it like the other image
+    with 400 `IMAGE_ANIMATED` (words in `admin/i18n/ka.json` since A-047; the admin upload shows it like the other image
     errors through the generic `apiErrors.<code>` lookup). It sits after `verify()` and the format check (a broken
     file is still `INVALID_IMAGE`, HEIC still `UNSUPPORTED_IMAGE_FORMAT`) and before the pixel limit. Why refuse
     rather than keep animation: the two storage paths disagreed — a file that fits kept every frame, a reduced one

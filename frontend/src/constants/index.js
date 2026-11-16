@@ -1,7 +1,9 @@
 /**
  * ცენტრალიზებული კონფიგი.
  *
- * Interface text lives in src/i18n/ka.json and en.json; what stays here is
+ * Storefront text lives in src/i18n/ka.json and en.json (English is loaded only
+ * on /en); the admin-only API error texts in src/admin/i18n/ka.json (Georgian
+ * only). What stays here is
  * configuration, and for a list whose entries have words - sort options,
  * payment methods, order statuses - the values the words are keyed by.
  */
