@@ -370,6 +370,30 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   eslint, vitest 682 / 58, ორივე build ✅.
   არ გაშვებულა: e2e, ნამდვილი ბრაუზერი, Telegram-ის ნამდვილი გაგზავნა, Render (ლიმიტი რეალური IP-ით), ლაივ ბაზა.
 
+**`/fix A-055 A-056 A-057 A-058 A-059 A-075 A-077 A-078 A-079` 2026-11-16** (ბრენჩი `fix/a055-a059-a075-a077-a079`,
+`agent-system`-იდან, `069410b`). ცხრავე ID ღია იყო. მფლობელმა წინასწარ დაამტკიცა ყველა (A-077 — ზონა Settings-იდან, A-078 —
+წინასწარი შემოწმება ჩაწერამდე); `DECODE_COST`, ბიუჯეტი და `Semaphore(1)` უცვლელია. storage.py-ის ხუთი ID რიგრიგობით გავიდა
+(ერთ ფაილზე ერთი აგენტი). ძველ კოდზე ჩავარდნა ორკესტრატორმა `git stash`-ით ხელახლა გაუშვა ყველა კოდის ID-ზე; A-079-ზე
+(მხოლოდ ტესტი) — დროებითი bypass-ით. pytest ერთდროულად ერთზე მეტი არასდროს გაშვებულა.
+- A-055 — fixed (verified), `84d1b1f`; code-reviewer — დახურულია.
+- A-056 — fixed (verified), `6b2d585` + `aa98335` (გაზომილია: `method=6` → `5`); code-reviewer — დახურულია.
+- A-057 — fixed (verified), `93e8fd1`; code-reviewer — დახურულია.
+- A-058 — fixed (verified), `a837692`; security-auditor — დახურულია.
+- A-059 — fixed (verified), `d446b70` (აუდიტის მაგალითი სხვა დეფექტი აღმოჩნდა → A-097); code-reviewer — დახურულია.
+- A-075 — fixed (verified), `bb7ae36` (დადასტურდა: 285 → 33 ms); security-auditor — დახურულია.
+- A-077 — fixed (verified), `9d2f96a` (+ `STORE_TIMEZONE`-ის startup-ვალიდაცია); code-reviewer — დახურულია.
+- A-078 — fixed (verified), `33c3cfe`; code-reviewer — დახურულია.
+- A-079 — fixed (verified), `172a3ba`; code-reviewer — დახურულია.
+- PROJECT.md: Decision Log-ის ახალი ჩანაწერი და მოძველებული „What still holds" ხაზები — `aa98335`.
+- ახალი: A-096, A-097 (should-fix, ჩვენამდეც ასე იყო, scope-ის გარეთ — ღია), A-098–A-100 (nit), A-101 (needs decision) —
+  სექციის ბოლოს.
+- pytest: 1658 (baseline `069410b`) → **1757 passed, 1 skipped**.
+- საბოლოო შემოწმება (`aa98335`, tester): ruff ✅ · format 186 ✅ · mypy 166 ✅ · **pytest 1757 passed, 1 skipped** · alembic
+  0001→0017 + check ✅ (ცარიელ `voltbox_final_check`-ზე, შემდეგ წაიშალა) · eslint ✅ · **vitest 682 / 58** (უცვლელი) · build
+  `http` ✅ · build `mock` ✅. frontend და დამოკიდებულებები არ შეცვლილა, ამიტომ `docker build` და Node 22 არ გაშვებულა.
+  არ გაშვებულა: Linux-ზე სურათების დრო და მეხსიერება (გაზომვები Windows-ისაა), ნამდვილი ტელეფონის/კამერის ფაილები, ბრაუზერში
+  stripped ფაილის რენდერი, e2e, Render, ლაივ ბაზა.
+
 ### Should-fix
 
 #### A-030 · should-fix · refresh-ის 429 ან 5xx პასუხი მომხმარებელს სისტემიდან აგდებს
@@ -818,7 +842,8 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   40 anyio-ს `run_in_threadpool`-ისაა. დასკვნა („გიგაბაიტები") ძალაში რჩება.
 - **გამოსწორება:** „up to the default executor's size, min(32, CPUs + 4)".
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `84d1b1f`. მხოლოდ კომენტარი; ფორმულა Python 3.14-ის `concurrent/futures/thread.py:181`-ით
+  გადამოწმდა (`min(32, (os.process_cpu_count() or 1) + 4)`), `app/`-ში `run_in_threadpool` არ არის. re-review: code-reviewer — დახურულია.
 
 #### A-056 · nit · WebP-ის `method=6` encode-ის დრო გაზომილი არ არის
 - **ფაილი:** `backend/app/services/storage.py` (`shrink_to_fit`, WebP-ის შტო)
@@ -826,7 +851,11 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   CPU-ს წვავს და სხვა ატვირთვებს აყოვნებს.
 - **გამოსწორება:** გაზომვა (1600 px შედეგი, `method` 4 vs 6: დრო და ზომა); მერე გადაწყვეტა.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `6b2d585` (+ `aa98335`, კომენტარის „2-4%"). გაზომვა (Windows, Ryzen 7 4700U, Pillow 13 /
+  libwebp 1.6, 1600×1186 შედეგი): ნაწილობრივ გამჭვირვალე WebP-ზე `method=6` 2.2–4.0 წმ, 4 და 5 — 0.18–0.73 წმ, ფაილი 2–4%-ით
+  პატარა; გაუმჭვირვალე ფოტოზე m5 16%-ით სწრაფია m6-ზე (1.4% დიდი ფაილი), m4 m5-ზე მხოლოდ 5%-ით. → `method=5`. `DECODE_COST`,
+  ბიუჯეტი და `Semaphore(1)` უცვლელია; `TestDecodeMemoryIsBounded` გადის (WebP-ის peak Windows-ზე 90 → 58 MiB). ტესტი ძველ
+  კოდზე ვარდება (ორკესტრატორი, `git stash`). re-review: code-reviewer — დახურულია. Linux-ის დრო არ გაზომილა → A-100.
 
 #### A-057 · nit · PNG, რომლის `eXIf` IDAT-ის შემდეგაა, ორიენტაციას კარგავს
 - **ფაილი:** `backend/app/services/storage.py` (`_exif_orientation`)
@@ -834,7 +863,10 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   შეიძლება გვერდზე ჩანდეს. კამერები PNG-ს ასე არ წერენ.
 - **გამოსწორება:** byte-level `eXIf` ძებნა header-only წაკითხვისთვის, ან ასეთი ფაილის `INVALID_IMAGE`.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `93e8fd1`. byte-level გზა: `_png_exif` chunk-ების სიას დადის (length/type, pixel-ის გარეშე),
+  PNG-ის EXIF ყოველთვის იქიდან იკითხება; `validate_image` და `shrink_to_fit` ერთსა და იმავე `_exif_orientation(probe, data)`-ს
+  ეკითხებიან, ამიტომ გვიანი eXIf ბიუჯეტით ისევე ფასდება. ცალკე ზღვარი არ დაემატა: 5 MiB ცარიელი chunk-ები — 0.18 წმ, `verify()`
+  იმავე ფაილზე 0.63 წმ. 15 ახალი ტესტიდან 10 ძველ კოდზე ვარდება (ორკესტრატორი, `git stash`). re-review: code-reviewer — დახურულია.
 
 #### A-058 · nit · PNG/WebP-ის stripper denylist-ია; JPEG-ის APP0/APP14 identifier-ს არ ამოწმებს
 - **ფაილი:** `backend/app/services/storage.py` (`_PNG_METADATA`, `_strip_webp`, `_strip_jpeg`-ის `keep`)
@@ -844,7 +876,10 @@ re-review: security-auditor — დახურულია; ნარჩენ�
 - **გამოსწორება:** allowlist: PNG — IHDR, PLTE, IDAT, IEND, tRNS, gAMA, cHRM, sRGB, iCCP, sBIT, bKGD, pHYs, cICP, mDCV, cLLI,
   acTL, fcTL, fdAT; WebP — VP8X, VP8, VP8L, ALPH, ANIM, ANMF, ICCP; APP0 მხოლოდ `JFIF\0`-ით, APP14 მხოლოდ `Adobe`-ით.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `a837692`. ზუსტად აუდიტის allowlist-ები (WebP-ის FourCC `VP8 ` space-ით); APP2 — მხოლოდ ICC.
+  ANMF-ის შიგთავსიც იფილტრება (მხოლოდ ALPH/VP8/VP8L, ერთი დონე), რადგან spec ფრეიმში უცნობ chunk-ს უშვებს. VP8X-ში მხოლოდ
+  EXIF/XMP bit-ები იწმინდება. 15 ახალი ტესტიდან (HTTP-ის გზაც) 14 ძველ კოდზე ვარდება (ორკესტრატორი, `git stash`).
+  re-review: security-auditor — დახურულია, 0 critical / 0 should-fix; ნარჩენი (ძველი) JFIF-ის შიდა thumbnail → A-098.
 
 #### A-059 · nit · resize-ის გზაზე stripper-ის შეცდომა უკვე მზა re-encode-ს უარყოფს
 - **ფაილი:** `backend/app/services/storage.py` (`shrink_to_fit`-ის ბოლო ორი ხაზი)
@@ -852,7 +887,11 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   `INVALID_IMAGE`-ს ისვრის და ატვირთვა 400-ია, თუმცა სუფთა `shrunk` უკვე არსებობს.
 - **გამოსწორება:** `try: stripped = …` / `except ValidationError: return shrunk`.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `d446b70`. აუდიტის ზუსტი მაგალითი (>1600 JPEG, EOI მოჭრილი) stripper-მდე ვერ აღწევს —
+  Pillow decode-ზე `OSError`-ს აგდებს (სხვა დეფექტი → A-097). დადასტურდა ფაილით, რომლის EOI walk-ისთვის წაუკითხავი კუდით
+  არის ჩანაცვლებული (Pillow ბოლო MCU-ზე ჩერდება): ძველ კოდზე HTTP 400. ახლა მხოლოდ შედარების ეტაპი იჭერს walk-ის
+  `ValidationError`-ს და re-encode-ს აბრუნებს; ≤1600 upright ფაილი ისევ `INVALID_IMAGE`-ია. PNG/WebP-ზე ეს გზა მიუწვდომელია
+  (`verify()` ადრე უარყოფს). 9 ტესტიდან 6 ძველ კოდზე ვარდება (ორკესტრატორი, `git stash`). re-review: code-reviewer — დახურულია.
 
 #### A-060 · nit · JPEG-ის walker-ს marker-ების რაოდენობის ზღვარი არ აქვს
 - **ფაილი:** `backend/app/services/storage.py` (`_strip_jpeg`)
@@ -996,7 +1035,11 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   ამიტომ ის ცალკე პრობლემად არ ჩაითვალა.
 - **გამოსწორება (თუ დადასტურდება):** chunk-ების მრიცხველი → `INVALID_IMAGE`, როგორც A-060-ში.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `bb7ae36`. **დადასტურდა** გაზომვით: libwebp ცარიელ უცნობ chunk-ებს image data-ს შემდეგაც და
+  ANMF-ის შიგნითაც იღებს; 5 MiB (655 000 chunk) `validate_image`-ს 3–65 ms-ში გადის, walk — 285 ms. `_MAX_WEBP_CHUNKS = 65_536`,
+  ერთი ბიუჯეტი ფაილისა და ყველა ფრეიმისთვის → 33 ms და `INVALID_IMAGE`; 3 000-ფრეიმიანი ანიმაცია ბაიტ-ბაიტ ინახება. 9 ტესტიდან
+  8 ძველ კოდზე ვარდება (ორკესტრატორი, `git stash`). re-review: security-auditor — დახურულია (ბიუჯეტი მართლაც საერთოა,
+  off-by-one არ არის, რეკურსია ერთი დონეა).
 
 ### A-042/A-043/A-044/A-069/A-070/A-072/A-073/A-074-ის re-review (2026-11-15)
 
@@ -1013,7 +1056,10 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   პირდაპირი მნიშვნელობა დაამტკიცა.
 - **გამოსწორება:** `AT TIME ZONE :tz` bind-პარამეტრით, `{"tz": settings.store_timezone}`.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `9d2f96a`. bind-პარამეტრი `settings.store_timezone`-ით (ნაგულისხმევი Asia/Tbilisi). ამ
+  ცვლილებით არასწორი `STORE_TIMEZONE` ყოველ checkout-ს 500-ად აქცევდა, ამიტომ `Settings`-ს დაემატა `known_store_timezone`
+  (ZoneInfo, startup-ზე უარი). A-043-ის ტესტები გადის (ახლა setting-ს კითხულობენ); ახალი ტესტებიდან 6 ძველ კოდზე ვარდება
+  (ორკესტრატორი, `git stash`). tzdata უკვე `requirements.txt`-შია. re-review: code-reviewer — დახურულია.
 
 #### A-078 · nit · `import_products.py` ახალ ზღვრებს `validate()`-ში წინასწარ არ ამოწმებს; ცოტა რამ A-072-ის ტესტებში
 - **ფაილი:** `backend/scripts/import_products.py:78` (`validate`), `:130`, `:160-163`; `backend/tests/test_stock_ceiling.py`;
@@ -1026,7 +1072,13 @@ re-review: security-auditor — დახურულია; ნარჩენ�
 - **გამოსწორება:** `validate()`-ში `MAX_STOCK` (ან `MAX_STOCK_ADJUSTMENT`) და `MAX_LOW_STOCK_THRESHOLD` → `ProductImportError`
   + unit-ტესტი; create-ის ტესტი `test_stock_ceiling.py`-ში; კომენტარისა და ტესტის სახელის გასწორება.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `33c3cfe`. `validate()` (ანუ `load_rows`, session-მდე, `--dry-run`-იც) უარყოფს `stock`-ს
+  0..`MAX_STOCK`-ის გარეთ, `lowStockThreshold`-ს 0..`MAX_LOW_STOCK_THRESHOLD`-ის გარეთ და არა-მთელ მნიშვნელობას (ახალი `to_int`;
+  `true`/`false`, `1.5`, `null`, ტექსტი) — `ProductImportError` slug-ით, ველით, მნიშვნელობით და ზღვრით. `MAX_STOCK` და არა
+  100 000, რადგან `adjust_stock` მხოლოდ მას ამოწმებს. create-ის ზღვრის ტესტი (service-ის დონეზე), checkout-ის ტესტი ახლა
+  ზღვარს ქვემოთ იწყება (ზემოდან გაყიდვა ცალკე ტესტია), კომენტარი: გაუქმება ერთ პროდუქტზე ≤ 10 ერთეულს აბრუნებს. 38 ტესტიდან
+  29 ძველ სკრიპტზე ვარდება (ორკესტრატორი, `git stash`). სკრიპტი მხოლოდ pytest-ით, ლოკალურ ბაზაზე. re-review: code-reviewer —
+  დახურულია; `reviewsCount` → A-099.
 
 #### A-079 · nit · ძებნის cap-ის ტესტები: ერთი კომენტარი არასწორია, layout candidate-ის გზა არ მოწმდება
 - **ფაილი:** `backend/tests/test_search.py:286-287`, `:351-378`
@@ -1035,7 +1087,10 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   მომავალში `_parse_query`-ს გვერდს აუვლის, ტესტები მაინც გაივლის. ახლანდელი კოდი სწორია (`_run` ორივეს `_parse_query`-ით კითხულობს).
 - **გამოსწორება:** კომენტარში `"... 100"`; `:365`/`:378`-ზე იგივე შემოწმება `to_latin(fix_layout(word))`-ზე.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `172a3ba`, მხოლოდ ტესტი. კომენტარი + `words[:8]`-ის assert. ორივე cap-ტესტი სიტყვას სამივე
+  ფორმით ეძებს (`word`, `fix_layout(word)`, `to_latin(fix_layout(word))`) და ამოწმებს, რომ layout candidate მართლა გაიგზავნა.
+  დროებითი bypass `search._run`-ში (ქართული candidate cap-ის გარეშე) → ორივე ვარდება (`30 == 16`); search.py აღდგა უცვლელად.
+  სინთეზური სიტყვები შეიცვალა: ძველი round trip-ზე ერთმანეთს ემთხვეოდა (q/k → k, w/c → ts). re-review: code-reviewer — დახურულია.
 
 ### A-063/A-036/A-046/A-010/A-011/A-048/A-065/A-066-ის re-review (2026-11-15)
 
@@ -1207,3 +1262,64 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   docstring-ის გასწორება.
 - **owner:** backend-dev
 - **status:** open
+
+### A-055–A-059/A-075/A-077–A-079-ის გასწორებისა და re-review-ის მიგნებები (2026-11-16)
+
+ორი should-fix დეველოპერებმა გასწორების დროს იპოვეს; ორივე ჩვენამდეც ასე იყო და ამ გაშვების scope-ის (მხოლოდ მითითებული
+ID-ები) გარეთაა, ამიტომ ღიად დარჩა.
+
+#### A-096 · should-fix · PNG, რომელიც IEND-ის header-ის შუაშია მოჭრილი, `verify()`-ზე `SyntaxError`-ს აგდებს → 500 (ჩვენამდეც ასე იყო)
+- **ფაილი:** `backend/app/services/storage.py` (`validate_image`, `except (UnidentifiedImageError, OSError, ValueError)`)
+- **სცენარი (გაშვებით, backend-dev, დროებითი ტესტი წაიშალა):** 64×64 PNG, ბოლოდან 5 ან 8 ბაიტი მოჭრილი (IEND-ის 4-ბაიტიანი
+  სიგრძე რჩება, header არასრულია) → Pillow `SyntaxError: broken PNG file (chunk b'IEN')`; ის `except`-ში არ არის და HTTP-ის
+  test client-მა `ExceptionGroup`-ად ამოაგდო → uvicorn-ქვეშ 500. 1/3/11 ბაიტზე — 400, როგორც საჭიროა. ნაწილობრივ
+  ჩამოტვირთული ფაილის ატვირთვა (მხოლოდ ადმინი) generic შეცდომას იღებს `INVALID_IMAGE`-ის ნაცვლად.
+- **გამოსწორება:** `SyntaxError` `except`-ის tuple-ში + HTTP ტესტი ამ ორ ზომაზე (400 `INVALID_IMAGE`).
+- **owner:** backend-dev
+- **status:** open
+
+#### A-097 · should-fix · >1600 px (ან მოსაბრუნებელი) JPEG, რომლის entropy data დაზიანებულია, `shrink_to_fit`-ში `OSError`-ს აგდებს → 500 (ჩვენამდეც ასე იყო)
+- **ფაილი:** `backend/app/services/storage.py` (`shrink_to_fit`: `image.thumbnail` / decode)
+- **სცენარი (გაშვებით `shrink_to_fit`-ის დონეზე, backend-dev; HTTP-ზე არა):** 1700×1300 JPEG, EOI მოჭრილი, ან `FF`-ით, ან
+  `FF D8`-ით ჩანაცვლებული — `validate_image` იღებს (`verify()` SOS-ის შემდეგ არაფერს ამოწმებს), decode კი `OSError: image file
+  is truncated` / `broken data stream`-ს აგდებს. `prepare_upload` მას `ValidationError`-ად არ აქცევს → 500. ეს A-059-ის
+  აუდიტის ზუსტი მაგალითია.
+- **გამოსწორება:** decode/re-encode-ის `OSError` → `INVALID_IMAGE` (მხოლოდ Pillow-ის decode-ის ირგვლივ) + HTTP ტესტი სამივე კუდზე.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-098 · nit · JFIF APP0-ის შიდა thumbnail (და APP14 12 ბაიტის მიღმა) ბაიტ-ბაიტ ინახება (ჩვენამდეც ასე იყო)
+- **ფაილი:** `backend/app/services/storage.py` (`_strip_jpeg`-ის `keep`)
+- **სცენარი (კოდით, security-auditor):** `JFIF\0` APP0 მთლიანად კოპირდება; payload-ის 12–13 ბაიტი Xthumbnail/Ythumbnail-ია,
+  რომელსაც 3·X·Y ბაიტი შეუკუმშავი RGB მოსდევს (≈147×148-მდე) — crop-მდელი კადრის მინიატურა შეიძლება საჯარო ფაილში დარჩეს.
+  ტელეფონები thumbnail-ს APP1-ში წერენ (ის იშლება), ამიტომ რეალურად იშვიათია; `shrink_to_fit`-ის docstring კი „thumbnails"-ის
+  წაშლას გვპირდება.
+- **გამოსწორება:** JFIF-დან მხოლოდ პირველი 14 ბაიტი, thumbnail-ის ზომა 0, სიგრძე 16; APP14-დან პირველი 12 ბაიტი. ტესტი
+  Xthumb/Ythumb ≠ 0-ით.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-099 · nit · `import_products.py`: `reviewsCount` წინასწარ არ მოწმდება, `isActive` ტექსტს `"false"`-ს `True`-ად კითხულობს (ჩვენამდეც ასე იყო)
+- **ფაილი:** `backend/scripts/import_products.py` (`import_one`: `int(row.get("reviewsCount", 0))`, `bool(row.get(...))`)
+- **სცენარი (კოდით, code-reviewer, backend-dev):** `"reviewsCount": 3000000000` → dry-run OK, ნამდვილი გაშვება int4 overflow-ზე
+  ჩერდება; `"abc"` → raw `ValueError` (A-078-ის „dry-run ტყუის" კლასი). `"isActive": "false"` ჩუმად აქტიური ხდება.
+- **გამოსწორება:** `to_int` + დიაპაზონი `reviewsCount`-ზე `validate()`-ში; boolean ველებზე `isinstance(value, bool)`.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-100 · nit · WEBP-ის `DECODE_COST` `method=6`-ით იყო გაზომილი; `method=5`-ზე ზედა ზღვარია
+- **ფაილი:** `backend/app/services/storage.py` (`DECODE_COST["WEBP"]`, კომენტარი)
+- **სცენარი (გაზომვით Windows-ზე, backend-dev):** A-056-ის შემდეგ ბიუჯეტის ყველაზე ძვირი WebP 90 → 58 MiB-ია, lossy RGBA
+  97 → 82. ზღვარი უსაფრთხოა, მაგრამ WebP-ს 1.9 MP-ზე მეტს არ აძლევს, თუმცა შეიძლება შეეძლოს. მფლობელმა `DECODE_COST`
+  უცვლელად დატოვა.
+- **გამოსწორება:** production image-ში (Linux) `TestDecodeMemoryIsBounded`-ის WEBP-ის ხელახალი გაზომვა; მერე გადაწყვეტა.
+- **owner:** backend-dev (გადაწყვეტა — მფლობელის)
+- **status:** open
+
+#### A-101 · nit · >1600 px APNG / ანიმირებული WebP ერთ ფრეიმად ინახება, პატარა — ანიმაციით (ჩვენამდეც ასე იყო)
+- **ფაილი:** `backend/app/services/storage.py` (`shrink_to_fit`), `validate_image`
+- **სცენარი (გაშვებით, backend-dev):** A-058-ის შემდეგ ≤1600 ანიმაცია ყველა ფრეიმს ინახავს; დიდი re-encode-ზე პირველ ფრეიმად
+  იქცევა. ორივეს `validate_image` იღებს.
+- **გამოსწორება:** მფლობელის გადაწყვეტილება — ანიმირებული პროდუქტის ფოტო საჭიროა? თუ არა, `validate_image` უარყოფს ანიმაციას.
+- **owner:** მფლობელი
+- **status:** needs decision

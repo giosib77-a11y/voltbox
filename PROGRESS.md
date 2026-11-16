@@ -838,6 +838,12 @@ Unverified (check before acting):
   A-088–A-095 open. Gates at 95c98b5: ruff, format 185, mypy 165, pytest 1658 (+1 skip), alembic 0001→0017 + check, docker
   build; eslint, vitest 682, both builds (also in node:22). Before deploying: see the A-080 entry in Blockers. Merge into
   `agent-system` is the owner's.
+- 2026-11-16 (outside Stage 3, branch `fix/a055-a059-a075-a077-a079` from `agent-system` `069410b`): AUDIT.md A-055, A-056
+  (WebP `method=5`, measured), A-057, A-058 (strippers are allowlists), A-059, A-075 (confirmed; `_MAX_WEBP_CHUNKS`), A-077
+  (order-number zone from `STORE_TIMEZONE`, validated at startup), A-078, A-079 — fixed (verified), all re-reviewed closed.
+  New: A-096, A-097 (should-fix, pre-existing 500s on damaged uploads, open), nits A-098–A-100, A-101 (needs decision).
+  Gates at aa98335: ruff, format 186, mypy 166, pytest 1757 (+1 skip), alembic 0001→0017 + check; eslint, vitest 682, both
+  builds. No migration, nothing to run on live. Merge into `agent-system` is the owner's.
 
 ## Stage 2 — Done
 Last session of Stage 2:
