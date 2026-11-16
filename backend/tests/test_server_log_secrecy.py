@@ -25,26 +25,24 @@ import uvicorn.config
 import uvicorn.logging
 from app.core.logging import JsonFormatter, configure_logging
 
+from tests.factories import logging_restored
+
 EMAIL = "x@y.com"
 DETAIL = f"DETAIL:  Key (email)=({EMAIL}) already exists."
 PLAIN_FORMAT = "[%(asctime)s] [%(process)d] [%(levelname)s] %(message)s"
 
-WATCHED = ("uvicorn", "uvicorn.error", "uvicorn.access", "gunicorn.error", "voltbox.error")
-
 
 @pytest.fixture(autouse=True)
 def restore_logging() -> Generator[None]:
-    """Put every logger these tests touch back, so no other test sees them."""
-    loggers = [logging.getLogger(), *(logging.getLogger(name) for name in WATCHED)]
-    saved = [(lg, list(lg.handlers), lg.propagate, lg.disabled, lg.level) for lg in loggers]
-    try:
+    """Put every logger these tests touch back, so no other test sees them.
+
+    The shared `logging_restored` (tests/factories.py): root, the server loggers,
+    `uvicorn.access`, `voltbox.error` and `slowapi` - handlers, filters, level,
+    propagate, disabled. `configure_logging` leaves a filter on `slowapi`, which
+    a list that stopped at handlers and propagation let outlive these tests (A-095).
+    """
+    with logging_restored():
         yield
-    finally:
-        for lg, handlers, propagate, disabled, level in saved:
-            lg.handlers[:] = handlers
-            lg.propagate = propagate
-            lg.disabled = disabled
-            lg.setLevel(level)
 
 
 @pytest.fixture

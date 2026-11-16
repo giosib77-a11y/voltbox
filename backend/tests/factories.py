@@ -8,16 +8,20 @@
 """
 
 import asyncio
+import contextlib
 import importlib.util
 import json
+import logging
 import sys
 import uuid
+from collections.abc import Generator
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from app.core.logging import SERVER_LOGGERS
 from app.core.security import create_access_token, hash_password
 from app.db.models import ROLE_CUSTOMER, Brand, Category, Product, ProductImage, User
 from app.services.search import build_search_text
@@ -161,6 +165,48 @@ def auth_header(user: User) -> dict[str, str]:
     """Bearer header for a user, skipping the login round trip."""
     token, _ = create_access_token(user.id, user.token_version)
     return {"Authorization": f"Bearer {token}"}
+
+
+def touched_loggers() -> list[logging.Logger]:
+    """Every logger `configure_logging` or the server's own wiring can change: root,
+    the server loggers, uvicorn's access logger (disabled, though not in
+    SERVER_LOGGERS), slowapi (it gets a filter) and the application's error logger."""
+    names = [*SERVER_LOGGERS, "uvicorn.access", "slowapi", "voltbox.error"]
+    return [logging.getLogger(), *(logging.getLogger(name) for name in names)]
+
+
+def logging_state() -> list[tuple[object, ...]]:
+    """What a test can change on those loggers, comparable by ==."""
+    return [
+        (lg.name, list(lg.handlers), list(lg.filters), lg.level, lg.propagate, lg.disabled)
+        for lg in touched_loggers()
+    ]
+
+
+@contextlib.contextmanager
+def logging_restored() -> Generator[None]:
+    """Put every logger in `touched_loggers` back as it was on entry: handlers,
+    filters, level, propagate, disabled.
+
+    One place for it. A test that calls `configure_logging` and restores only part
+    of this leaves the rest for the next test: `uvicorn.access.disabled = True` was
+    recorded as the next file's baseline (A-087), and a `PseudonymiseRateLimitKey`
+    left on `slowapi` was added a second time by the rate-limit test, which then
+    saw its key pseudonymised twice (A-095).
+    """
+    saved = [
+        (lg, list(lg.handlers), list(lg.filters), lg.level, lg.propagate, lg.disabled)
+        for lg in touched_loggers()
+    ]
+    try:
+        yield
+    finally:
+        for lg, handlers, filters, level, propagate, disabled in saved:
+            lg.handlers[:] = handlers
+            lg.filters[:] = filters
+            lg.setLevel(level)
+            lg.propagate = propagate
+            lg.disabled = disabled
 
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"

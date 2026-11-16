@@ -1299,7 +1299,10 @@ re-review: security-auditor — დახურულია; ნარჩენ�
 - **გამოსწორება:** `_logging_restored` → `tests/factories.py`, `restore_logging`-მაც ის გამოიყენოს (+ `voltbox.error`);
   docstring-ის გასწორება.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `logging_restored()` / `logging_state()` → `tests/factories.py` (root, server logger-ები,
+  `uvicorn.access`, `slowapi`, `voltbox.error`: handlers, filters, level, propagate, disabled); `restore_logging` მას
+  იყენებს, `WATCHED` წაიშალა; A-087-ის docstring გასწორდა. `pytest tests/test_server_log_secrecy.py tests/test_rate_limit.py`
+  ძველ ტესტ-ფაილებზე 1 failed (`git stash`, ორკესტრატორმაც გაიმეორა), ახლა 131 passed; შებრუნებული რიგიც და ცალ-ცალკეც გადის.
 
 ### A-055–A-059/A-075/A-077–A-079-ის გასწორებისა და re-review-ის მიგნებები (2026-11-16)
 

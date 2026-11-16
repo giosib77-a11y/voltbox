@@ -16,7 +16,6 @@ repr by their type, which no formatter takes part in, and a repr reaches a
 traceback or a debugger without being a log line - test_settings_secrecy.py.
 """
 
-import contextlib
 import hashlib
 import hmac
 import json
@@ -35,6 +34,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
+
+from tests.factories import logging_restored, logging_state
 
 EMAIL = "nino@example.ge"
 PASSWORD_HASH = "$argon2id$v=19$m=65536,t=3,p=4$SECRETSALT$SECRETHASHVALUE"
@@ -246,53 +247,13 @@ class TestTheAccessLogsClientField:
         assert fields["client"] == NO_CLIENT
 
 
-def _touched_by_configure_logging() -> list[logging.Logger]:
-    """Every logger `configure_logging` mutates: root, the server loggers, uvicorn's
-    access logger (it is disabled, though not in SERVER_LOGGERS) and slowapi."""
-    from app.core.logging import SERVER_LOGGERS
-
-    names = [*SERVER_LOGGERS, "uvicorn.access", "slowapi"]
-    return [logging.getLogger(), *(logging.getLogger(name) for name in names)]
-
-
-def _logging_state() -> list[tuple[object, ...]]:
-    """What `configure_logging` can change on those loggers, comparable by ==."""
-    return [
-        (lg.name, list(lg.handlers), list(lg.filters), lg.level, lg.propagate, lg.disabled)
-        for lg in _touched_by_configure_logging()
-    ]
-
-
-@contextlib.contextmanager
-def _logging_restored() -> Generator[None]:
-    """Put every logger `configure_logging` touches back as it was on entry.
-
-    One place for it: a test that calls `configure_logging` and restores only part
-    of this leaves the rest (e.g. `uvicorn.access.disabled = True`) for the next
-    file's fixture to record as its baseline (A-087).
-    """
-    saved = [
-        (lg, list(lg.handlers), list(lg.filters), lg.level, lg.propagate, lg.disabled)
-        for lg in _touched_by_configure_logging()
-    ]
-    try:
-        yield
-    finally:
-        for lg, handlers, filters, level, propagate, disabled in saved:
-            lg.handlers[:] = handlers
-            lg.filters[:] = filters
-            lg.setLevel(level)
-            lg.propagate = propagate
-            lg.disabled = disabled
-
-
 @pytest.fixture
 def every_line() -> Generator[list[str]]:
     """Everything the root handler would emit, formatted as a collector sees it,
     with logging configured as the lifespan does (`configure_logging`).
 
     `configure_logging` rewires process-wide state, so what it touches is put back
-    (`_logging_restored`).
+    (`logging_restored`).
     """
     from app.core.logging import configure_logging
 
@@ -302,7 +263,7 @@ def every_line() -> Generator[list[str]]:
         def emit(self, record: logging.LogRecord) -> None:
             lines.append(self.format(record))
 
-    with _logging_restored():
+    with logging_restored():
         configure_logging()
         collector = Collector(level=logging.DEBUG)
         collector.setFormatter(JsonFormatter())
@@ -388,7 +349,7 @@ class TestTheRateLimitWarningDoesNotNameTheClient:
     def test_configuring_twice_does_not_stack_a_second_filter(self) -> None:
         from app.core.logging import PseudonymiseRateLimitKey, configure_logging
 
-        with _logging_restored():
+        with logging_restored():
             configure_logging()
             configure_logging()
             ours = [
@@ -400,15 +361,18 @@ class TestTheRateLimitWarningDoesNotNameTheClient:
 
     def test_configuring_leaves_no_logging_state_behind(self) -> None:
         """A-087: the next file's fixture records whatever is left as its baseline,
-        so `uvicorn.access.disabled` left True hid a deleted disable line."""
+        so `uvicorn.access.disabled` left True would be the next file's starting
+        point. (The leak was latent: deleting the disable line in `configure_logging`
+        removes it as well, so `test_the_access_log_of_uvicorn_is_still_off` fails on
+        that deletion with or without it. What remained was the `slowapi` filter, A-095.)"""
         from app.core.logging import configure_logging
 
-        before = _logging_state()
-        with _logging_restored():
+        before = logging_state()
+        with logging_restored():
             configure_logging()
             configure_logging()
             assert logging.getLogger("uvicorn.access").disabled is True
-        assert _logging_state() == before
+        assert logging_state() == before
 
     def test_the_restore_puts_back_what_configure_logging_changes(self) -> None:
         """The check above is only as good as the restore: make the state differ
@@ -417,17 +381,17 @@ class TestTheRateLimitWarningDoesNotNameTheClient:
 
         access = logging.getLogger("uvicorn.access")
         server = logging.getLogger("uvicorn.error")
-        with _logging_restored():
+        with logging_restored():
             access.disabled = False
             server.propagate = False
             server.addHandler(logging.NullHandler())
-            before = _logging_state()
-            with _logging_restored():
+            before = logging_state()
+            with logging_restored():
                 configure_logging()
                 assert access.disabled is True
                 assert server.propagate is True
                 assert server.handlers == []
-            assert _logging_state() == before
+            assert logging_state() == before
 
 
 class TestThePseudonymiseFilterItself:
