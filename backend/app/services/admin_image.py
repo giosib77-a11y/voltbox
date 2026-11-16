@@ -50,9 +50,10 @@ async def _images(db: AsyncSession, product_id: uuid.UUID) -> list[ProductImage]
 #: bounds the memory is this semaphore: the process never holds more than
 #: MAX_IMAGE_DECODE_BYTES for an upload, and the deployment never more than
 #: WEB_CONCURRENCY times that. A bare `to_thread` would let uploads decode in
-#: parallel, up to the pool size - 40 by default in anyio - which is gigabytes
-#: the free plan does not have. A second decode would not finish sooner anyway
-#: on the fraction of a CPU Render gives.
+#: parallel, up to the size of the loop's default executor - min(32, CPUs + 4),
+#: not anyio's 40, since `asyncio.to_thread` does not use that pool - which is
+#: gigabytes the free plan does not have. A second decode would not finish sooner
+#: anyway on the fraction of a CPU Render gives.
 #:
 #: The GIL is no obstacle: Pillow's C codecs release it for much of the decode,
 #: the resize and the encode, and where they do not, the interpreter switches
