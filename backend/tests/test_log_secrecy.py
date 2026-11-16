@@ -16,6 +16,7 @@ repr by their type, which no formatter takes part in, and a repr reaches a
 traceback or a debugger without being a log line - test_settings_secrecy.py.
 """
 
+import contextlib
 import hashlib
 import hmac
 import json
@@ -245,15 +246,55 @@ class TestTheAccessLogsClientField:
         assert fields["client"] == NO_CLIENT
 
 
+def _touched_by_configure_logging() -> list[logging.Logger]:
+    """Every logger `configure_logging` mutates: root, the server loggers, uvicorn's
+    access logger (it is disabled, though not in SERVER_LOGGERS) and slowapi."""
+    from app.core.logging import SERVER_LOGGERS
+
+    names = [*SERVER_LOGGERS, "uvicorn.access", "slowapi"]
+    return [logging.getLogger(), *(logging.getLogger(name) for name in names)]
+
+
+def _logging_state() -> list[tuple[object, ...]]:
+    """What `configure_logging` can change on those loggers, comparable by ==."""
+    return [
+        (lg.name, list(lg.handlers), list(lg.filters), lg.level, lg.propagate, lg.disabled)
+        for lg in _touched_by_configure_logging()
+    ]
+
+
+@contextlib.contextmanager
+def _logging_restored() -> Generator[None]:
+    """Put every logger `configure_logging` touches back as it was on entry.
+
+    One place for it: a test that calls `configure_logging` and restores only part
+    of this leaves the rest (e.g. `uvicorn.access.disabled = True`) for the next
+    file's fixture to record as its baseline (A-087).
+    """
+    saved = [
+        (lg, list(lg.handlers), list(lg.filters), lg.level, lg.propagate, lg.disabled)
+        for lg in _touched_by_configure_logging()
+    ]
+    try:
+        yield
+    finally:
+        for lg, handlers, filters, level, propagate, disabled in saved:
+            lg.handlers[:] = handlers
+            lg.filters[:] = filters
+            lg.setLevel(level)
+            lg.propagate = propagate
+            lg.disabled = disabled
+
+
 @pytest.fixture
 def every_line() -> Generator[list[str]]:
     """Everything the root handler would emit, formatted as a collector sees it,
     with logging configured as the lifespan does (`configure_logging`).
 
-    `configure_logging` rewires process-wide state, so what it touches is put back:
-    root's handlers and level, the server loggers, and slowapi's filters.
+    `configure_logging` rewires process-wide state, so what it touches is put back
+    (`_logging_restored`).
     """
-    from app.core.logging import SERVER_LOGGERS, configure_logging
+    from app.core.logging import configure_logging
 
     lines: list[str] = []
 
@@ -261,28 +302,12 @@ def every_line() -> Generator[list[str]]:
         def emit(self, record: logging.LogRecord) -> None:
             lines.append(self.format(record))
 
-    root = logging.getLogger()
-    slowapi_logger = logging.getLogger("slowapi")
-    access = logging.getLogger("uvicorn.access")
-    servers = [logging.getLogger(name) for name in SERVER_LOGGERS]
-    saved_root = (list(root.handlers), root.level)
-    saved_filters = list(slowapi_logger.filters)
-    saved_servers = [(item, list(item.handlers), item.propagate) for item in servers]
-    saved_access_disabled = access.disabled
-    try:
+    with _logging_restored():
         configure_logging()
         collector = Collector(level=logging.DEBUG)
         collector.setFormatter(JsonFormatter())
-        root.handlers[:] = [collector]
+        logging.getLogger().handlers[:] = [collector]
         yield lines
-    finally:
-        root.handlers[:] = saved_root[0]
-        root.setLevel(saved_root[1])
-        slowapi_logger.filters[:] = saved_filters
-        for item, handlers, propagate in saved_servers:
-            item.handlers[:] = handlers
-            item.propagate = propagate
-        access.disabled = saved_access_disabled
 
 
 async def _refused_login_from(address: str, db: AsyncSession) -> int:
@@ -363,19 +388,46 @@ class TestTheRateLimitWarningDoesNotNameTheClient:
     def test_configuring_twice_does_not_stack_a_second_filter(self) -> None:
         from app.core.logging import PseudonymiseRateLimitKey, configure_logging
 
-        slowapi_logger = logging.getLogger("slowapi")
-        saved = list(slowapi_logger.filters)
-        root = logging.getLogger()
-        saved_root = (list(root.handlers), root.level)
-        try:
+        with _logging_restored():
             configure_logging()
             configure_logging()
-            ours = [f for f in slowapi_logger.filters if isinstance(f, PseudonymiseRateLimitKey)]
-        finally:
-            root.handlers[:] = saved_root[0]
-            root.setLevel(saved_root[1])
-            slowapi_logger.filters[:] = saved
+            ours = [
+                f
+                for f in logging.getLogger("slowapi").filters
+                if isinstance(f, PseudonymiseRateLimitKey)
+            ]
         assert len(ours) == 1
+
+    def test_configuring_leaves_no_logging_state_behind(self) -> None:
+        """A-087: the next file's fixture records whatever is left as its baseline,
+        so `uvicorn.access.disabled` left True hid a deleted disable line."""
+        from app.core.logging import configure_logging
+
+        before = _logging_state()
+        with _logging_restored():
+            configure_logging()
+            configure_logging()
+            assert logging.getLogger("uvicorn.access").disabled is True
+        assert _logging_state() == before
+
+    def test_the_restore_puts_back_what_configure_logging_changes(self) -> None:
+        """The check above is only as good as the restore: make the state differ
+        from what `configure_logging` writes, and see it come back."""
+        from app.core.logging import configure_logging
+
+        access = logging.getLogger("uvicorn.access")
+        server = logging.getLogger("uvicorn.error")
+        with _logging_restored():
+            access.disabled = False
+            server.propagate = False
+            server.addHandler(logging.NullHandler())
+            before = _logging_state()
+            with _logging_restored():
+                configure_logging()
+                assert access.disabled is True
+                assert server.propagate is True
+                assert server.handlers == []
+            assert _logging_state() == before
 
 
 class TestThePseudonymiseFilterItself:
