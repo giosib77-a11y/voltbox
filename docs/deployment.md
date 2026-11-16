@@ -623,7 +623,7 @@ rule-ი `frontend/render.yaml`-შია:
 
 ```bash
 cd backend
-VOLTBOX_NO_DOTENV=1 JWT_SECRET='<ნებისმიერი 32+ სიმბოლო>' DATABASE_URL='<ბაზის URL>' \
+VOLTBOX_NO_DOTENV=1 JWT_SECRET='<ნებისმიერი 32+ სიმბოლო>' DATABASE_URL='postgresql://unused@localhost/unused' \
   alembic upgrade <ძველი>:<ახალი> --sql > migration.sql
 # ხელით დაამატეთ public. ყველა ცხრილის სახელს, მერე SQL Editor-ში
 ```
@@ -635,14 +635,19 @@ VOLTBOX_NO_DOTENV=1 JWT_SECRET='<ნებისმიერი 32+ სიმბ
 URL-ის query-ში, არალოკალურია. `--sql` ამას არ ეხება (`backend/alembic/env.py`,
 `backend/app/db/local_url.py`).
 
-`backend/.env` ამ repo-ში აღარ არის, ამიტომ `alembic`-ის ნებისმიერ გაშვებას
-(`--sql`-საც) გარემო თვითონ უნდა მიაწოდოთ: `Settings` ორ ცვლადს მოითხოვს —
+`backend/.env` ამ repo-ში აღარ არის, ამიტომ `alembic`-ის ყოველ გაშვებას,
+რომელიც `backend/alembic/env.py`-ს ასრულებს (`upgrade`, `downgrade`, `stamp`,
+`check`, `current` — `--sql`-საც), გარემო თვითონ უნდა მიაწოდოთ. `heads` და
+`history` მხოლოდ `alembic/versions/`-ს კითხულობენ და `env.py`-ს არ ასრულებენ,
+ამიტომ მათ ეს ცვლადები არ სჭირდებათ. `Settings` ორ ცვლადს მოითხოვს —
 `DATABASE_URL` და `JWT_SECRET` (მინიმუმ 32 სიმბოლო; migration-ს მისი მნიშვნელობა
 არ სჭირდება, ნებისმიერი გრძელი ტექსტი გამოდგება) — და `.env`-ს მუშა საქაღალდიდან
 კითხულობს, თუ `VOLTBOX_NO_DOTENV=1` არ არის (`backend/app/core/config.py`).
 ამიტომ ორივე ბრძანებაში (ზემოთ და `check`-ისაში) `VOLTBOX_NO_DOTENV=1`,
 `JWT_SECRET` და `DATABASE_URL` ერთ ბრძანებაზეა პრეფიქსად. `--sql` ბაზას არ
-უკავშირდება, ამიტომ `DATABASE_URL` მისთვის მხოლოდ SQL-ის დიალექტს განსაზღვრავს.
+უკავშირდება, ამიტომ `DATABASE_URL` მისთვის მხოლოდ SQL-ის დიალექტს განსაზღვრავს:
+production-ის URL (და პაროლი) აქ არ ჩასვათ, `postgresql://unused@localhost/unused`
+საკმარისია.
 
 ### `alembic check` production-ზე (მხოლოდ წასაკითხი)
 
@@ -667,8 +672,10 @@ shell-ის შემდეგ `alembic upgrade`/`downgrade`/`stamp`-საც 
 - კოდის უკანასკნელი რევიზია — `alembic heads` (`backend/`-იდან; ბაზას არ უკავშირდება)
 
 თუ production კოდზე უკან არის, `alembic check` არაფერს შეადარებს და ჩერდება
-შეტყობინებით `CommandError: Target database is not up to date.`
-(`alembic/autogenerate/api.py`: ბაზის რევიზია უნდა იყოს კოდის head). ეს ჩავარდნა
+შეტყობინებით `FAILED: Target database is not up to date.` (ეს ტექსტი კონსოლზე
+იბეჭდება; `CommandError` მხოლოდ შიდა exception-ია, რომელსაც CLI ამ ტექსტად
+გადააქცევს — `alembic/config.py`, `alembic/autogenerate/api.py`: ბაზის რევიზია
+უნდა იყოს კოდის head). ეს ჩავარდნა
 არ არის სქემის განსხვავება — ჯერ გაუშვით გადაუსვლელი მიგრაცია `--sql` გზით
 (რომელი — `PROGRESS.md`-ის Blockers-ში; 2026-11-15-ზე ეს `0017`-ია), მერე გაიმეორეთ `check`. „სუფთა" პასუხი
 სანდოა მხოლოდ მას შემდეგ, რაც ორი ნომერი ერთი გახდება.
@@ -792,7 +799,9 @@ proxy-ის IP-ით ჩანს და მთელი მაღაზია
 ყველა მნიშვნელობას ცვლის).
 
 deploy-ის შემდეგ, **ორი სხვადასხვა ქსელიდან** (მაგ. სახლის Wi-Fi და მობილური
-ინტერნეტი):
+ინტერნეტი). განმეორებითი მოთხოვნები გააკეთეთ Wi-Fi-დან; მობილური ის „სხვა
+ქსელია“: მობილური ოპერატორის CGNAT-მა საჯარო IP მოთხოვნებს შორის შეიძლება
+შეცვალოს, ამიტომ მობილურიდან განმეორებითი მოთხოვნა სანდო შედარებას არ იძლევა:
 
 ```bash
 curl -s https://api.voltbox.ge/api/v1/health/live
@@ -807,6 +816,12 @@ Render-ის Logs-ში იპოვეთ ორი `voltbox.access` ხა�
   `FORWARDED_ALLOW_IPS`-ის დროს `client` Render-ის შიდა proxy-ის მისამართის
   ფსევდონიმია, და სხვადასხვა proxy-ინსტანსმა ორ მოთხოვნაზე სხვადასხვა მნიშვნელობა
   შეიძლება მოგცეთ — ამიტომ „ორი განსხვავებული" ცალკე არ კმარა.
+- **ერთი და იმავე (Wi-Fi) ქსელიდან მნიშვნელობა იცვლება** — შედარება ვერაფერს
+  ამტკიცებს. გაიმეორეთ 5–10 მოთხოვნა ზედიზედ; თუ მნიშვნელობა მაინც იცვლება და ის
+  სხვა მომხმარებლების ხაზებზეც ჩანს, ეს proxy-ის ინსტანსების სხვადასხვა
+  მისამართია, ანუ `FORWARDED_ALLOW_IPS` არასწორია — მოქმედება იგივეა, რაც
+  შემდეგ პუნქტში. თუ ის სხვა ხაზზე არსად ჩანს, ქსელი/VPN შეცვალეთ და
+  გაიმეორეთ.
 - **ორივე ერთნაირია** (ან ყველა მომხმარებელს ერთი და იგივე აქვს) —
   `FORWARDED_ALLOW_IPS` არასწორია და ყველა კლიენტი ერთ ლიმიტს იზიარებს.
   შეამოწმეთ API სერვისზე `FORWARDED_ALLOW_IPS` env ცვლადი: ის უნდა იყოს
