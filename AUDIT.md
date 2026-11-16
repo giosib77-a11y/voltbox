@@ -1411,4 +1411,5 @@ A-102 security-auditor-მა იპოვა და მფლობელის
   expensive image(s)" — WebP-ზე მხოლოდ ფორმით (შინაარსი, A-103, ასევე მნიშვნელოვანია).
 - **გამოსწორება:** „roughly a seventh" (ან რიცხვები); „the most expensive shape".
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (reviewed) — მხოლოდ კომენტარები: „a seventh … 13.3 megapixels against 1.9" (JPEG 4:2:0 vs WEBP,
+  100 MiB-ზე); `largest_that_fits` / `largest_that_is_turned` — „shape", A-103-ის მითითებით. კოდი და მნიშვნელობები უცვლელია.

@@ -2699,7 +2699,11 @@ class TestUploadProcessingRunsOffTheEventLoop:
 
 
 def largest_that_fits(path: str) -> tuple[int, int]:
-    """The most expensive image of `path` the decode budget still accepts.
+    """The most expensive shape of `path` the decode budget still accepts.
+
+    A shape, not a whole worst case: the content matters too (a WebP with noise in
+    its alpha costs more than the flat picture built from this size, AUDIT.md
+    A-103).
 
     Not simply the biggest: at a fixed pixel count the shape decides the cost.
     `shrink_to_fit` scales the longest side down to MAX_STORED_EDGE, so a source
@@ -2963,7 +2967,7 @@ class TestDecodeMemoryIsBounded:
 
 
 def largest_that_is_turned(path: str) -> list[tuple[int, int]]:
-    """The most expensive images of `path` that are decoded only to be turned.
+    """The most expensive shapes of `path` that are decoded only to be turned.
 
     No resize is involved, so the longest side is at most MAX_STORED_EDGE and the
     pixel count is what the budget admits. Two shapes, because the cost is not

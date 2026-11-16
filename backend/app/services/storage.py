@@ -393,8 +393,9 @@ def validate_image(data: bytes, declared_type: str | None) -> tuple[str, str]:
 
     # A decompression bomb is small on disk and enormous once decoded, and the
     # decode is what allocates - so the limit is memory, converted into a pixel
-    # count at this file's own cost. A WebP buys roughly a third of the pixels a
-    # phone's JPEG does for the same memory.
+    # count at this file's own cost. A WebP buys roughly a seventh of the pixels a
+    # phone's JPEG (4:2:0) does for the same memory: at the default 100 MiB, 13.3
+    # megapixels against 1.9 (`DECODE_COST` above).
     #
     # Only an image that will actually be decoded pays it: one that is resized
     # (longest side above the edge) or turned upright (EXIF Orientation other
