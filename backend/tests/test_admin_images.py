@@ -1339,6 +1339,347 @@ class TestWhatAPhotoKnowsDoesNotReachThePublicBucket:
         assert refused.value.code == "INVALID_IMAGE"
 
 
+# --- Only chunks known to be harmless are stored (A-058) ---------------------
+#
+# The stripper used to be a denylist for PNG (EXIF, text, tIME) and WebP (EXIF,
+# XMP), so anything it had not been told about - C2PA, which may name the author,
+# an Apple thumbnail index, a tool's private chunk - was published in the public
+# bucket, while the JPEG walker dropped C2PA (APP11) and kept APP0 and APP14 whole.
+
+
+def png_chunks(data: bytes) -> list[bytes]:
+    """Every chunk of a PNG whole - length, type, data and CRC."""
+    chunks: list[bytes] = []
+    pos = 8
+    while pos < len(data):
+        end = pos + 12 + int.from_bytes(data[pos : pos + 4], "big")
+        chunks.append(data[pos:end])
+        pos = end
+    return chunks
+
+
+def png_after_header(png: bytes, *chunks: bytes) -> bytes:
+    """`png` with `chunks` right after IHDR, where Apple writes `iDOT` too."""
+    header_end = 8 + 12 + 13
+    return png[:header_end] + b"".join(chunks) + png[header_end:]
+
+
+#: Chunks that identify, or may identify, whoever made the picture. Each payload
+#: carries a marker that must not be found in the stored file.
+PNG_IDENTITY = {
+    b"caBX": b"c2pa-secret",
+    b"exIf": b"exif-secret",
+    b"zxIf": b"zxif-secret",
+    b"iDOT": b"idot-secret",
+    b"prVt": b"private-secret",
+    b"sPLT": b"splt-secret",
+}
+
+
+def png_with_identity(original: bytes) -> bytes:
+    return png_after_header(original, *(png_chunk(k, v) for k, v in PNG_IDENTITY.items()))
+
+
+def riff_chunks(data: bytes, pos: int, end: int) -> list[tuple[bytes, bytes]]:
+    """The `(FourCC, payload)` chunks of `data[pos:end]`, padding not included."""
+    chunks: list[tuple[bytes, bytes]] = []
+    while pos < end:
+        length = int.from_bytes(data[pos + 4 : pos + 8], "little")
+        chunks.append((data[pos : pos + 4], data[pos + 8 : pos + 8 + length]))
+        pos += 8 + length + length % 2
+    return chunks
+
+
+def riff_chunk(fourcc: bytes, payload: bytes) -> bytes:
+    return fourcc + len(payload).to_bytes(4, "little") + payload + b"\x00" * (len(payload) % 2)
+
+
+def webp_from_chunks(chunks: list[tuple[bytes, bytes]]) -> bytes:
+    body = b"WEBP" + b"".join(riff_chunk(fourcc, payload) for fourcc, payload in chunks)
+    return b"RIFF" + len(body).to_bytes(4, "little") + body
+
+
+WEBP_IDENTITY = {b"C2PA": b"c2pa-secret", b"prVt": b"private-secret!", b"IPTC": b"iptc-secret"}
+
+
+def webp_with_identity(original: bytes) -> bytes:
+    """Unknown chunks right after the picture and as the last chunk. After the
+    picture because that is where the format allows them: libwebp refuses a file
+    with one between the header and the image data."""
+    chunks = riff_chunks(original, 12, len(original))
+    image = next(i for i, (fourcc, _) in enumerate(chunks) if fourcc in (b"VP8 ", b"VP8L"))
+    unknown = list(WEBP_IDENTITY.items())
+    chunks[image + 1 : image + 1] = unknown[:2]
+    chunks.append(unknown[2])
+    return webp_from_chunks(chunks)
+
+
+def jpeg_with_identity(original: bytes) -> bytes:
+    return jpeg_with_segments(
+        original,
+        (0xE0, b"JFXX\x00\x10" + b"thumb-secret"),  # APP0, an extension with a thumbnail
+        (0xEB, b"c2pa-secret"),  # APP11, C2PA
+        (0xEE, b"Phone\x00" + b"app14-secret"),  # APP14 that is not Adobe's
+    )
+
+
+def animation_frames(data: bytes) -> list[bytes]:
+    with Image.open(io.BytesIO(data)) as animated:
+        frames: list[bytes] = []
+        for index in range(animated.n_frames):  # type: ignore[attr-defined]
+            animated.seek(index)
+            frames.append(animated.convert("RGBA").tobytes())
+        return frames
+
+
+def three_frames() -> list[Image.Image]:
+    base = patterned((64, 48))
+    return [
+        base,
+        base.transpose(Image.Transpose.FLIP_LEFT_RIGHT),
+        base.transpose(Image.Transpose.ROTATE_180),
+    ]
+
+
+class TestOnlyChunksKnownToBeHarmlessAreStored:
+    """An allowlist, not a denylist: the chunks that can carry an identity are an
+    open set, the ones that say how to show the picture are a short closed one."""
+
+    @staticmethod
+    async def _store(
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+        data: bytes,
+        fmt: str,
+    ) -> bytes:
+        response = await _upload(
+            client, headers, product_id, data=data, filename=f"p.{fmt}", content_type=f"image/{fmt}"
+        )
+        assert response.status_code == 201, response.text
+        return only_object(storage)
+
+    def test_a_png_keeps_what_shows_the_picture_and_nothing_that_names_its_maker(self) -> None:
+        written = encode(patterned((120, 80)), "PNG", icc_profile=ICC_PROFILE, dpi=(300, 300))
+        gamma = png_chunk(b"gAMA", struct.pack(">I", 45455))
+        original = png_with_identity(png_after_header(written, gamma))
+        assert set(PNG_IDENTITY) <= set(png_chunk_types(original))
+
+        stored = shrink_to_fit(original, "PNG")
+
+        kinds = png_chunk_types(stored)
+        assert not set(PNG_IDENTITY) & set(kinds)
+        assert {b"iCCP", b"pHYs", b"gAMA"} <= set(kinds)
+        # Every kept chunk is the source's own bytes - CRC included, in order.
+        expected = [c for c in png_chunks(original) if c[4:8] not in PNG_IDENTITY]
+        assert png_chunks(stored) == expected
+        for secret in PNG_IDENTITY.values():
+            assert secret not in stored
+        assert pixels(stored) == pixels(original)
+
+    def test_a_png_made_only_of_known_chunks_is_stored_byte_for_byte(self) -> None:
+        clean = encode(patterned((64, 48)), "PNG", icc_profile=ICC_PROFILE, dpi=(72, 72))
+
+        assert shrink_to_fit(clean, "PNG") == clean
+
+    def test_an_animated_png_keeps_every_frame(self) -> None:
+        """`validate_image` accepts an APNG, so the strip must not flatten one."""
+        first, *rest = three_frames()
+        written = encode(first, "PNG", save_all=True, append_images=rest)
+        assert {b"acTL", b"fcTL", b"fdAT"} <= set(png_chunk_types(written))
+        original = png_with_identity(written)
+
+        stored = shrink_to_fit(original, "PNG")
+
+        assert not set(PNG_IDENTITY) & set(png_chunk_types(stored))
+        assert png_chunks(stored) == png_chunks(written)
+        assert len(animation_frames(stored)) == 3
+        assert animation_frames(stored) == animation_frames(original)
+
+    def test_a_png_above_the_edge_whose_re_encode_is_no_smaller_is_stored_stripped(self) -> None:
+        """The stripped original is what the re-encode is compared with and what
+        is kept when the re-encode does not beat it - so it is the one that must
+        not carry the chunks. A repeating ramp compresses well as drawn and badly
+        once the resize has smoothed it."""
+        original = png_with_identity(encode(patterned((1700, 40), "L"), "PNG"))
+        stripped = storage_module._strip_png(original)
+        with Image.open(io.BytesIO(original)) as probe:
+            probe.thumbnail((MAX_STORED_EDGE, MAX_STORED_EDGE), Image.Resampling.LANCZOS)
+            assert len(encode(probe, "PNG")) >= len(stripped)  # the premise
+
+        stored = shrink_to_fit(original, "PNG")
+
+        assert stored == stripped
+        assert not set(PNG_IDENTITY) & set(png_chunk_types(stored))
+
+    def test_a_webp_keeps_what_shows_the_picture_and_nothing_that_names_its_maker(self) -> None:
+        written = encode(
+            patterned((200, 100)),
+            "WEBP",
+            lossless=True,
+            exif=exif_bytes(gps=True, make="Acme"),
+            xmp=b"<x:xmpmeta>secret</x:xmpmeta>",
+            icc_profile=ICC_PROFILE,
+        )
+        original = webp_with_identity(written)
+        assert set(WEBP_IDENTITY) <= {
+            fourcc for fourcc, _ in riff_chunks(original, 12, len(original))
+        }
+
+        stored = shrink_to_fit(original, "WEBP")
+
+        kept = riff_chunks(stored, 12, len(stored))
+        assert [fourcc for fourcc, _ in kept] == [b"VP8X", b"ICCP", b"VP8L"]
+        by_name = dict(kept)
+        assert by_name[b"ICCP"] == ICC_PROFILE
+        assert by_name[b"VP8L"] == dict(riff_chunks(written, 12, len(written)))[b"VP8L"]
+        # EXIF and XMP are gone and so are their flags; the ICC flag stays.
+        assert by_name[b"VP8X"][0] & 0x0C == 0
+        assert by_name[b"VP8X"][0] & 0x20
+        assert int.from_bytes(stored[4:8], "little") == len(stored) - 8
+        for secret in (*WEBP_IDENTITY.values(), b"Acme"):
+            assert secret not in stored
+        assert pixels(stored) == pixels(original)
+
+    def test_a_webp_with_alpha_keeps_its_alpha_chunk_and_flag(self) -> None:
+        written = encode(patterned((120, 80), "RGBA"), "WEBP", quality=80)
+        assert {b"VP8X", b"ALPH", b"VP8 "} <= {f for f, _ in riff_chunks(written, 12, len(written))}
+        original = webp_with_identity(written)
+
+        stored = shrink_to_fit(original, "WEBP")
+
+        kept = riff_chunks(stored, 12, len(stored))
+        assert [fourcc for fourcc, _ in kept] == [b"VP8X", b"ALPH", b"VP8 "]
+        assert kept[0][1][0] & 0x10  # the alpha flag still has its chunk
+        assert pixels(stored) == pixels(original)
+
+    def test_an_animated_webp_keeps_its_frames_and_loses_what_is_inside_them(self) -> None:
+        """An `ANMF` payload is a 16-byte frame header and then chunks of its own:
+        the spec lets a frame carry unknown ones, so they are filtered there too."""
+        first, *rest = three_frames()
+        written = encode(first, "WEBP", save_all=True, append_images=rest, lossless=True)
+        top = riff_chunks(written, 12, len(written))
+        assert [f for f, _ in top].count(b"ANMF") == 3
+        flagged = [
+            (fourcc, payload + riff_chunk(b"C2PA", b"frame-c2pa-secret"))
+            if fourcc == b"ANMF"
+            else (fourcc, payload)
+            for fourcc, payload in top
+        ]
+        original = webp_from_chunks([*flagged, (b"C2PA", b"top-c2pa-secret")])
+        assert len(animation_frames(original)) == 3
+
+        stored = shrink_to_fit(original, "WEBP")
+
+        kept = riff_chunks(stored, 12, len(stored))
+        assert [f for f, _ in kept] == [f for f, _ in top]
+        assert kept[0][1][0] & 0x02  # VP8X still says it is animated
+        for (_, got), (_, sent) in zip(
+            [c for c in kept if c[0] == b"ANMF"], [c for c in top if c[0] == b"ANMF"], strict=True
+        ):
+            assert got[:16] == sent[:16]  # position, size, duration, blend and dispose
+            assert got[16:] == sent[16:]  # exactly the frame's own image data
+        assert b"c2pa-secret" not in stored
+        assert int.from_bytes(stored[4:8], "little") == len(stored) - 8
+        assert animation_frames(stored) == animation_frames(written)
+
+    @pytest.mark.parametrize("payload", [b"", b"\x00" * 15])
+    def test_an_animation_frame_too_short_for_its_header_is_invalid_not_decoded(
+        self, payload: bytes
+    ) -> None:
+        first, *rest = three_frames()
+        written = encode(first, "WEBP", save_all=True, append_images=rest, lossless=True)
+        broken = webp_from_chunks(
+            [(f, payload if f == b"ANMF" else p) for f, p in riff_chunks(written, 12, len(written))]
+        )
+
+        with pytest.raises(ValidationError) as refused:
+            storage_module._strip_webp(broken)
+
+        assert refused.value.code == "INVALID_IMAGE"
+
+    def test_a_frame_chunk_longer_than_its_frame_is_invalid_not_decoded(self) -> None:
+        first, *rest = three_frames()
+        written = encode(first, "WEBP", save_all=True, append_images=rest, lossless=True)
+        lying = webp_from_chunks(
+            [
+                (f, p[:16] + b"VP8L" + (10_000).to_bytes(4, "little") + b"x" * 8)
+                if f == b"ANMF"
+                else (f, p)
+                for f, p in riff_chunks(written, 12, len(written))
+            ]
+        )
+
+        with pytest.raises(ValidationError) as refused:
+            storage_module._strip_webp(lying)
+
+        assert refused.value.code == "INVALID_IMAGE"
+
+    def test_a_jpeg_keeps_jfif_and_loses_the_thumbnail_extension_and_foreign_segments(
+        self,
+    ) -> None:
+        written = encode(patterned((300, 200)), "JPEG", icc_profile=ICC_PROFILE)
+        assert 0xE0 in jpeg_markers(written)  # the JFIF header
+        original = jpeg_with_identity(written)
+        assert {0xE0, 0xEB, 0xEE} <= set(jpeg_markers(original))
+
+        stored = shrink_to_fit(original, "JPEG")
+
+        markers = jpeg_markers(stored)
+        assert markers == jpeg_markers(written)  # the JFIF and the ICC profile, no more
+        assert b"JFIF\x00" in stored
+        for secret in (b"JFXX", b"thumb-secret", b"c2pa-secret", b"Phone", b"app14-secret"):
+            assert secret not in stored
+        assert pixels(stored) == pixels(original)
+
+    def test_a_jpeg_keeps_adobe_and_loses_an_app14_that_is_not_adobe(self) -> None:
+        written = encode(patterned((200, 100), "CMYK"), "JPEG")
+        assert b"Adobe" in written
+        original = jpeg_with_identity(written)
+
+        stored = shrink_to_fit(original, "JPEG")
+
+        assert jpeg_markers(stored) == jpeg_markers(written)
+        assert stored.count(b"Adobe") == 1
+        assert b"Phone" not in stored
+        assert pixels(stored) == pixels(original)
+
+    @pytest.mark.parametrize("fmt", ["png", "webp", "jpeg"])
+    async def test_an_upload_is_stored_without_the_chunks_it_carried(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        storage: InMemoryStorage,
+        product_id: str,
+        fmt: str,
+    ) -> None:
+        if fmt == "png":
+            original = png_with_identity(
+                encode(patterned((120, 80)), "PNG", icc_profile=ICC_PROFILE)
+            )
+            secrets = tuple(PNG_IDENTITY.values())
+        elif fmt == "webp":
+            original = webp_with_identity(
+                encode(patterned((120, 80)), "WEBP", lossless=True, icc_profile=ICC_PROFILE)
+            )
+            secrets = tuple(WEBP_IDENTITY.values())
+        else:
+            original = jpeg_with_identity(
+                encode(patterned((120, 80)), "JPEG", icc_profile=ICC_PROFILE)
+            )
+            secrets = (b"JFXX", b"thumb-secret", b"c2pa-secret", b"app14-secret")
+        assert all(secret in original for secret in secrets)
+
+        stored = await self._store(client, headers, storage, product_id, original, fmt)
+
+        for secret in secrets:
+            assert secret not in stored
+        with Image.open(io.BytesIO(stored)) as saved:
+            assert saved.info["icc_profile"] == ICC_PROFILE
+        assert pixels(stored) == pixels(original)
+
+
 @asynccontextmanager
 async def _loop_ticks() -> AsyncGenerator[Callable[[], int]]:
     """Count how often the event loop got to run a 5 ms timer inside the block."""

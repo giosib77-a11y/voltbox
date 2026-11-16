@@ -432,13 +432,21 @@ _MAX_JPEG_MARKERS = 65_536
 def _strip_jpeg(data: bytes) -> bytes:
     """A JPEG without EXIF, XMP, IPTC, comments or anything after the image.
 
-    Walks the segments from SOI to EOI. Kept: APP0 (JFIF), APP2 only when it is
-    an ICC profile, APP14 (Adobe - it says how to read the colours), and every
-    segment that is not an APPn or a comment (tables, frame and scan headers).
-    Dropped: all other APPn - APP1 is EXIF and XMP (extended XMP too), APP13 is
-    IPTC/Photoshop - and COM. Entropy-coded data is copied untouched, and the
-    walk ends at the first EOI: phones, Samsung among them, append metadata
-    trailers after it, and an MPO's second picture sits there too.
+    Walks the segments from SOI to EOI. Kept, each only when its payload says what
+    it is: APP0 starting `JFIF\\0` (the density and aspect), APP2 starting
+    `ICC_PROFILE\\0`, APP14 starting `Adobe` (it says how to read the colours); and
+    every segment that is not an APPn or a comment (tables, frame and scan
+    headers). Dropped: every other APPn - APP0 `JFXX` (an extension that carries
+    a thumbnail), APP1 (EXIF and XMP, extended XMP too), APP11 (C2PA), APP13
+    (IPTC/Photoshop) - an APP0 or APP14 under another identifier, and COM.
+    Entropy-coded data is copied untouched, and the walk ends at the first EOI:
+    phones, Samsung among them, append metadata trailers after it, and an MPO's
+    second picture sits there too.
+
+    What still holds: the PNG and WebP walkers drop by the same rule - a chunk is
+    kept because it is known to be harmless, not dropped because it is known to be
+    harmful - so an identifying chunk nobody has named yet does not get through in
+    any of the three formats.
 
     Entropy data is not searched for `FF D9` but walked marker by marker: a
     progressive file has segments between its scans, and their bytes can be
@@ -506,8 +514,9 @@ def _strip_jpeg(data: bytes) -> bytes:
         payload = data[pos + 2 : end]
         is_app = 0xE0 <= marker <= 0xEF
         keep = (
-            marker in (0xE0, 0xEE)
+            (marker == 0xE0 and payload.startswith(b"JFIF\x00"))
             or (marker == 0xE2 and payload.startswith(b"ICC_PROFILE\x00"))
+            or (marker == 0xEE and payload.startswith(b"Adobe"))
             or not (is_app or marker == 0xFE)
         )
         if keep:
@@ -518,18 +527,52 @@ def _strip_jpeg(data: bytes) -> bytes:
     raise _unreadable()  # no EOI
 
 
-#: PNG chunks that carry metadata. Kept: iCCP, sRGB, gAMA, cHRM, pHYs and the
-#: rest - they say how to show the picture, not who took it.
-_PNG_METADATA = frozenset({b"eXIf", b"tEXt", b"iTXt", b"zTXt", b"tIME"})
+#: The PNG chunks that are stored: the ones that say how to decode or show the
+#: picture, never who made it. An allowlist, because the set of chunks that can
+#: carry an identity is open - `caBX` (C2PA, which may name the author), `exIf`
+#: and `zxIf` (EXIF under other spellings), `iDOT` (an Apple one), `sPLT`, `tIME`
+#: and any private chunk a tool invents - and a denylist only ever removes the ones
+#: someone has already named.
+#:
+#: Critical: IHDR, PLTE, IDAT, IEND. Colour and transparency: tRNS, gAMA, cHRM,
+#: sRGB, iCCP (the ICC profile - it changes how the colours look), sBIT, bKGD,
+#: cICP, mDCV, cLLI. Size on screen: pHYs. Animation (APNG - `validate_image`
+#: accepts one, so the strip must not turn it into something else): acTL, fcTL,
+#: fdAT. What is not here is dropped, including text (tEXt, zTXt, iTXt), eXIf,
+#: tIME and every chunk this list has not heard of.
+_PNG_KEPT = frozenset(
+    {
+        b"IHDR",
+        b"PLTE",
+        b"IDAT",
+        b"IEND",
+        b"tRNS",
+        b"gAMA",
+        b"cHRM",
+        b"sRGB",
+        b"iCCP",
+        b"sBIT",
+        b"bKGD",
+        b"pHYs",
+        b"cICP",
+        b"mDCV",
+        b"cLLI",
+        b"acTL",
+        b"fcTL",
+        b"fdAT",
+    }
+)
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 def _strip_png(data: bytes) -> bytes:
-    """A PNG without EXIF, text chunks and the modification time.
+    """A PNG with only the chunks in `_PNG_KEPT`.
 
     Every chunk is length, type, data, CRC, and a kept one is copied whole - the
     CRC with it, so nothing is recomputed. The walk ends after IEND, and what
-    follows it is dropped.
+    follows it is dropped. What still holds: the pixel data is never touched, so
+    the result decodes to the same pixels (an APNG keeps all its frames), and a
+    file made only of kept chunks comes back byte for byte.
     """
     size = len(data)
     if data[:8] != _PNG_SIGNATURE:
@@ -542,7 +585,7 @@ def _strip_png(data: bytes) -> bytes:
         end = pos + 12 + length
         if end > size:
             raise _unreadable()
-        if kind not in _PNG_METADATA:
+        if kind in _PNG_KEPT:
             out += data[pos:end]
         if kind == b"IEND":
             return bytes(out)
@@ -550,44 +593,83 @@ def _strip_png(data: bytes) -> bytes:
     raise _unreadable()  # no IEND
 
 
-#: In a WebP `VP8X` header: the EXIF and XMP bits of the feature flags.
+#: The WebP chunks that are stored, by FourCC (`VP8 ` has a trailing space): the
+#: image data (VP8, VP8L, ALPH), the header that announces what follows (VP8X),
+#: the animation (ANIM, ANMF - `validate_image` accepts an animated WebP) and the
+#: ICC profile (ICCP - it changes how the colours look). An allowlist for the same
+#: reason as `_PNG_KEPT`: EXIF and `XMP ` are the two chunks the format names as
+#: metadata, but `C2PA` and any other FourCC a tool invents would have passed a
+#: list of those two.
+_WEBP_KEPT = frozenset({b"VP8X", b"VP8 ", b"VP8L", b"ALPH", b"ANIM", b"ANMF", b"ICCP"})
+
+#: What an `ANMF` frame may contain after its 16-byte frame header: the frame's own
+#: image data. The spec lets a frame carry unknown chunks as well, and they are
+#: dropped like any other.
+_WEBP_FRAME_KEPT = frozenset({b"VP8 ", b"VP8L", b"ALPH"})
+_WEBP_FRAME_HEADER = 16
+
+#: In a WebP `VP8X` header: the EXIF and XMP bits of the feature flags. These are
+#: the only flags that announce a chunk this module drops (the others announce ICC,
+#: alpha and animation, all kept), so nothing is left announcing what is gone.
 _WEBP_EXIF_FLAG = 0x08
 _WEBP_XMP_FLAG = 0x04
 
 
+def _webp_chunks(data: bytes, pos: int, end: int, *, in_frame: bool = False) -> bytes:
+    """The allowlisted chunks in `data[pos:end]`, each padded to an even length.
+
+    The chunk list of the file, or - with `in_frame` - of one `ANMF` payload after
+    its frame header. Only the file level contains frames, so the recursion is one
+    level deep and every byte is walked once.
+    """
+    kept = _WEBP_FRAME_KEPT if in_frame else _WEBP_KEPT
+    body = bytearray()
+    while pos < end:
+        if pos + 8 > end:
+            raise _unreadable()
+        fourcc = data[pos : pos + 4]
+        length = int.from_bytes(data[pos + 4 : pos + 8], "little")
+        payload_end = pos + 8 + length
+        if payload_end > end:
+            raise _unreadable()
+        next_pos = payload_end + length % 2  # the source's padding, whatever is kept
+        if fourcc in kept:
+            payload = bytearray(data[pos + 8 : payload_end])
+            if fourcc == b"VP8X" and payload:
+                payload[0] &= ~(_WEBP_EXIF_FLAG | _WEBP_XMP_FLAG)
+            elif fourcc == b"ANMF":
+                if length < _WEBP_FRAME_HEADER:
+                    raise _unreadable()
+                frame = _webp_chunks(data, pos + 8 + _WEBP_FRAME_HEADER, payload_end, in_frame=True)
+                payload = payload[:_WEBP_FRAME_HEADER] + frame
+                length = len(payload)
+            body += fourcc + length.to_bytes(4, "little") + payload
+            if length % 2:
+                body += b"\x00"  # chunks are padded to an even length
+        pos = next_pos
+    return bytes(body)
+
+
 def _strip_webp(data: bytes) -> bytes:
-    """A WebP without its EXIF and XMP chunks.
+    """A WebP with only the chunks in `_WEBP_KEPT`.
 
     A RIFF file: `RIFF`, a little-endian size, `WEBP`, then chunks of FourCC,
     little-endian size and data padded to an even length. The `VP8X` header
     announces which metadata chunks exist, so its EXIF and XMP bits are cleared
-    with them; ICCP and everything else is copied. The RIFF size is rewritten,
-    and what lies beyond the declared size is dropped.
+    with them; the ICC, alpha and animation bits stay, because their chunks do.
+    An `ANMF` frame holds chunks of its own, and the ones that are not image data
+    (ALPH, VP8, VP8L) are dropped from inside it, with the frame's size rewritten.
+    The RIFF size is rewritten too, and what lies beyond the declared size is
+    dropped. What still holds: image data is copied byte for byte, so the result
+    decodes to the same pixels.
     """
     if len(data) < 12 or data[:4] != b"RIFF" or data[8:12] != b"WEBP":
         raise _unreadable()
     riff_end = 8 + int.from_bytes(data[4:8], "little")
     if riff_end > len(data):
         raise _unreadable()
-    body = bytearray()
-    pos = 12
-    while pos < riff_end:
-        if pos + 8 > riff_end:
-            raise _unreadable()
-        fourcc = data[pos : pos + 4]
-        length = int.from_bytes(data[pos + 4 : pos + 8], "little")
-        payload_end = pos + 8 + length
-        if payload_end > riff_end:
-            raise _unreadable()
-        if fourcc not in (b"EXIF", b"XMP "):
-            payload = bytearray(data[pos + 8 : payload_end])
-            if fourcc == b"VP8X" and payload:
-                payload[0] &= ~(_WEBP_EXIF_FLAG | _WEBP_XMP_FLAG)
-            body += fourcc + length.to_bytes(4, "little") + payload
-            if length % 2:
-                body += b"\x00"  # chunks are padded to an even length
-        pos = payload_end + length % 2
-    return b"RIFF" + (4 + len(body)).to_bytes(4, "little") + b"WEBP" + bytes(body)
+    body = _webp_chunks(data, 12, riff_end)
+    return b"RIFF" + (4 + len(body)).to_bytes(4, "little") + b"WEBP" + body
 
 
 _STRIP_METADATA = {"JPEG": _strip_jpeg, "PNG": _strip_png, "WEBP": _strip_webp}
