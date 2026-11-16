@@ -68,6 +68,37 @@ REFUSED = [
     "abcdefgh1357",
     "qwertyuiop12",
     "abababab",
+    # A walk across two touching rows of the keyboard, bare and decorated
+    # (A-088): the listed ones, and ones no list holds.
+    "1q2w3e4r!",
+    "1qaz2wsx!",
+    "q1w2e3r4!",
+    "!1q2w3e4r",
+    "1Q2W3E4R!",
+    "zaq12wsx",
+    "1q2w3e4r5t",
+    "1q2w3e4r5t6y!",
+    "q1w2e3r4t5!",
+    "2w3e4r5t#",
+]
+
+#: The decorated walks the audit named: each is refused by the common-list
+#: look-up alone and by the pattern rule alone, so neither leans on the other.
+DECORATED_WALKS = ["1q2w3e4r!", "1qaz2wsx!", "q1w2e3r4!"]
+
+#: Walks the pattern rule must catch on its own, listed or not.
+KEYBOARD_WALKS = [
+    *DECORATED_WALKS,
+    "1q2w3e4r",
+    "q1w2e3r4",
+    "1qaz2wsx",
+    "zaq12wsx",
+    "1q2w3e4r5t",
+    "!1q2w3e4r",
+    "1Q2W3E4R!",
+    "q1w2e3r4t5y6",
+    "1q2w3e4r5t6y7u8i",
+    "zaq1xsw2cde3",
 ]
 
 #: Refused as well, and only for an administrator, on length or on pattern.
@@ -85,6 +116,18 @@ ACCEPTED = [
     "brand-new-pass-7",
     # Exactly the five different characters left that the rule asks for.
     "abcdexk9zq",
+    # Passphrases and Georgian words in Latin letters, as people write them.
+    "correct horse battery staple",
+    "gamarjoba-sakartvelo-7",
+    "mtiebi da zghva 2026",
+    "Kutaisi!Rioni42",
+    "Batumi_Okros_Kvavila9",
+    "vardi-da-atamashi-31",
+    "tskaltubo.Prometes.Gamoqvavi5",
+    # A random twelve, and a keyboard-neighbouring word with digits around it.
+    "T9v#wXq4Lb7p",
+    "n8Fk@3zWm5Hd",
+    "Stoke2Lamp!Rowan",
 ]
 
 
@@ -151,6 +194,63 @@ def test_a_good_password_is_let_through(password: str) -> None:
 @pytest.mark.parametrize("password", ["Password1!", "monkey2024!", "  summer  ", "#Dragon99"])
 def test_a_decorated_common_word_counts_as_the_word(password: str) -> None:
     assert is_common_password(password)
+
+
+@pytest.mark.parametrize("password", DECORATED_WALKS)
+def test_a_listed_word_with_a_digit_at_its_edge_is_found_with_the_digit(password: str) -> None:
+    """A-088: `1q2w3e4r!` trims to `q2w3e4r` with the digits, which no list holds;
+    only the look-up that keeps them finds `1q2w3e4r`."""
+    assert is_common_password(password)
+    # The digits-too form is not on the list, so it is the new look-up that does it.
+    assert password.lower().strip(security._DECORATION) not in COMMON_PASSWORDS
+    assert password.lower().strip(security._PUNCTUATION_ONLY) in COMMON_PASSWORDS
+
+
+@pytest.mark.parametrize("password", KEYBOARD_WALKS)
+def test_a_walk_across_two_keyboard_rows_is_a_pattern_on_its_own(password: str) -> None:
+    assert is_patterned_password(password)
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "c"),
+    [
+        ("1", "q", "2"),
+        ("q", "1", "w"),
+        ("1", "q", "a"),
+        ("q", "a", "z"),
+        ("z", "a", "q"),
+        ("w", "s", "x"),
+        ("q", "2", "w"),
+        ("0", "p", "9"),
+    ],
+)
+def test_keyboard_walk_shapes(a: str, b: str, c: str) -> None:
+    assert security._is_keyboard_walk(a, b, c)
+    assert security._is_pattern(a, b, c)
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "c"),
+    [
+        ("q", "a", "q"),  # back where it started: not a walk
+        ("1", "q", "1"),
+        ("q", "1", "e"),  # the outer two are not neighbours
+        ("1", "w", "3"),  # w does not touch 1, and 1 and 3 are not neighbours
+        ("1", "z", "a"),  # a row skipped
+        ("q", "s", "c"),  # q does not touch s
+        ("a", "e", "d"),  # a does not touch e
+        ("q", "!", "w"),  # not a key of the map
+        ("1", "q", "9"),  # q touches 1, but 9 is far from both
+    ],
+)
+def test_not_a_keyboard_walk(a: str, b: str, c: str) -> None:
+    assert not security._is_keyboard_walk(a, b, c)
+
+
+def test_a_single_walk_does_not_make_a_password_patterned() -> None:
+    """Only what the patterns leave behind counts: one `1q2` in a longer password costs it three."""
+    assert not is_patterned_password("1q2-Tbilisi")
+    assert not is_patterned_password("Vake-1q2w-Saburtalo")
 
 
 def test_only_the_whole_core_is_looked_up() -> None:
@@ -257,7 +357,21 @@ async def test_reset_password_refuses_a_weak_one(
 # ── what is never touched: signing in with a password chosen before ──────────
 
 
-@pytest.mark.parametrize("password", ["aaaaaaaa", "12345678", "Password1!", "abcd1234", "x"])
+@pytest.mark.parametrize(
+    "password",
+    [
+        "aaaaaaaa",
+        "12345678",
+        "Password1!",
+        "abcd1234",
+        "x",
+        # A-088: refused as a new password now, still the way in for whoever chose it before.
+        "1q2w3e4r!",
+        "1qaz2wsx!",
+        "q1w2e3r4!",
+        "zaq12wsx",
+    ],
+)
 @pytest.mark.parametrize("role", [ROLE_CUSTOMER, ROLE_ADMIN])
 async def test_an_existing_weak_password_still_signs_in(
     client: httpx.AsyncClient, db: AsyncSession, password: str, role: str

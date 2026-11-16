@@ -1224,7 +1224,11 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   `passwordpassword`, `P@ssw0rd` (სიტყვის გამეორება, leetspeak — მფლობელის წესის გარეთ).
 - **გამოსწორება:** მესამე შემოწმება — მხოლოდ punctuation/whitespace-ით ჩამოჭრილი ფორმა; ტესტი სამივე მაგალითზე.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — მესამე look-up (ციფრები რჩება) + მფლობელის მოთხოვნით pattern-ის წესი ორ მეზობელ რიგს
+  შორის keyboard walk-ს იჭერს (`_is_keyboard_walk`). სამივე მაგალითი (და `zaq12wsx`, `1q2w3e4r5t`, `!1q2w3e4r`, …)
+  ორივე წესით ცალ-ცალკე უარყოფილია register/change/reset-ზე; არსებული `1q2w3e4r!` hash-ით შესვლა 200 (customer, admin).
+  65 ტესტი ძველ `security.py`-ზე ვარდება (`git stash`), 222 გადის. შემთხვევითი 8-სიმბოლოიანი პაროლის უარი 1.1–2.3%
+  (ადრე 0.35–0.74%), 12+ — < 0.04%.
 
 #### A-089 · nit · storefront-ი ახალ პაროლის წესს მხოლოდ უარის შემდეგ ამბობს
 - **ფაილი:** `frontend/src/pages/Account/ChangePassword.jsx:58`, `frontend/src/pages/ResetPassword.jsx:142`

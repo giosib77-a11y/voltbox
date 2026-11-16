@@ -382,7 +382,22 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
     synthetic 1700×50 `I;16` PNG was kept at 1700 px). AUDIT.md's "only when the original fits the edge" would
     have been a condition that never holds. Consequence: a stored re-encode may be larger in bytes than the
     upload; the edge holds.
-- What still holds: an upright image at or below the edge is never decoded and is stripped byte for byte (a file
+  - **The new-password rule catches keyboard walks across two rows** (A-088; the owner asked that the pattern
+    rule itself catch `1q2w3e4r!`-type passwords). Two changes in `app/core/security.py`: `is_common_password`
+    has a third look-up, the password with only punctuation and spaces trimmed (digits kept, same 4-character
+    floor), so `1q2w3e4r!` → `1q2w3e4r` is found on the list; and `is_patterned_password` also removes a
+    three-key window that walks two touching rows of a staggered QWERTY layout (`_is_keyboard_walk`: `1q2`,
+    `qaz`, `zaq`, `wsx` — each step to a touching key in the next row, same direction sideways; or `q1w` — two
+    row neighbours with a touching key between). Ours: kept to touching keys on purpose, because a false
+    refusal costs more than a missed walk. Measured on SystemRandom passwords (200 000 per cell): 8 characters
+    are refused 1.1–2.3% of the time (0.35–0.74% before), 12 characters under 0.04%, 16 characters ~0.
+- What still holds (A-088): the rule is checked only when a password is set (register, change-password, reset,
+  `manage_admin.py create-admin`), never at sign-in — a stored `1q2w3e4r!` still signs in (tested, customer and
+  admin). The refusal is the same 400 `VALIDATION_ERROR`, no new code. Still not caught: word repetition
+  (`passwordpassword`), leetspeak (`P@ssw0rd`), walks over three or more rows, walks that skip keys. The common
+  list is unchanged (sha256-pinned). The storefront still shows the generic text for a pattern refusal (A-089,
+  frontend, open).
+- What still holds (images): an upright image at or below the edge is never decoded and is stripped byte for byte (a file
   the walk cannot read is still `INVALID_IMAGE` there); a decoded file is no longer walked, so one the walk would
   refuse is stored as its metadata-free re-encode, as A-059 already did. An APNG whose default image is not frame 0 is still refused (Pillow counts two frames), and
   any real animation is `IMAGE_ANIMATED`. `_WEBP_KEPT` still keeps ANIM/ANMF, so a one-frame animated WebP keeps
@@ -454,7 +469,8 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
   digits, punctuation and spaces trimmed off both ends when that core is ≥ 4 characters (`Password1!` → `password`);
   (2) a pattern: every character inside a 3-character window of one repeated character, a ±1 step among digits or
   letters, or three adjacent keys of a keyboard row is removed, and fewer than 5 distinct characters may not remain
-  (`MIN_DISTINCT_CHARACTERS`). An administrator's new password needs 12 (`MIN_ADMIN_PASSWORD_LENGTH`), checked in the
+  (`MIN_DISTINCT_CHARACTERS`). Since A-088 also a walk across two keyboard rows, and a third list look-up that
+  keeps edge digits (entry at the top of the log). An administrator's new password needs 12 (`MIN_ADMIN_PASSWORD_LENGTH`), checked in the
   service where the role is known (change-password before anything is counted; reset under the row lock before the
   link is spent, so a refusal leaves it usable) → 400 `ADMIN_PASSWORD_TOO_SHORT`; `manage_admin.py create-admin`
   applies all of it; `promote-user` sets no password and says so. Login never checks the rule.
