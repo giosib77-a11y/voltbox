@@ -394,6 +394,30 @@ re-review: security-auditor — დახურულია; ნარჩენ�
   არ გაშვებულა: Linux-ზე სურათების დრო და მეხსიერება (გაზომვები Windows-ისაა), ნამდვილი ტელეფონის/კამერის ფაილები, ბრაუზერში
   stripped ფაილის რენდერი, e2e, Render, ლაივ ბაზა.
 
+**`/fix A-096 A-097 A-101 A-098 A-099 A-100` 2026-11-16** (ბრენჩი `fix/a096-a101`, `agent-system`-იდან, `07466ed`). ექვსივე ID
+ღია იყო; ამ რიგით გავიდა, ერთ ფაილზე ერთი აგენტი, pytest ერთდროულად მხოლოდ ერთი. მფლობელმა წინასწარ დაამტკიცა ყველა
+(A-101 — ანიმაცია იკრძალება, `IMAGE_ANIMATED`); `MAX_IMAGE_DECODE_BYTES`, `DECODE_COST` და `Semaphore(1)` უცვლელია. ძველ კოდზე
+ჩავარდნა ორკესტრატორმა `git stash`-ით ხელახლა გაუშვა ყველა კოდის ID-ზე.
+- A-096 — fixed (verified), `e7487a4`; security-auditor — დახურულია.
+- A-097 — fixed (verified), `d503a1e`; security-auditor — დახურულია.
+- A-101 — fixed (verified), `da165ea` (+ Decision Log); security-auditor — დახურულია (გვერდის ავლა → A-104, nit).
+- A-098 — fixed (verified), `5a31a38`; code-reviewer — დახურულია.
+- A-099 — fixed (verified), `3a5aef4`; code-reviewer — დახურულია.
+- A-100 — fixed (verified), `ddde89e` (Linux-ზე გაზომილი, მნიშვნელობა უცვლელი); code-reviewer — დახურულია.
+- re-review-ის should-fix-ები, გასწორების რაუნდი 1: A-102 — fixed (verified), `fbb132a`; A-103-ის მცდარი კომენტარები — `72361f8`
+  (მნიშვნელობა — მფლობელის); ორივე ხელახლა შემოწმდა და დახურულია.
+- ღია: **A-103 (should-fix, needs decision)**, A-104–A-106 (nit) — სექციის ბოლოს.
+- პროცესის დარღვევები (არაფერს შეხებია, შედეგები ჩვეულებრივი გაშვებით გადამოწმდა): ერთ დეველოპერს ერთხელ `-p no:logging`
+  ჰქონდა (ჩაშენებული plugin-ის გამორთვა), მეორემ `-p no:cacheprovider` სცადა (classifier-მა უარყო) და ერთი read-only
+  `python -I -c` გაუშვა (Pillow-ის ვერსია).
+- pytest: 1757 (baseline `aa98335`) → **1866 passed, 1 skipped**.
+- საბოლოო შემოწმება (`72361f8`, tester): ruff ✅ · format 186 ✅ · mypy 166 ✅ · **pytest 1866 passed, 1 skipped** · alembic
+  0001→0017 + check ✅ (ცარიელ `voltbox_final_check`-ზე, შემდეგ წაიშალა) · eslint ✅ · **vitest 683 / 58** (baseline 682 / 58) ·
+  build `http` ✅ · build `mock` ✅ · Node 22.23.2 / npm 10.9.8 container-ში: `npm ci`, eslint, vitest 683 / 58, ორივე build ✅.
+  დამოკიდებულებები და Dockerfile არ შეცვლილა (`docker build` მხოლოდ A-100-ის გაზომვისთვის აეწყო, `voltbox-api:a100`).
+  არ გაშვებულა: ნამდვილი ბრაუზერი (`IMAGE_ANIMATED`-ის ტექსტი ადმინ პანელში, A-104-ის APNG), ნამდვილი ტელეფონის/კამერის
+  ფაილები, Render (გაზომვა Docker Desktop-ის WSL2-ზეა), e2e, ლაივ ბაზა.
+
 ### Should-fix
 
 #### A-030 · should-fix · refresh-ის 429 ან 5xx პასუხი მომხმარებელს სისტემიდან აგდებს
@@ -1276,7 +1300,7 @@ ID-ები) გარეთაა, ამიტომ ღიად დარ�
   ჩამოტვირთული ფაილის ატვირთვა (მხოლოდ ადმინი) generic შეცდომას იღებს `INVALID_IMAGE`-ის ნაცვლად.
 - **გამოსწორება:** `SyntaxError` `except`-ის tuple-ში + HTTP ტესტი ამ ორ ზომაზე (400 `INVALID_IMAGE`).
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified), `e7487a4` (ტესტი ძველ კოდზე ვარდება: 5 და 8 ბაიტი); security-auditor — დახურულია.
 
 #### A-097 · should-fix · >1600 px (ან მოსაბრუნებელი) JPEG, რომლის entropy data დაზიანებულია, `shrink_to_fit`-ში `OSError`-ს აგდებს → 500 (ჩვენამდეც ასე იყო)
 - **ფაილი:** `backend/app/services/storage.py` (`shrink_to_fit`: `image.thumbnail` / decode)
@@ -1286,7 +1310,7 @@ ID-ები) გარეთაა, ამიტომ ღიად დარ�
   აუდიტის ზუსტი მაგალითია.
 - **გამოსწორება:** decode/re-encode-ის `OSError` → `INVALID_IMAGE` (მხოლოდ Pillow-ის decode-ის ირგვლივ) + HTTP ტესტი სამივე კუდზე.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified), `d503a1e` (24 HTTP ტესტი — JPEG, PNG, WebP; ყველა ძველ კოდზე ვარდება); security-auditor — დახურულია.
 
 #### A-098 · nit · JFIF APP0-ის შიდა thumbnail (და APP14 12 ბაიტის მიღმა) ბაიტ-ბაიტ ინახება (ჩვენამდეც ასე იყო)
 - **ფაილი:** `backend/app/services/storage.py` (`_strip_jpeg`-ის `keep`)
@@ -1297,7 +1321,7 @@ ID-ები) გარეთაა, ამიტომ ღიად დარ�
 - **გამოსწორება:** JFIF-დან მხოლოდ პირველი 14 ბაიტი, thumbnail-ის ზომა 0, სიგრძე 16; APP14-დან პირველი 12 ბაიტი. ტესტი
   Xthumb/Ythumb ≠ 0-ით.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified), `5a31a38` (7 ტესტიდან 3 ძველ კოდზე ვარდება, დანარჩენი ინვარიანტია); code-reviewer — დახურულია.
 
 #### A-099 · nit · `import_products.py`: `reviewsCount` წინასწარ არ მოწმდება, `isActive` ტექსტს `"false"`-ს `True`-ად კითხულობს (ჩვენამდეც ასე იყო)
 - **ფაილი:** `backend/scripts/import_products.py` (`import_one`: `int(row.get("reviewsCount", 0))`, `bool(row.get(...))`)
@@ -1305,7 +1329,7 @@ ID-ები) გარეთაა, ამიტომ ღიად დარ�
   ჩერდება; `"abc"` → raw `ValueError` (A-078-ის „dry-run ტყუის" კლასი). `"isActive": "false"` ჩუმად აქტიური ხდება.
 - **გამოსწორება:** `to_int` + დიაპაზონი `reviewsCount`-ზე `validate()`-ში; boolean ველებზე `isinstance(value, bool)`.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified), `3a5aef4` (42 შემთხვევა ძველ კოდზე ვარდება); code-reviewer — დახურულია.
 
 #### A-100 · nit · WEBP-ის `DECODE_COST` `method=6`-ით იყო გაზომილი; `method=5`-ზე ზედა ზღვარია
 - **ფაილი:** `backend/app/services/storage.py` (`DECODE_COST["WEBP"]`, კომენტარი)
@@ -1314,12 +1338,72 @@ ID-ები) გარეთაა, ამიტომ ღიად დარ�
   უცვლელად დატოვა.
 - **გამოსწორება:** production image-ში (Linux) `TestDecodeMemoryIsBounded`-ის WEBP-ის ხელახალი გაზომვა; მერე გადაწყვეტა.
 - **owner:** backend-dev (გადაწყვეტა — მფლობელის)
-- **status:** open
+- **status:** fixed (verified), `ddde89e` — Linux-ზე გაიზომა (production image), `DECODE_COST["WEBP"]` უცვლელია (cut-out ბიუჯეტს 2.3–2.6 MP-ზე აღწევს); გაზომვამ A-103 იპოვა; code-reviewer — დახურულია.
 
 #### A-101 · nit · >1600 px APNG / ანიმირებული WebP ერთ ფრეიმად ინახება, პატარა — ანიმაციით (ჩვენამდეც ასე იყო)
 - **ფაილი:** `backend/app/services/storage.py` (`shrink_to_fit`), `validate_image`
 - **სცენარი (გაშვებით, backend-dev):** A-058-ის შემდეგ ≤1600 ანიმაცია ყველა ფრეიმს ინახავს; დიდი re-encode-ზე პირველ ფრეიმად
   იქცევა. ორივეს `validate_image` იღებს.
 - **გამოსწორება:** მფლობელის გადაწყვეტილება — ანიმირებული პროდუქტის ფოტო საჭიროა? თუ არა, `validate_image` უარყოფს ანიმაციას.
-- **owner:** მფლობელი
-- **status:** needs decision
+- **owner:** backend-dev (გადაწყვეტა — მფლობელის: ანიმაცია პროდუქტის ფოტოსთვის საჭირო არ არის)
+- **status:** fixed (verified), `da165ea` — 400 `IMAGE_ANIMATED`, ტექსტი ka/en.json-ში, vitest; 10 backend ტესტი და vitest ძველ კოდზე ვარდება; security-auditor — დახურულია (გვერდის ავლა ორი `acTL`-ით → A-104).
+
+### A-096–A-101-ის გასწორებისა და re-review-ის მიგნებები (2026-11-16)
+
+A-102 security-auditor-მა იპოვა და მფლობელის წესის („არცერთი სურათის შეცდომა 500-მდე") ფარგლებში იმავე გაშვებაში
+გასწორდა. A-103 A-100-ის გაზომვამ აჩვენა; მისი ღირებულება მფლობელის გადაწყვეტილებაა. ოთხივე ჩვენამდეც ასე იყო.
+
+#### A-102 · should-fix · JPEG, რომლის SOF ნაკლებ კომპონენტს ჩამოთვლის, ან PNG IDAT-ის გარეშე → `IndexError` → 500 (ჩვენამდეც ასე იყო)
+- **ფაილი:** `backend/app/services/storage.py` (`validate_image`-ის except)
+- **სცენარი (security-auditor — კოდით; backend-dev — HTTP-ზე გაშვებით):** (1) SOF0 ამბობს Nf=3, ჩამოთვლის 0/1/2 კომპონენტს —
+  Pillow `layer`-ს ჩამოთვლილით ავსებს, `_decode_cost` → `JpegImagePlugin.get_sampling` → `layer[1]` → `IndexError`;
+  (2) signature + IHDR + IEND სწორი CRC-ებით — `verify()` → `self.tile[0]` → `IndexError`. Pillow `IndexError`-ს `SyntaxError`-ად
+  მხოლოდ `_open`-ის შიგნით აქცევს.
+- **გამოსწორება:** `IndexError` except-ის დახურულ tuple-ში (try-ში ჩვენი კოდი არაფერს ინდექსავს) + HTTP ტესტები.
+- **owner:** backend-dev
+- **status:** fixed (verified), `fbb132a` (4 ტესტი ძველ კოდზე ვარდება, `git stash`); security-auditor — დახურულია.
+
+#### A-103 · should-fix · RGBA WebP, რომლის alpha ხმაურია, ბიუჯეტზე მეტს ხარჯავს (108–113 MiB / 100); ტესტის ფიქსტურა ამას ვერ აჩვენებს (ჩვენამდეც ასე იყო)
+- **ფაილი:** `backend/app/services/storage.py` (`DECODE_COST["WEBP"] = (71 MiB, 16)`), `backend/tests/test_admin_images.py`
+  (`TestDecodeMemoryIsBounded`-ის WEBP ფიქსტურა ერთფეროვანია)
+- **სცენარი (გაზომვით, backend-dev, production image Linux-ზე — Docker Desktop WSL2, Pillow 13.0.0, libwebp 1.6.0,
+  `method=5`):** 1601×1187 (ბიუჯეტის მაქსიმუმი) — ერთფეროვანი RGBA 51 MiB, soft-edged cut-out 82.5, ხმაურიანი alpha
+  108.8, RGBA ხმაური lossy 109.4 / lossless 113.4. მხოლოდ მოტრიალების გზაზე (orientation 6, 1378×1378 / 1600×1187):
+  107.9–108.1 და 112.5–112.8. decode 47–55 MiB-ია ყოველთვის; libwebp-ის alpha encoder ხმაურზე +58 MiB-ს იღებს. ატვირთვა
+  მხოლოდ ადმინს შეუძლია; `config.py`-ის არითმეტიკით (512 MB, 2 worker) 2 × 113 MiB მაინც ეტევა — OOM არ არის, მაგრამ
+  ბიუჯეტის დაპირება ირღვევა. A-056-მდე (`method=6`) ალბათ უარესიც იყო.
+- **გამოსწორება (მფლობელის გადაწყვეტილება):** (ა) ხმაურიანი alpha-ს ფიქსტურა ტესტში + WebP-ის ახალი ფასი (backend-dev-ის
+  შეფასებით ≈ (7 MiB, 56 B/px), ≈ 1.5 MP; code-reviewer-ის მოდელით ≈ 1.0 MP — გაუზომავია, ჯერ გაზომვა; ორივე დღევანდელზე
+  მკაცრია: 1601×1187 WebP აღარ მიიღება); (ბ) გადაჭარბების მიღება Accepted Risks-ში;
+  (გ) re-encode `alpha_quality < 100`-ით ან `method=4`-ით — ჯერ გაზომვა.
+- **owner:** მფლობელი (შემდეგ backend-dev)
+- **status:** needs decision. კომენტარები და docstring-ები, რომლებიც სხვას ამბობდა, გასწორდა (`72361f8`); მნიშვნელობა უცვლელია.
+
+#### A-104 · nit · APNG ორი `acTL` chunk-ით Pillow-ს ერთ ფრეიმად ეჩვენება და `IMAGE_ANIMATED`-ს გვერდს უვლის (ჩვენამდეც ასე იყო)
+- **ფაილი:** `backend/app/services/storage.py` (`validate_image`-ის `n_frames`, `_PNG_KEPT`)
+- **სცენარი (კოდით, security-auditor; ბრაუზერში არ შემოწმებულა):** IDAT-მდე მეორე `acTL`-ზე Pillow `n_frames`-ს 1-ად ტოვებს
+  (`PngImagePlugin.py:712-715`); ≤1600 და orientation 1 ფაილს byte-strip ორივე `acTL`-ს და ყველა `fcTL`/`fdAT`-ს უნახავს —
+  ბრაუზერმა შეიძლება ააანიმიროს. ასევე `acTL num_frames=1` + ზედმეტი `fcTL`/`fdAT` (backend-dev): მკვდარი ბაიტები. ფაილი
+  განზრახ უნდა აეწყოს და მხოლოდ ადმინს შეუძლია ატვირთვა.
+- **გამოსწორება:** `_PNG_KEPT`-იდან `acTL`/`fcTL`/`fdAT` ამოიღონ (ყოველი მიღებული APNG ერთკადრიანია, მისი IDAT ფრეიმი 0-ია,
+  ასე რომ შენახული ფაილი სტატიკური PNG ხდება) — Decision Log-ის „What still holds" და walker-ის ტესტების განახლებით.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-105 · nit · „re-encode უფრო დიდი გამოვიდა → stripped ორიგინალი" წესი 1600 px-ზე გრძელ სურათს ინახავს (ჩვენამდეც ასე იყო)
+- **ფაილი:** `backend/app/services/storage.py` (`shrink_to_fit`-ის ბოლო, „A re-encode that came out larger…")
+- **სცენარი (გაშვებით, backend-dev, სინთეზური ფაილით):** 1700×50 `I;16` PNG გლუვი/პერიოდული მონაცემით — re-encode ორიგინალზე
+  დიდია, ამიტომ 1700×50 ინახება, `MAX_STORED_EDGE`-ის მიუხედავად. decode-ის ბიუჯეტით შეზღუდულია და კოდში აღწერილია;
+  ნამდვილ ფოტოზე არ დაფიქსირებულა.
+- **გამოსწორება:** თუ საჭიროა — „უფრო პატარა" წესი მხოლოდ მაშინ, როცა ორიგინალი ზღვარშია.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-106 · nit · ორი ძველი კომენტარი WebP-ის ღირებულებაზე ზედმეტს ამბობს (ჩვენამდეც ასე იყო)
+- **ფაილი:** `backend/app/services/storage.py:393-394`, `backend/tests/test_admin_images.py` (`largest_that_fits`, `largest_that_is_turned`)
+- **სცენარი (კოდით, code-reviewer):** „A WebP buys roughly a third of the pixels a phone's JPEG does" — `DECODE_COST`-ით 1.9 / 13.3
+  MP ≈ მეშვიდედია (იმავე ფაილის WEBP-ის კომენტარიც ასე ამბობს). `largest_that_fits` / `largest_that_is_turned`: „the most
+  expensive image(s)" — WebP-ზე მხოლოდ ფორმით (შინაარსი, A-103, ასევე მნიშვნელოვანია).
+- **გამოსწორება:** „roughly a seventh" (ან რიცხვები); „the most expensive shape".
+- **owner:** backend-dev
+- **status:** open

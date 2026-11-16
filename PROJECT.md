@@ -358,8 +358,8 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
-### 2026-11-16 — Animated images are refused; a damaged image is a 400, never a 500 (A-096, A-097, A-101)
-- Decision (owner-approved beforehand):
+### 2026-11-16 — Animated images are refused; a damaged image is a 400, never a 500; WebP cost re-measured (A-096–A-102)
+- Decision (owner-approved beforehand; values that were left to us are marked):
   - **Animation is not needed for a product photo** (A-101). `validate_image` refuses any image Pillow counts
     more than one frame in (`n_frames`, read at open, no frame decoded) — APNG and animated WebP, at any size —
     with 400 `IMAGE_ANIMATED` (words in `ka.json`/`en.json`; the admin upload shows it like the other image
@@ -371,14 +371,24 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
     `validate_image`'s except (a PNG cut inside its last chunk header), and `shrink_to_fit` turns a closed list of
     Pillow's bad-bytes errors (`OSError`, `ValueError`, `SyntaxError`, `IndexError`) into `INVALID_IMAGE` around
     only the two calls that decode (`thumbnail`, `transpose`). Ours: the list is closed and the encoder is outside
-    the wrap, so a bug in our code is still a 500.
+    the wrap, so a bug in our code is still a 500. `IndexError` also joins `validate_image`'s except (A-102, found
+    by the re-review): a JPEG whose SOF lists fewer components than it declares, a PNG with no IDAT.
+  - A stored JPEG keeps only JFIF's 14-byte header with the thumbnail size 0×0 and Adobe's 12 bytes (A-098); a
+    shorter JFIF/Adobe payload is kept as it is (ours: it has no thumbnail, and Pillow reads it today).
+  - `import_products.py` refuses `reviewsCount` outside 0..2 147 483 647 (the int4 column; nothing else caps it)
+    and a flag (`isActive`/`isFeatured`/`isNew`) that is not a JSON bool, `null` included, before any write (A-099).
+  - WEBP's `DECODE_COST` stays `(71 MiB, 16)` after a Linux re-measurement with `method=5` (A-100): a soft-edged
+    cut-out reaches the 100 MiB budget between 2.3 and 2.6 MP, so no lower cost is justified.
 - What still holds: a one-frame APNG (`acTL` = 1) or one-frame animated WebP is accepted and keeps its animation
   chunks, which is why the A-058 allowlists still list acTL/fcTL/fdAT and ANIM/ANMF. An APNG whose default image is
-  not its first frame counts as two frames in Pillow and is refused (conservative). `MAX_IMAGE_DECODE_BYTES`,
-  `DECODE_COST` and `Semaphore(1)` are unchanged. The bad-bytes list was measured on the Pillow in `.venv`; another
-  Pillow version may raise another type for some other malformed chunk.
+  not its first frame counts as two frames in Pillow and is refused (conservative); one with two `acTL` chunks counts
+  as one (AUDIT.md A-104). `MAX_IMAGE_DECODE_BYTES`, `DECODE_COST` and `Semaphore(1)` are unchanged. The bad-bytes
+  list was measured on the Pillow in `.venv`; another Pillow version may raise another type for some other malformed
+  chunk. **Not held:** a 1601×1187 RGBA WebP with noise in its alpha channel peaks 108–113 MiB on Linux, over the
+  budget (AUDIT.md A-103, owner's decision); the WEBP fixture of `TestDecodeMemoryIsBounded` is flat and cannot show it.
 - How it changes: allowing animation again means deciding what a reduced one becomes (all frames re-encoded, with
-  its own decode cost) before removing the check.
+  its own decode cost) before removing the check. Pricing WebP for noisy alpha (an unmeasured estimate of 1.0–1.5 MP;
+  to be measured first) or accepting the overrun is A-103.
 
 ### 2026-11-16 — Image strippers are allowlists; WebP method 5; order-number zone from settings (A-055–A-059, A-075, A-077–A-079)
 - Decision (all approved by the owner beforehand; values that were left to us are marked):
@@ -398,12 +408,10 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
     0..`MAX_LOW_STOCK_THRESHOLD` and non-integers before any write (A-078). `MAX_STOCK`, not the admin form's
     100 000, because `adjust_stock` enforces only `MAX_STOCK` and an import is a bulk restock (ours).
 - What still holds: `MAX_IMAGE_DECODE_BYTES`, `DECODE_COST` and `Semaphore(1)` are unchanged; the WEBP
-  `DECODE_COST` pair was measured with `method=6` on Linux and is now an unre-measured upper bound (Windows peaks
-  fell 90 → 58 MiB). The ICC profile is still kept whole, and so are an allowlisted APP0 JFIF / APP14 Adobe segment
-  (an inline JFIF thumbnail survives: AUDIT.md A-098). Timings are Windows-only. zoneinfo, not Postgres, validates
-  the zone name.
-- How it changes: re-measure WEBP on the production image before lowering its `DECODE_COST`; add a chunk to an
-  allowlist only with a reason it cannot identify anyone.
+  `DECODE_COST` pair was measured with `method=6` on Linux (re-measured with `method=5` on 2026-11-16, A-100 —
+  kept; see the entry above). The ICC profile is still kept whole; an allowlisted APP0 JFIF / APP14 Adobe segment is
+  cut to its header since A-098. Timings are Windows-only. zoneinfo, not Postgres, validates the zone name.
+- How it changes: add a chunk to an allowlist only with a reason it cannot identify anyone.
 
 ### 2026-11-16 — New-password rule, administrator minimum 12, Telegram on an administrator's lock (A-037, no TOTP)
 - Decision (owner-approved scope; details chosen in the fix): `_validate_password` (register, change-password,
@@ -592,7 +600,8 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
   killed a gunicorn worker at `timeout=5`. `optimize=True` was most of that: locally 5.2 s → 1.7 s for a
   photo-like 2800×2100 RGBA PNG, for a file about 10% larger.
 - What still holds: one decode per worker process, so the memory ceiling stays `MAX_IMAGE_DECODE_BYTES` per
-  process and `WEB_CONCURRENCY` times that per deployment; `DECODE_COST` and `TestDecodeMemoryIsBounded`
+  process and `WEB_CONCURRENCY` times that per deployment (except a WebP with noise in its alpha channel, measured
+  up to 113 MiB against the 100 MiB budget — AUDIT.md A-103); `DECODE_COST` and `TestDecodeMemoryIsBounded`
   unchanged. JPEG keeps `optimize=True` (0.2 s). WebP moved from `method=6` to `method=5` on 2026-11-16 (A-056,
   measured; see the entry of that date).
 - How to change: raising the semaphore multiplies the memory ceiling by its value.

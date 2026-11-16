@@ -844,6 +844,13 @@ Unverified (check before acting):
   New: A-096, A-097 (should-fix, pre-existing 500s on damaged uploads, open), nits A-098–A-100, A-101 (needs decision).
   Gates at aa98335: ruff, format 186, mypy 166, pytest 1757 (+1 skip), alembic 0001→0017 + check; eslint, vitest 682, both
   builds. No migration, nothing to run on live. Merge into `agent-system` is the owner's.
+- 2026-11-16 (outside Stage 3, branch `fix/a096-a101` from `agent-system` `07466ed`): AUDIT.md A-096, A-097 (a damaged
+  image is 400 INVALID_IMAGE, never a 500), A-101 (owner: animation not needed → 400 `IMAGE_ANIMATED`), A-098, A-099,
+  A-100 (WEBP `DECODE_COST` re-measured on Linux, kept) — fixed (verified), all re-reviewed closed. Re-review found A-102
+  (two more `IndexError` 500s) — fixed (verified). Open: A-103 (should-fix, needs owner decision: a noisy-alpha WebP peaks
+  108–113 MiB against the 100 MiB budget), nits A-104–A-106. Gates at 72361f8: ruff, format 186, mypy 166, pytest 1866
+  (+1 skip), alembic 0001→0017 + check; eslint, vitest 683/58, both builds (also in node:22). No migration, nothing to run
+  on live. Merge into `agent-system` is the owner's.
 
 ## Stage 2 — Done
 Last session of Stage 2:
