@@ -8,7 +8,8 @@ import yaml
 
 BLUEPRINT = Path(__file__).resolve().parents[2] / "frontend" / "render.yaml"
 
-# Markers of the temporary onrender.com addresses. They come off when voltbox.ge
+# Markers of the temporary onrender.com values: the sitemap rewrite target, the
+# connect-src address, and the HSTS max-age=300. They come off when voltbox.ge
 # is bought; this count must then drop with them, never change by accident.
 TEMP_ONRENDER_MARKERS = 3
 
