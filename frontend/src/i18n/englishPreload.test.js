@@ -81,7 +81,9 @@ describe('the English modulepreload', () => {
     expect(document.documentElement.className).toMatch(/^theme-(light|dark)$/);
   });
 
-  it('honours a non-root base', async () => {
+  // Only the href prefix is checked. The path rule assumes base '/' (as
+  // languageFromPath does), so /en under base /shop/ is not a real combination.
+  it('prefixes the chunk href with the configured base', async () => {
     expect(load(await build(bundle(), '/shop/'), '/en')).toEqual(['/shop/' + EN_FILE]);
   });
 

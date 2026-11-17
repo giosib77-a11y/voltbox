@@ -383,7 +383,8 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 - What still holds: a Georgian page requests no English (≈ 330 bytes more in theme-init.js, no request). The
   real `import()` still loads the chunk, so a missing or stale preload costs only time.
 - Changes if: theme-init.js gets a long cache lifetime (an unhashed file — a stale copy would preload an old
-  name, a wasted 404), or the site gets per-language HTML.
+  name, which the `/*` SPA rewrite in render.yaml answers with index.html: a wasted ~4 KB fetch and a console
+  error, not a 404), or the site gets per-language HTML.
 
 ### 2026-11-17 — vitest waits are sized for a loaded machine: testTimeout 15 s, findBy/waitFor 3 s
 - Decision: the owner's one-off vitest failure "while pytest ran" was reproduced: three full suites at once

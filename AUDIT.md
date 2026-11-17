@@ -479,6 +479,18 @@ pytest ერთდროულად მხოლოდ ერთი; ძვე
   არ გაშვებულა: ნამდვილი ბრაუზერი (`/en`-ის ჩატვირთვა, ველის შეცდომების ჩვენება, ადმინის შეცდომის ტექსტები), e2e, Render,
   ლაივ ბაზა.
 
+**`/auto` → `/fix A-110 A-107 A-108 A-109` 2026-11-17** (ბრენჩი `fix/a110-a107-a108-a109`, `agent-system`-იდან, `819156c`).
+ახალი აუდიტი არ გაშვებულა; მფლობელმა ოთხივე წინასწარ დაამტკიცა. ოთხივე ღია იყო. ამ რიგით, თითო frontend-dev, ერთდროულად
+ერთი; ძველ კოდზე ჩავარდნა ორკესტრატორმა `git stash`-ით გაიმეორა ოთხივეზე.
+- A-110 — fixed (verified), `6a9dde6`; code-reviewer — დახურულია (ნარჩენი — A-111).
+- A-107 — fixed (verified), `3543fbf` (+ Profile-ის `INVALID_CURRENT_PASSWORD`, იგივე ხარვეზი იმავე handler-ში); code-reviewer — დახურულია.
+- A-108 — **ჯერ დადასტურდა** (ძველ კოდზე refresh და მასზე მომლოდინე მოთხოვნა ვადის შემდეგაც pending რჩება), შემდეგ fixed
+  (verified), `39436a7`; code-reviewer — დახურულია (ნარჩენი — A-112).
+- A-109 — fixed (verified), `db7d1fa` (+ Decision Log); code-reviewer — დახურულია.
+- re-review: 0 critical / 0 should-fix. nit-ები ამ ბრენჩის ტექსტში (Decision Log-ის „404“ → SPA rewrite-ის index.html, ტესტის
+  სახელი non-root base-ზე, session.js-ის body-ის კომენტარი) — გასწორდა, საბოლოო commit-ში. ახალი: A-111, A-112 (nit-ები, ჩვენამდეც ასე იყო).
+- pytest: 1976 passed, 1 skipped (baseline-ის ტოლი; backend არ შეცვლილა) · vitest 775 / 69 → **792 / 71**.
+
 ### Should-fix
 
 #### A-030 · should-fix · refresh-ის 429 ან 5xx პასუხი მომხმარებელს სისტემიდან აგდებს
@@ -1511,7 +1523,9 @@ A-102 security-auditor-მა იპოვა და მფლობელის
   `EMAIL_ALREADY_EXISTS`-ს `details`-ის გარეშე აბრუნებს. A-089-მა იგივე Register-ზე გაასწორა (კოდით შემოწმება).
 - **გამოსწორება:** Register-ის მსგავსად `error?.details?.code === 'EMAIL_ALREADY_EXISTS'` → email ველთან, toast-ის გარეშე; ტესტი.
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `3543fbf`. `EMAIL_ALREADY_EXISTS` email ველთან, `INVALID_CURRENT_PASSWORD` (იგივე ხარვეზი:
+  `details.currentPassword` მხოლოდ mock-ის ფორმაა) მიმდინარე პაროლის ველთან, ორივე toast-ის გარეშე; სხვა უარი ისევ toast-ია.
+  3 ახალი ტესტი რეალური httpClient-ით (mock fetch); 2 ძველ `Profile.jsx`-ზე ვარდება (`git stash`), მესამე („still toasts“) ორივეზე გადის.
 
 #### A-108 · nit (დაუდასტურებელი) · refresh-ის `fetch`-ს ვადა არ აქვს (ჩვენამდეც ასე იყო)
 - **ფაილი:** `frontend/src/services/session.js:~228`
@@ -1519,7 +1533,12 @@ A-102 security-auditor-მა იპოვა და მფლობელის
   ყველა მოთხოვნა, რომელიც ამ refresh-ს ელოდება, ჩერდება. ჩვეულებრივ მოთხოვნებს httpClient-ის timeout აქვს. გაშვებით არ შემოწმებულა.
 - **გამოსწორება:** იგივე timeout, რაც httpClient-ის მოთხოვნებს; ვადის გასვლა = ქსელის შეცდომა (სესია რჩება, `apiErrors.network`).
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `39436a7`. ჯერ დადასტურდა: fetch-ით, რომელიც მხოლოდ signal-ის abort-ზე სრულდება, ძველი
+  `refreshSession` და მასზე მომლოდინე `getOrders()` ვადის შემდეგაც pending რჩება. ახლა refresh-ს httpClient-ის 45 s
+  `timeoutSignal()` აქვს (session.js-ში გადავიდა, httpClient იქიდან იღებს); ვადა = ქსელის შეცდომა — სესია რჩება,
+  `refreshFailedOnNetwork()` true, მომლოდინე მოთხოვნა `apiErrors.network`-ს აჩვენებს. ვადა body-ის კითხვასაც ფარავს
+  (იქ ვადაც სესიას ტოვებს). 401 და token-ის გარეშე body ისევ ასრულებს. 4 ახალი ტესტიდან 3 ძველ კოდზე ვარდება (`git stash`).
+  ნამდვილ ბრაუზერში (`navigator.locks`, ორი tab) არ შემოწმებულა.
 
 #### A-109 · nit · `/en`-ზე ინგლისური chunk წინასწარ არ იტვირთება
 - **ფაილი:** `frontend/src/i18n/index.js` (`loadEnglish`), `frontend/index.html`
@@ -1527,7 +1546,12 @@ A-102 security-auditor-მა იპოვა და მფლობელის
   რენდერამდე ერთი დამატებითი round trip აქვს. ქართულ გვერდს არ ეხება.
 - **გამოსწორება (თუ საჭირო გახდება):** `/en`-ზე `modulepreload` ინგლისური chunk-ისთვის (build-ის დროს ცნობილი სახელით).
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `db7d1fa` (+ Decision Log). build-only Vite plugin (`frontend/vite-plugins/englishPreload.js`)
+  `i18n/en.json`-ის chunk-ს პოულობს და `dist/theme-init.js`-ს ბოლოში უმატებს შემოწმებას, რომელიც `/en`-ზე
+  `<link rel="modulepreload">`-ს სვამს. ქართულ გვერდზე ახალი მოთხოვნა არ არის (+≈320 B theme-init.js-ში); inline script არ
+  არის (CSP); `public/theme-init.js` და dev/vitest უცვლელია. ორივე build: `en-BF9yMHp_.js`, theme-init.js იმავეს ასახელებს.
+  ბრაუზერში (playwright, `vite preview`, entry 1.5 s-ით დაყოვნებული): `/en`-ზე en-ის მოთხოვნა 36 ms-ზე იწყება (entry — 24 ms),
+  `/`-ზე და `/cart`-ზე en-ის მოთხოვნა არ არის. 8 ტესტი; plugin-ის გარეშე ფაილი ვერ იტვირთება (`git stash`). Render-ზე მოგება არ გაზომილა.
 
 #### A-110 · should-fix · კატეგორიების ერთი ჩავარდნილი ჩატვირთვა ყველა კატეგორიის გვერდს „ვერ მოიძებნა"-დ აქცევს reload-მდე (ჩვენამდეც ასე იყო)
 - **ფაილი:** `frontend/src/hooks/useProducts.js:~95` (`useCategories`), `frontend/src/pages/Category.jsx:~55`
@@ -1538,5 +1562,29 @@ A-102 security-auditor-მა იპოვა და მფლობელის
   გაშვებით არ შემოწმებულა. ამ ბრენჩის ფარგლებს (დამტკიცებული ID-ები) სცდება, ამიტომ არ გასწორებულა.
 - **გამოსწორება:** `loadDeliveryRules`-ის pattern: `api.getCategories().catch((e) => { categoriesPromise = null; throw e; })`;
   ტესტი: ჯერ ჩავარდნა, მერე წარმატება — მეორე mount კატეგორიას აჩვენებს.
+- **owner:** frontend-dev
+- **status:** fixed (verified) — `6a9dde6`. ზუსტად ეს pattern; წარმატებული პასუხი ისევ ერთხელ ითხოვება და გვერდის სიცოცხლის
+  ბოლომდე საერთოა. `CategoryLoadFailure.test.jsx` (რეალური Category გვერდი): ჯერ ჩავარდნა, მეორე mount — კატეგორიის სათაური,
+  `getCategories` ×2; ძველ `useProducts.js`-ზე ვარდება (`git stash`: მეორე mount-იც „ვერ მოიძებნა“). ნარჩენი — A-111.
+
+### A-110/A-107/A-108/A-109-ის გასწორებისა და re-review-ის მიგნებები (2026-11-17)
+
+#### A-111 · nit · კატეგორიების ჩავარდნის შემდეგ header/footer ცარიელი რჩება და Category „ვერ მოიძებნა“-ს წერს (ჩვენამდეც ასე იყო)
+- **ფაილი:** `frontend/src/components/layout/Layout.jsx:19`, `frontend/src/pages/Category.jsx:55-66`, `frontend/src/routes.jsx:132`
+- **სცენარი (კოდით, code-reviewer):** A-110-ის შემდეგ cache ჩავარდნას აღარ ინახავს, მაგრამ (1) Layout-ის `useCategories` mount-ებული
+  რჩება და თავისით აღარ იმეორებს — header-ის მენიუ და footer ცარიელია reload-მდე; (2) ჩავარდნილი Category mount ისევ
+  „კატეგორია ვერ მოიძებნა“-ს წერს არსებულ კატეგორიაზე (`error`-ს არ კითხულობს); (3) `/category/a → /category/b` Category-ს
+  remount-ს არ აკეთებს (route-ს key არ აქვს), ამიტომ იქ retry არ ხდება. სხვა გვერდის mount აღდგება.
+- **გამოსწორება:** Category-მ `error`-ზე `ErrorState` `reload`-ით; Layout-მა `error`-ისას route-ის ცვლილებაზე `reload()`.
+  `CategoryLoadFailure.test.jsx:59` პირველ mount-ზე „not found“-ს ამოწმებს — შესაბამისად შეიცვალოს.
+- **owner:** frontend-dev
+- **status:** open
+
+#### A-112 · nit · refresh-ის 200-ის body-ის კითხვისას კავშირის გაწყვეტა სესიას ასრულებს (ჩვენამდეც ასე იყო)
+- **ფაილი:** `frontend/src/services/session.js` (`refreshSession`, `response.json()`-ის `catch`)
+- **სცენარი (კოდით, code-reviewer; ძალიან იშვიათი):** body-ის კითხვისას კავშირის გაწყვეტა ვადის გარეშე (`TypeError`,
+  `signal.aborted` false) `endSession()`-ში მიდის. სერვერს token უკვე შეცვლილი აქვს და ახალი cookie, სავარაუდოდ, დაყენებულია —
+  სესია ზედმეტად სრულდება. A-108-მა ვადის შემთხვევა გაასწორა; კომენტარი ამ შემთხვევას ახლა პირდაპირ ასახელებს.
+- **გამოსწორება:** `json()`-ის `SyntaxError`-ის გარდა ყველა შეცდომა ქსელის ჩავარდნად (სესია რჩება); ტესტი.
 - **owner:** frontend-dev
 - **status:** open

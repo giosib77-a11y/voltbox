@@ -277,8 +277,9 @@ export function refreshSession({ background = false } = {}) {
     if (!response.ok) return null;
 
     // The deadline also covers the body. If it passes while the body is being
-    // read, that is the same network failure (session kept); only a body that
-    // arrived and is not a session ends it.
+    // read, that is the same network failure (session kept). Any other failure
+    // to read a session from the body (not JSON, no token, or the connection
+    // dropped mid-body) still ends the session.
     let session = null;
     try {
       session = await response.json();
