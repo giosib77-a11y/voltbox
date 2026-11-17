@@ -88,10 +88,18 @@ export default function Profile() {
       });
       toast.success(t('account.profileUpdated'));
     } catch (error) {
-      toast.error(error?.message || t('account.saveFailed'));
-      if (error?.details?.currentPassword) {
-        setErrors((c) => ({ ...c, currentPassword: error.message }));
+      // A refusal that belongs to a field is shown at that field only.
+      // `details.email` / `details.currentPassword` are the mock's shape; the
+      // real API sends the code.
+      if (error?.details?.email || error?.details?.code === 'EMAIL_ALREADY_EXISTS') {
+        setErrors((c) => ({ ...c, email: error.message }));
+        return;
       }
+      if (error?.details?.currentPassword || error?.details?.code === 'INVALID_CURRENT_PASSWORD') {
+        setErrors((c) => ({ ...c, currentPassword: error.message }));
+        return;
+      }
+      toast.error(error?.message || t('account.saveFailed'));
     } finally {
       setSaving(false);
     }

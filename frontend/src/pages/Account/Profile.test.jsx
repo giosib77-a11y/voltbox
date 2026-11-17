@@ -12,6 +12,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import Profile from './Profile.jsx';
+import * as httpApi from '../../services/httpApi.js';
 import { t } from '../../i18n/index.js';
 
 const updateProfile = vi.fn();
@@ -28,12 +29,13 @@ const auth = { user, updateProfile };
 
 vi.mock('../../hooks/useAuth.js', () => ({ useAuth: () => auth }));
 
-vi.mock('../../hooks/useToast.js', () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn() }),
-}));
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock('../../hooks/useToast.js', () => ({ useToast: () => toast }));
 
 beforeEach(() => {
   updateProfile.mockReset().mockResolvedValue({});
+  toast.success.mockReset();
+  toast.error.mockReset();
 });
 
 const passwordField = () => screen.queryByLabelText(new RegExp(t('account.currentPassword')));
@@ -75,5 +77,71 @@ describe('the profile form', () => {
     await userEvent.click(screen.getByRole('button', { name: t('common.save') }));
 
     expect(updateProfile).not.toHaveBeenCalled();
+  });
+});
+
+// The real API answers with the code and no per-field details, so these go
+// through the real http client with a mocked fetch reply.
+describe('a refusal from the real API', () => {
+  const reply = (body, status) => ({
+    ok: false,
+    status,
+    json: async () => body,
+  });
+
+  async function submitChangedEmail() {
+    updateProfile.mockImplementation(httpApi.updateProfile);
+    render(<Profile />);
+    const email = screen.getByLabelText(new RegExp(t('fields.email')));
+    await userEvent.clear(email);
+    await userEvent.type(email, 'taken@example.ge');
+    await userEvent.type(passwordField(), 'supersecret1');
+    await userEvent.click(screen.getByRole('button', { name: t('common.save') }));
+    return email;
+  }
+
+  // The error id comes first in aria-describedby; a hint id may follow it.
+  const messageOf = (field) => document.getElementById(field.getAttribute('aria-describedby').split(' ')[0]);
+
+  it('shows a taken email at the email field, with no toast', async () => {
+    global.fetch = vi.fn(async () =>
+      reply({ error: { code: 'EMAIL_ALREADY_EXISTS', message: 'email taken' } }, 409),
+    );
+
+    const email = await submitChangedEmail();
+
+    await waitFor(() => expect(email).toHaveAttribute('aria-invalid', 'true'));
+    expect(messageOf(email)).toHaveTextContent(t('apiErrors.EMAIL_ALREADY_EXISTS'));
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('shows a wrong current password at its own field, with no toast', async () => {
+    global.fetch = vi.fn(async () =>
+      reply(
+        {
+          error: {
+            code: 'INVALID_CURRENT_PASSWORD',
+            message: 'wrong password',
+            details: [{ field: 'currentPassword', message: 'wrong password' }],
+          },
+        },
+        400,
+      ),
+    );
+
+    await submitChangedEmail();
+
+    const field = passwordField();
+    await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'));
+    expect(messageOf(field)).toHaveTextContent(t('apiErrors.INVALID_CURRENT_PASSWORD'));
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('still toasts a refusal that belongs to no field', async () => {
+    global.fetch = vi.fn(async () => reply({ error: { code: 'INTERNAL_ERROR', message: 'boom' } }, 500));
+
+    await submitChangedEmail();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
   });
 });
