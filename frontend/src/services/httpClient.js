@@ -18,7 +18,13 @@ import {
   SessionExpiredError,
   ValidationError,
 } from './errors.js';
-import { getAccessToken, isAuthPath, readSession, refreshSession } from './session.js';
+import {
+  getAccessToken,
+  isAuthPath,
+  readSession,
+  refreshFailedOnNetwork,
+  refreshSession,
+} from './session.js';
 import { i18n, t } from '../i18n/index.js';
 
 const BASE_URL = (import.meta.env?.VITE_API_BASE_URL || '').replace(/\/+$/, '');
@@ -218,7 +224,12 @@ export async function request(path, options = {}) {
       // The refresh gave no token but did not end the session (network error,
       // 429, 5xx): the session is still stored and may well be valid, so this is
       // a temporary failure, not an expired session - no redirect, no logout.
-      if (readSession()) throw new ApiError(t('apiErrors.fallback'), 0);
+      if (readSession()) {
+        throw new ApiError(
+          refreshFailedOnNetwork() ? t('apiErrors.network') : t('apiErrors.fallback'),
+          0,
+        );
+      }
       // The session is gone and cleared. `refreshSession` redirected to the login
       // page only if a request the shopper made was waiting; a background one
       // (`background: true`) just ends the session and the app follows it. One

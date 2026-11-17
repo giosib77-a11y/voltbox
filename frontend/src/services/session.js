@@ -25,6 +25,14 @@ const NO_REFRESH_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/au
 /** The in-flight refresh, shared by every caller until it settles. */
 let inFlight = null;
 
+/** Whether the latest refresh got no answer at all (as opposed to a 429/5xx). */
+let lastRefreshWasNetworkFailure = false;
+
+/** True when the latest refresh failed because the network did. */
+export function refreshFailedOnNetwork() {
+  return lastRefreshWasNetworkFailure;
+}
+
 /**
  * Name of the cross-tab lock.
  *
@@ -86,7 +94,12 @@ export function writeSession(session) {
   writeJSON(STORAGE_KEYS.auth, session);
 }
 
-/** Drops the session. Called on logout and when a refresh fails. */
+/**
+ * Drops the session. Called on logout, after a password change, when a
+ * customer signs in on the admin page, for a session stored in the old shape,
+ * and by the refresh on a 401 or a 2xx that carries no token - never by the
+ * refresh on a network error, 429 or 5xx.
+ */
 export function clearSession() {
   writeJSON(STORAGE_KEYS.auth, null);
 }
@@ -194,6 +207,7 @@ export function refreshSession({ background = false } = {}) {
   if (!staleToken) return Promise.resolve(null);
 
   foregroundWaiting = !background;
+  lastRefreshWasNetworkFailure = false;
   let ended = false;
   const endSession = () => {
     clearSession();
@@ -219,8 +233,10 @@ export function refreshSession({ background = false } = {}) {
         headers: { Accept: 'application/json' },
       });
     } catch {
-      // Network failure: the session may still be valid, so keep it and let the
-      // caller surface the original error rather than logging the user out.
+      // Network failure: the session may still be valid, so keep it rather than
+      // logging the user out. The caller (httpClient.js) then raises its own
+      // error and asks `refreshFailedOnNetwork()` which words to use.
+      lastRefreshWasNetworkFailure = true;
       return null;
     }
 
@@ -263,6 +279,7 @@ export function refreshSession({ background = false } = {}) {
 export function __resetSessionStateForTests() {
   inFlight = null;
   foregroundWaiting = false;
+  lastRefreshWasNetworkFailure = false;
   endedListeners.clear();
   onSessionLost = defaultOnSessionLost;
 }
