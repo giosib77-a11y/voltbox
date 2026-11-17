@@ -444,6 +444,41 @@ pytest ერთდროულად მხოლოდ ერთი; ძვე
   ტოლი; frontend არ შეცვლილა) · build `http` ✅ · build `mock` ✅. დამოკიდებულებები და Dockerfile არ შეცვლილა, image არ აწყობილა.
   არ გაშვებულა: ნამდვილი ბრაუზერი (APNG-ის ჩვენება), §10-ის პროცედურა ცოცხალზე, Render, e2e, ლაივ ბაზა.
 
+**`/auto` → `/fix A-089 A-049 A-047 A-050 A-052 A-053 A-054 A-064 A-082` 2026-11-17** (ბრენჩი
+`fix/a089-a049-a047-a050-a082`, `agent-system`-იდან, `58211a5`). ახალი აუდიტი არ გაშვებულა; მფლობელმა ყველა წინასწარ
+დაამტკიცა. ცხრავე ღია იყო; A-050-ის ოთხივე შეუსაბამობა ჯერ კიდევ არსებობდა. ძველ კოდზე ჩავარდნა ორკესტრატორმა
+`git stash`-ით გაიმეორა კოდის ყველა ID-ზე; pytest ერთდროულად მხოლოდ ერთი.
+- A-089 — fixed (verified), `a4763f3`; security-auditor + code-reviewer — დახურულია.
+- A-049 — fixed (verified), `3b0e283`; code-reviewer — დახურულია.
+- A-047 — fixed (verified), `e63ac33` (+ Decision Log, CLAUDE.md); code-reviewer — დახურულია. gzip, ცვლილებამდე → შემდეგ:
+  | chunk | http | mock |
+  |---|---|---|
+  | constants (entry, ყველა გვერდზე) | 22.92 → 12.97 | 22.89 → 12.94 |
+  | en (ახალი, მხოლოდ `/en`) | — → 9.01 | — → 9.01 |
+  | index | 20.61 → 20.04 | 35.24 → 34.63 |
+  | adminApi (lazy) | 0.70 → 2.38 | — |
+  | vendor / icons | 89.04 / 5.88 (უცვლელი) | 88.85 / 4.60 (უცვლელი) |
+  `/`-ის საწყისი JS ≈ −10.5 kB gzip ორივე რეჟიმში; `/en` ≈ −1.5 kB (ინგლისური ცალკე მოთხოვნაა, A-109).
+- A-050 — fixed (reviewed), `43dffb4`; A-052 — fixed (reviewed), `efd3525`; A-053 — fixed (verified), `bfc457d`;
+  A-054 — fixed (verified), `bca370f`; A-064 — fixed (verified), `0c42877`; A-082 — fixed (verified), `737c83c`;
+  code-reviewer — ყველა დახურულია.
+- re-review-ის nit-ები ამ ბრენჩის საკუთარ ტექსტში/ტესტებში — გასწორდა იმავე commit-ებში. ახალი: A-107, A-108 (დაუდასტურებელი),
+  A-109 (nit-ები) და **A-110 (should-fix, ჩვენამდეც ასე იყო, ამ ბრენჩის ფარგლებს სცდება — ღიაა)**.
+- **vitest-ის ჩავარდნა პარალელური pytest-ისას** (მფლობელის დამატებითი პუნქტი) — `482d353` (+ Decision Log). ჩუმ მანქანაზე
+  5/5 ზედიზედ მწვანე; დატვირთვაზე (სამი ნაკრები ერთად) გამეორდა: HomeHero 6-დან 2-ში, Register / catalogNames / BrandList
+  თითოჯერ — ყველა `testTimeout` 5 s-ის ან `findBy*`-ის 1 s-ის ამოწურვა. გასწორდა ზედმეტი ხარჯი (HomeHero-ს per-test
+  `resetModules`, userEvent-ის keystroke delay, ერთი რეალური debounce, lazy გვერდების preload) და ლოდინი დატვირთვაზე
+  გაიზომა (`testTimeout` 15 s, `asyncUtilTimeout` 3 s). შემდეგ: 6/6 ნაკრები მწვანე backend-ის სრულ pytest-თან ერთად.
+- პროცესის დარღვევები (არაფერს შეხებია): ერთმა backend-dev-მა ერთხელ ცარიელი heredoc გაუშვა (`cat >/dev/null`); ორი
+  frontend-dev ერთ ფაილზე (`httpClient.js`) ერთდროულად მუშაობდა — ორკესტრატორის შეცდომა, შედეგი ხელახლა გადამოწმდა.
+- pytest: 1970 (baseline `58211a5`) → **1976 passed, 1 skipped**; vitest 683 / 58 → **775 / 69**, `act()` 25 → 0.
+- საბოლოო შემოწმება (`482d353`, tester + ორკესტრატორი): ruff ✅ · format 188 ✅ · mypy 168 ✅ · **pytest 1976 passed,
+  1 skipped** · alembic 0001→0017 + check ✅ (ცარიელ `voltbox_final_check`-ზე, შემდეგ წაიშალა) · eslint ✅ · **vitest 775 / 69**,
+  0 `act()` · build `http` ✅ · build `mock` ✅ · Node 22.23.2 / npm 10.9.8 container-ში (`git archive HEAD frontend backend`):
+  `npm ci`, eslint, vitest 775 / 69, ორივე build ✅. დამოკიდებულებები და Dockerfile არ შეცვლილა.
+  არ გაშვებულა: ნამდვილი ბრაუზერი (`/en`-ის ჩატვირთვა, ველის შეცდომების ჩვენება, ადმინის შეცდომის ტექსტები), e2e, Render,
+  ლაივ ბაზა.
+
 ### Should-fix
 
 #### A-030 · should-fix · refresh-ის 429 ან 5xx პასუხი მომხმარებელს სისტემიდან აგდებს
@@ -738,7 +773,9 @@ pytest ერთდროულად მხოლოდ ერთი; ძვე
 - **გამოსწორება:** ინგლისური — მხოლოდ `/en`-ზე, ადმინის ტექსტები — ადმინის chunk-ში. build-ის ზომები ცვლილებამდე
   და შემდეგ — report-ში.
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `e63ac33`. entry-ის `constants` 22.92 → 12.95 kB gzip (http), 22.89 → 12.92 (mock);
+  `en` ცალკე chunk-ია (9.01 kB), მხოლოდ `/en`-ზე. ადმინის 38 `apiErrors` → `src/admin/i18n/ka.json`.
+  `loading.test.js`-ის 6 ტესტი ძველ კოდზე ვარდება. re-review: code-reviewer — დახურულია.
 
 #### A-048 · nit · `robots.txt` ინგლისურ პირად გვერდებს არ ფარავს
 - **ფაილი:** `frontend/public/robots.txt:8-11`
@@ -757,7 +794,9 @@ pytest ერთდროულად მხოლოდ ერთი; ძვე
 - **გამოსწორება:** ტესტები პრიორიტეტით: Register (ვალიდაცია, redirect, სერვერის შეცდომა), Addresses (CRUD, default),
   Pagination; ადმინის გვერდებზე smoke (რენდერი, ცარიელი მდგომარეობა, შეცდომა). `act()` გაფრთხილებები გასწორდეს.
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `3b0e283`. 9-ვე ფაილს ტესტი აქვს; `act()` გაფრთხილებები 25 → 0 (ითვლება
+  `vitest run --reporter=default`-ით — agent-ის shell-ში ჩვეულებრივი `npm test` გამავალი ტესტების console-ს მალავს).
+  Addresses-ს edit და „set default" ღილაკი არ აქვს, ამიტომ ისინი არ მოწმდება. re-review: code-reviewer — დახურულია.
 
 #### A-050 · nit · დოკუმენტაცია კოდს ჩამორჩება
 - **ფაილი / სცენარი:**
@@ -767,7 +806,8 @@ pytest ერთდროულად მხოლოდ ერთი; ძვე
   - `TODO.md` №18 — „სრული e2e CI-ში არაა“, `.github/workflows/e2e.yml` კი არსებობს (განრიგით + `workflow_dispatch`).
 - **გამოსწორება:** ოთხივე ადგილი სიმართლეს შეესაბამოს.
 - **owner:** task-executor
-- **status:** open
+- **status:** fixed (reviewed) — `43dffb4`. ოთხივე ჯერ კიდევ არსებობდა; ასევე `MOCK ONLY` Login/Register/ChangePassword-ში
+  და `frontend/README.md`-ის mock-ავტორიზაციის შენიშვნა. re-review: code-reviewer — დახურულია.
 
 #### A-051 · nit · დაუდასტურებელი შეკვეთა მარაგს უვადოდ იკავებს
 - **ფაილი:** `backend/app/services/order.py`, `backend/app/services/order_status.py`
@@ -788,7 +828,8 @@ pytest ერთდროულად მხოლოდ ერთი; ძვე
   გასწორებულია. იქვე `:77` (სტუმრის lookup token) „256-bit"-ს ამბობს — არ შემოწმებულა.
 - **გამოსწორება:** „384-bit (`token_urlsafe(48)`)".
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (reviewed) — `efd3525`. `:77` (lookup token) მართლა 256-ია (`token_urlsafe(32)`); იგივე შეცდომა
+  `security.py:8`-ის docstring-შიც იყო. re-review: code-reviewer — დახურულია.
 
 #### A-053 · nit · A-030-ის ტესტი შეცდომის status-ს არ აფიქსირებს
 - **ფაილი:** `frontend/src/services/sessionLost.test.js:122`
@@ -797,7 +838,8 @@ pytest ერთდროულად მხოლოდ ერთი; ძვე
   შეიცვლება, ტესტი გაივლის, ადმინი კი refresh-ის 503-ზე login-ზე გადავა.
 - **გამოსწორება:** `expect(error).toMatchObject({ name: 'ApiError', status: 0 })`.
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `bfc457d`. throw-ის status 401-ზე → 4-ვე შემთხვევა (429/500/502/503) ვარდება.
+  re-review: code-reviewer — დახურულია.
 
 #### A-054 · nit · `session.js`-ის ორი კომენტარი ახალ ქცევას აღარ ემთხვევა
 - **ფაილი:** `frontend/src/services/session.js:89` („Called on logout and when a refresh fails" — ახლა მხოლოდ 401-ზე
@@ -805,7 +847,8 @@ pytest ერთდროულად მხოლოდ ერთი; ძვე
   `apiErrors.fallback`-ს აჩვენებს; ქსელის შეცდომაზე `apiErrors.network` უფრო ზუსტი იქნებოდა).
 - **გამოსწორება:** კომენტარების ტექსტი; სურვილისამებრ ქსელის შემთხვევაში `apiErrors.network`.
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `bca370f`. ორივე კომენტარი + ქსელის შემთხვევაში `apiErrors.network` (429/5xx — fallback).
+  `session.test.js`-ის ქსელის ტესტი ძველ კოდზე ვარდება (`git stash`). re-review: code-reviewer — დახურულია.
 
 ### A-032/A-033-ის re-review და ინციდენტი (2026-11-12)
 
@@ -852,7 +895,8 @@ pytest ერთდროულად მხოლოდ ერთი; ძვე
 - **გამოსწორება:** subprocess ტესტი, რომელიც ინციდენტს plugin-ის გარეშე იმეორებს: ჯერ `app.core.config`, მერე `tests.conftest`
   იმპორტი, `DATABASE_URL=…db.invalid.example/voltbox` → exit ≠ 0 და `built before tests/conftest.py`.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `0c42877`. `tests/test_conftest_guard.py` + `tests/_guard_child.py`; conftest-ის ორი
+  გამოძახების გათიშვისას უარის ტესტები ვარდება, საკონტროლო გადის. re-review: code-reviewer — დახურულია.
 
 #### A-065 · nit · `alembic/env.py`-ში `%`-იანი პაროლი URL-ს traceback-ში ბეჭდავს (fix-მდეც ასე იყო)
 - **ფაილი:** `backend/alembic/env.py` (`config.set_main_option("sqlalchemy.url", …)`)
@@ -1179,7 +1223,7 @@ pytest ერთდროულად მხოლოდ ერთი; ძვე
 - **სცენარი (კოდით, frontend-dev):** `/search?` აკრძალულია, `/en/search?…` — არა (`routes.jsx:134`, `/en` basename).
 - **გამოსწორება:** `Disallow: /en/search?` + ტესტი `robotsTxt.test.js`-ში. (A-048-ში მხოლოდ სამი გზა იყო დამტკიცებული.)
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `737c83c`. ტესტი ძველ ფაილზე ვარდება (`git stash`). re-review: code-reviewer — დახურულია.
 
 #### A-083 · nit · ორი AppError 429-ს `Retry-After` header არ აქვს
 - **ფაილი:** `backend/app/services/auth.py:149` (`_password_check_locked`; წამები მხოლოდ body-ში, `retryAfterSeconds`),
@@ -1263,7 +1307,9 @@ pytest ერთდროულად მხოლოდ ერთი; ძვე
 - **გამოსწორება:** change-password-ზე `newPassword` ველის შეცდომა ისე, როგორც reset-ზე; მინიშნებაში „გამეორება და
   მიმდევრობა არ შეიძლება“. ადმინის 12 — ადმინის პანელის პაროლის შეცვლის ფორმაზე (თუ ასეთი არსებობს).
 - **owner:** frontend-dev
-- **status:** open
+- **status:** fixed (verified) — `a4763f3`. ChangePassword/Reset/Register: სერვერის უარი ველთან, toast-ის გარეშე;
+  12 ახალი ტესტი ძველ კოდზე ვარდება (`git stash`). ადმინ პანელში პაროლის ფორმა არ არსებობს. re-review:
+  security-auditor და code-reviewer — დახურულია. ნარჩენი: A-107.
 
 #### A-090 · nit · reset-ის Retry-After-ის ორი ტესტი გაფუჭებულ ფუნქციასაც გაატარებდა
 - **ფაილი:** `backend/tests/test_app_error_headers.py:110-117`, `backend/tests/test_password_reset.py:545-547`
@@ -1456,3 +1502,41 @@ A-102 security-auditor-მა იპოვა და მფლობელის
 - **owner:** backend-dev
 - **status:** fixed (reviewed) — მხოლოდ კომენტარები: „a seventh … 13.3 megapixels against 1.9" (JPEG 4:2:0 vs WEBP,
   100 MiB-ზე); `largest_that_fits` / `largest_that_is_turned` — „shape", A-103-ის მითითებით. კოდი და მნიშვნელობები უცვლელია.
+
+### A-089/A-049/A-047/A-050/A-052–A-054/A-064/A-082-ის გასწორებისა და re-review-ის მიგნებები (2026-11-17)
+
+#### A-107 · nit · `Profile.jsx`-ზე დაკავებული ელფოსტა http რეჟიმში მხოლოდ toast-ით ჩანს (ჩვენამდეც ასე იყო)
+- **ფაილი:** `frontend/src/pages/Account/Profile.jsx:92`
+- **სცენარი (კოდით, security-auditor + code-reviewer):** `error?.details?.email` მხოლოდ mock-ის ფორმას ემთხვევა; ნამდვილი API
+  `EMAIL_ALREADY_EXISTS`-ს `details`-ის გარეშე აბრუნებს. A-089-მა იგივე Register-ზე გაასწორა (კოდით შემოწმება).
+- **გამოსწორება:** Register-ის მსგავსად `error?.details?.code === 'EMAIL_ALREADY_EXISTS'` → email ველთან, toast-ის გარეშე; ტესტი.
+- **owner:** frontend-dev
+- **status:** open
+
+#### A-108 · nit (დაუდასტურებელი) · refresh-ის `fetch`-ს ვადა არ აქვს (ჩვენამდეც ასე იყო)
+- **ფაილი:** `frontend/src/services/session.js:~228`
+- **სცენარი (კოდით, code-reviewer):** refresh-ის მოთხოვნას `timeoutSignal` არ აქვს. თუ სერვერი კავშირს იღებს და არასდროს პასუხობს,
+  ყველა მოთხოვნა, რომელიც ამ refresh-ს ელოდება, ჩერდება. ჩვეულებრივ მოთხოვნებს httpClient-ის timeout აქვს. გაშვებით არ შემოწმებულა.
+- **გამოსწორება:** იგივე timeout, რაც httpClient-ის მოთხოვნებს; ვადის გასვლა = ქსელის შეცდომა (სესია რჩება, `apiErrors.network`).
+- **owner:** frontend-dev
+- **status:** open
+
+#### A-109 · nit · `/en`-ზე ინგლისური chunk წინასწარ არ იტვირთება
+- **ფაილი:** `frontend/src/i18n/index.js` (`loadEnglish`), `frontend/index.html`
+- **სცენარი (A-047-ის trade-off):** `en-*.js` (9.01 kB gzip) entry-ის შესრულების შემდეგ ითხოვება — ინგლისურ გვერდს პირველ
+  რენდერამდე ერთი დამატებითი round trip აქვს. ქართულ გვერდს არ ეხება.
+- **გამოსწორება (თუ საჭირო გახდება):** `/en`-ზე `modulepreload` ინგლისური chunk-ისთვის (build-ის დროს ცნობილი სახელით).
+- **owner:** frontend-dev
+- **status:** open
+
+#### A-110 · should-fix · კატეგორიების ერთი ჩავარდნილი ჩატვირთვა ყველა კატეგორიის გვერდს „ვერ მოიძებნა"-დ აქცევს reload-მდე (ჩვენამდეც ასე იყო)
+- **ფაილი:** `frontend/src/hooks/useProducts.js:~95` (`useCategories`), `frontend/src/pages/Category.jsx:~55`
+- **სცენარი (კოდით, code-reviewer; ორკესტრატორმა წაიკითხა):** `categoriesPromise` უარყოფილ promise-საც ინახავს გვერდის
+  სიცოცხლის ბოლომდე. `GET /categories` ერთხელ ჩავარდა (ქსელი, deploy, 5xx) → ყოველი შემდეგი `useCategories` იმავე rejected
+  promise-ს იღებს, `Category.jsx`-ის `!categoriesLoading && !category` → „კატეგორია ვერ მოიძებნა", retry არსად არის — მხოლოდ
+  სრული reload შველის. `useDeliveryRules.js:19-22` (`loadDeliveryRules`) იგივე cache-ს `.catch`-ში ასუფთავებს; აქ — არა.
+  გაშვებით არ შემოწმებულა. ამ ბრენჩის ფარგლებს (დამტკიცებული ID-ები) სცდება, ამიტომ არ გასწორებულა.
+- **გამოსწორება:** `loadDeliveryRules`-ის pattern: `api.getCategories().catch((e) => { categoriesPromise = null; throw e; })`;
+  ტესტი: ჯერ ჩავარდნა, მერე წარმატება — მეორე mount კატეგორიას აჩვენებს.
+- **owner:** frontend-dev
+- **status:** open
