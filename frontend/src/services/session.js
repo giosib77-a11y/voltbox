@@ -19,6 +19,26 @@ import { languageFromPath, localizedPath, stripLanguage } from '../i18n/index.js
 
 const BASE_URL = (import.meta.env?.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
+/**
+ * How long to wait before giving up on a request, in milliseconds.
+ *
+ * Long, deliberately. A free-tier host puts the API to sleep after idling and
+ * the first request afterwards waits for the process to start, so a tight
+ * deadline would turn a slow first page into a failed one. Shared with
+ * httpClient.js (which imports this module, so it lives here, not there).
+ */
+export const REQUEST_TIMEOUT_MS = 45_000;
+
+/** An abort signal that fires after the deadline, where the browser has one. */
+export function timeoutSignal() {
+  // Guarded: AbortSignal.timeout is recent enough that an older browser, or a
+  // test environment, may not have it. Without it the request simply behaves
+  // as it did before rather than throwing here.
+  return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+    ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    : undefined;
+}
+
 /** Paths whose own 401 must never trigger a refresh (it would recurse). */
 const NO_REFRESH_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'];
 
@@ -51,8 +71,8 @@ const REFRESH_LOCK = 'voltbox-auth-refresh';
  * lock is the behaviour this had before, so the fallback is a smaller window
  * rather than a broken one.
  *
- * The lock is released when the promise settles, and fetch always settles, so
- * a stuck holder is bounded by the browser's own network timeout.
+ * The lock is released when the promise settles. The refresh carries the
+ * request deadline (REQUEST_TIMEOUT_MS), so a stuck holder is bounded by it.
  */
 function withRefreshLock(task) {
   const locks = globalThis.navigator?.locks;
@@ -221,6 +241,11 @@ export function refreshSession({ background = false } = {}) {
     const current = readSession()?.token ?? null;
     if (current && current !== staleToken) return current;
 
+    // The same deadline as every other request. Without it a server that
+    // accepts the connection and never answers would hold this lock, and with
+    // it every waiting request and every other tab's refresh. A deadline that
+    // passes is a network failure: the session is kept, only a 401 ends it.
+    const signal = timeoutSignal();
     let response;
     try {
       // No body and no token: the refresh token is an httpOnly cookie, which
@@ -231,6 +256,7 @@ export function refreshSession({ background = false } = {}) {
         method: 'POST',
         credentials: 'include',
         headers: { Accept: 'application/json' },
+        signal,
       });
     } catch {
       // Network failure: the session may still be valid, so keep it rather than
@@ -250,7 +276,18 @@ export function refreshSession({ background = false } = {}) {
     }
     if (!response.ok) return null;
 
-    const session = await response.json().catch(() => null);
+    // The deadline also covers the body. If it passes while the body is being
+    // read, that is the same network failure (session kept); only a body that
+    // arrived and is not a session ends it.
+    let session = null;
+    try {
+      session = await response.json();
+    } catch {
+      if (signal?.aborted) {
+        lastRefreshWasNetworkFailure = true;
+        return null;
+      }
+    }
     if (!session?.token) {
       endSession();
       return null;

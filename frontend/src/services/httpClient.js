@@ -24,29 +24,11 @@ import {
   readSession,
   refreshFailedOnNetwork,
   refreshSession,
+  timeoutSignal,
 } from './session.js';
 import { i18n, t } from '../i18n/index.js';
 
 const BASE_URL = (import.meta.env?.VITE_API_BASE_URL || '').replace(/\/+$/, '');
-
-/**
- * How long to wait before giving up on a request, in milliseconds.
- *
- * Long, deliberately. A free-tier host puts the API to sleep after idling and
- * the first request afterwards waits for the process to start, so a tight
- * deadline would turn a slow first page into a failed one.
- */
-const REQUEST_TIMEOUT_MS = 45_000;
-
-/** An abort signal that fires after the deadline, where the browser has one. */
-function timeoutSignal() {
-  // Guarded: AbortSignal.timeout is recent enough that an older browser, or a
-  // test environment, may not have it. Without it the request simply behaves
-  // as it did before rather than throwing here.
-  return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
-    ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-    : undefined;
-}
 
 /** ავტორიზაციის ტოკენი — რეალურ backend-ზე httpOnly cookie სჯობს. */
 function authHeader() {
