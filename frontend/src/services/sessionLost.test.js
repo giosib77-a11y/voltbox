@@ -118,8 +118,10 @@ describe('a session that cannot be recovered', () => {
 
       const error = await httpApi.getOrders().catch((e) => e);
 
-      expect(error).toBeTruthy();
-      expect(error.name).not.toBe('SessionExpiredError');
+      // httpClient.js throws `new ApiError(fallback, 0)` here. The admin shell
+      // shows its "unreachable" screen only for a non-401 error, so a 401
+      // (or a SessionExpiredError) would send the admin to login on an outage.
+      expect(error).toMatchObject({ name: 'ApiError', status: 0 });
       expect(readSession()).toMatchObject({ token: 'expired' });
       expect(lost).not.toHaveBeenCalled();
       expect(ended).not.toHaveBeenCalled();
