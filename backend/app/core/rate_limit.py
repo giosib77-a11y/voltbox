@@ -64,13 +64,14 @@ AUTH_RATE_LIMIT = "5/minute"
 
 #: `POST /auth/refresh`. Not AUTH_RATE_LIMIT: that one is there to stop password
 #: guessing, and refresh has no password to guess. It is spent with the
-#: `HttpOnly; SameSite=strict; Path=/api/v1/auth` cookie, whose token is 256-bit
-#: random and rotated on every use, so no rate makes it guessable. What the
-#: endpoint does meet is many shoppers behind one address (office NAT, mobile
-#: CGNAT) whose access tokens expire within the same minutes; at five a minute
-#: the sixth got a 429, which the storefront treats as a logout. Thirty a minute
-#: carries a crowd of real sessions and still caps a script hammering the
-#: endpoint (each call is a database lookup and, on a hit, a write).
+#: `HttpOnly; SameSite=strict; Path=/api/v1/auth` cookie, whose token is 384-bit
+#: (`token_urlsafe(48)`) random and rotated on every use, so no rate makes it
+#: guessable. What the endpoint does meet is many shoppers behind one address
+#: (office NAT, mobile CGNAT) whose access tokens expire within the same
+#: minutes; at five a minute the sixth got a 429, which the storefront treats
+#: as a logout. Thirty a minute carries a crowd of real sessions and still caps
+#: a script hammering the endpoint (each call is a database lookup and, on a
+#: hit, a write).
 #:
 #: Still at AUTH_RATE_LIMIT, because they check or change a password or send an
 #: email: login, register, forgot/reset password, change-password and profile
@@ -90,11 +91,11 @@ REFRESH_RATE_LIMIT = "30/minute"
 RESET_EMAIL_ADDRESS_LIMIT = "3/hour"
 
 #: Guest order lookup. Order numbers are VB-YYYYMMDD-NNNNN from one sequence, so
-#: the number is guessable; the secret is the 256-bit token issued with the
-#: order, which no rate makes guessable. This limit was the only defence while
-#: the secret was the shopper's phone, and stays as a cap on what any one
-#: address can make the endpoint do. Ten a minute leaves a real shopper
-#: untouched.
+#: the number is guessable; the secret is the 256-bit (`token_urlsafe(32)`)
+#: token issued with the order, which no rate makes guessable. This limit was
+#: the only defence while the secret was the shopper's phone, and stays as a
+#: cap on what any one address can make the endpoint do. Ten a minute leaves a
+#: real shopper untouched.
 LOOKUP_RATE_LIMIT = "10/minute"
 
 #: Crash reports from the browser. Unauthenticated by necessity - a crash
