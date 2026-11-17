@@ -14,7 +14,7 @@ import { getSafeRedirect } from '../utils/redirect.js';
 import { t } from '../i18n/index.js';
 import Rich from '../i18n/Rich.jsx';
 
-// MOCK ONLY — replace with real auth API.
+// Signs in through AuthContext, i.e. services/api.js (real API in http mode, mockApi in mock mode).
 export default function Login() {
   useDocumentTitle(t('nav.login'));
 

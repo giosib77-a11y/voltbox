@@ -15,7 +15,7 @@ import { t } from '../i18n/index.js';
 
 const EMPTY = { firstName: '', lastName: '', email: '', password: '', confirmPassword: '' };
 
-// MOCK ONLY — replace with real auth API.
+// Registers through AuthContext, i.e. services/api.js (real API in http mode, mockApi in mock mode).
 export default function Register() {
   useDocumentTitle(t('auth.register'));
 

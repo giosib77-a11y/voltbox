@@ -46,17 +46,25 @@ const API_PROXY = {
  * React, the router and i18next in a `vendor` chunk, lucide in an `icons` chunk.
  *
  * In one chunk with the app, every deploy renamed all of it, and a returning
- * visitor downloaded React again with each code change: 92.6 kB gzip on the
- * entry path. Split, a code change renames only `index` on that path
- * (16.1 kB under Vite 8); `vendor` (66.9 kB) keeps its name until a
+ * visitor downloaded React again with each code change. Split, a code change
+ * renames only `index` on that path; `vendor` keeps its name until a
  * dependency changes.
+ *
+ * Sizes, gzip, `VITE_API_MODE=http` build (re-measured 2026-11-17): `vendor`
+ * 89.0 kB, `index` 20.0 kB, `icons` 5.9 kB, `constants` 13.0 kB. In the mock
+ * build `index` is 34.6 kB (it carries mockApi and its products), `vendor`
+ * 88.9 kB, `icons` 4.6 kB, `constants` 12.9 kB, all gzip. The
+ * figures from the first measurement (a single 92.6 kB gzip chunk on the entry
+ * path, `index` 16.1 kB and `vendor` 66.9 kB under Vite 8) are out of date and
+ * were not repeated, because the app has grown since; the argument depends on
+ * which chunk is renamed, not on those numbers.
  *
  * lucide gets its own chunk because what goes into it depends on the app:
  * adding an icon changes it. Inside `vendor` that would evict React too; left
- * to the bundler, the icons land in `index` and change on every deploy, 2.2 kB
- * more re-downloaded on the entry path each time. The cost is the first visit,
- * 2.7 kB gzip more on that path, icons that only lazy pages use and that now
- * load up front.
+ * to the bundler, the icons land in `index` and change on every deploy, so the
+ * icons are re-downloaded on the entry path each time (2.2 kB gzip when first
+ * measured; not re-measured). The cost is the first visit: icons that only
+ * lazy pages use now load up front (`icons` is 5.9 kB gzip today).
  *
  * `codeSplitting` groups, not `manualChunks`: under Rolldown the function is
  * deprecated and ignored once `codeSplitting` is set.

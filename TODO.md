@@ -120,8 +120,12 @@
 - [ ] **17. ტაბებზე ისრებით ნავიგაცია** — ARIA-ს ნიმუში ისრებს ელოდება.
       Tab-ით სრულად მუშაობს.
 
-- [ ] **18. სრული e2e CI-ში** — docker + ბაზა + ორი სერვერი სჭირდება.
-      ახლა ხელით: `backend/scripts/e2e/up.sh` და `journey.py`
+- [x] **18. სრული e2e CI-ში** — **გაკეთდა.** `.github/workflows/e2e.yml`
+      ეშვება ყოველ ღამე (cron `37 2 * * *`, 02:37 UTC) და ხელით
+      (`workflow_dispatch`): `backend/scripts/e2e/up.sh` + `journey.py` და
+      `frontend/scripts/e2e/cart-sync.mjs` (Chromium, ქართულად და `/en`-ზე).
+      push-ზე **არ** ეშვება; ხელით გაშვება კვლავ შესაძლებელია იმავე
+      სკრიპტებით
 
 ---
 

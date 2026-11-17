@@ -13,7 +13,7 @@ import { t } from '../../i18n/index.js';
 
 const EMPTY = { currentPassword: '', newPassword: '', confirmPassword: '' };
 
-// MOCK ONLY — replace with real auth API.
+// Changes the password through AuthContext, i.e. services/api.js (real API in http mode, mockApi in mock mode).
 export default function ChangePassword() {
   useDocumentTitle(t('auth.changePassword'));
 

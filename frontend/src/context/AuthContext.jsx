@@ -5,9 +5,11 @@ import { subscribeSessionEnded } from '../services/session.js';
 /**
  * ავტორიზაციის მდგომარეობა.
  *
- * ⚠️  MOCK ONLY — replace with real auth API.
- *     სესია ინახება localStorage-ში (`auth:v1`); რეალურ backend-ზე
- *     გადასვლისას `services/httpApi.js` იმავე ხელმოწერებს ინარჩუნებს.
+ * ყველა გამოძახება `services/api.js`-ზე გადის: `VITE_API_MODE=http`-ზე ეს
+ * რეალური backend-ია (`services/httpApi.js`), `mock`-ზე — `services/mockApi.js`
+ * (მომხმარებლები localStorage-ში). სესია ორივე რეჟიმში localStorage-ის
+ * `auth:v1`-შია: http-ზე მას `services/session.js` მართავს, mock-ზე —
+ * `services/mockApi.js`. ორივე იმავე ხელმოწერებს ინარჩუნებს.
  */
 
 const AuthContext = createContext(null);
@@ -24,7 +26,9 @@ export function AuthProvider({ children }) {
     setInitializing(false);
   }, []);
 
-  // session.js clears the stored session when a refresh fails; without this the
+  // session.js clears the stored session when the server rejects the refresh
+  // (401) or answers it without a token (not on a network error, 429 or 5xx);
+  // without this the
   // user restored above would stay on screen and the cart sync would never see
   // a sign-out.
   useEffect(() => subscribeSessionEnded(() => setUser(null)), []);

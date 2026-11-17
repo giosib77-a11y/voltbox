@@ -57,7 +57,7 @@ npm run gen:images   # პროდუქტების placeholder-სურ�
 | Build | Vite 8 |
 | UI | React 18 (JSX, ფუნქციური კომპონენტები + hooks) |
 | Styling | Tailwind CSS 3 (utility-first) |
-| Routing | React Router v6 (`createBrowserRouter`) |
+| Routing | React Router v7 (library mode, `createBrowserRouter` from `react-router`) |
 | State | Context + `useReducer` (Cart, Auth, Toast) |
 | Icons | `lucide-react` |
 | i18n | `i18next` (React-ის binding-ის გარეშე — [ენები](#ენები)) |
@@ -572,9 +572,11 @@ WCAG 2.1 AA-ზე (≥ 4.5:1 ტექსტისთვის, ≥ 3:1 UI-ე�
 დამუშავება (ჩანაწერი იშლება), private mode-ის მხარდაჭერა და `storage` event-ით
 სხვა tab-თან სინქრონიზაცია.
 
-> ⚠️ ავტორიზაცია **mock-ია**: პაროლები ინახება მხოლოდ base64-ით დაფარულად და
-> არავითარ უსაფრთხოებას არ უზრუნველყოფს. შესაბამის ფაილებში დატანილია
-> `// MOCK ONLY — replace with real auth API` კომენტარი.
+> ⚠️ `VITE_API_MODE=mock`-ზე ავტორიზაცია **mock-ია**: პაროლები ინახება მხოლოდ
+> base64-ით დაფარულად და არავითარ უსაფრთხოებას არ უზრუნველყოფს (`users:v1`,
+> `services/mockApi.js`, სადაც დატანილია `MOCK ONLY — replace with real auth API`
+> კომენტარი). `VITE_API_MODE=http`-ზე ავტორიზაცია რეალურია (backend); localStorage-ში
+> მხოლოდ სესია (`auth:v1`) რჩება.
 > კალათა და შეკვეთა ავტორიზაციის გარეშე მუშაობს.
 
 ---
