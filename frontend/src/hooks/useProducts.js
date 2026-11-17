@@ -82,6 +82,10 @@ export function useRelatedProducts(productId, limit = 4) {
  * The names in it are in the page's language, and that is safe to keep for
  * the page's life: the language never changes under an open page - switching
  * it loads the page again, which starts this cache empty (i18n/index.js).
+ *
+ * A failed request is not kept: it is dropped from the cache, so the next
+ * mount asks again instead of showing every category as "not found" until a
+ * reload. What still holds: a successful answer is shared for the page's life.
  */
 let categoriesPromise = null;
 
@@ -92,7 +96,12 @@ export function forgetCategories() {
 
 export function useCategories() {
   const fetcher = useCallback(() => {
-    if (!categoriesPromise) categoriesPromise = api.getCategories();
+    if (!categoriesPromise) {
+      categoriesPromise = api.getCategories().catch((e) => {
+        categoriesPromise = null;
+        throw e;
+      });
+    }
     return categoriesPromise;
   }, []);
   return useAsync(fetcher, [], { initialData: [] });
