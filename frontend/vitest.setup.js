@@ -29,7 +29,18 @@ import.meta.env.VITE_API_BASE_URL ||= '/api/v1';
 
 import '@testing-library/jest-dom/vitest';
 import { afterEach, vi } from 'vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
+
+// How long findBy* and waitFor wait for something to appear. The default 1 s is
+// too tight when the machine is oversubscribed (vitest beside the full backend
+// pytest, or three suites at once): the cold first test of a file, which pays
+// for module loading, was seen to run out of it - BrandList "reads the saved
+// English name back..." at 192 s per suite, with the loading skeleton still on
+// screen. Same reasoning as `testTimeout` in vite.config.js: this is a wait for
+// something to show up, not a performance assertion; a passing test is not
+// slowed by it, only a failing one takes longer to fail. No test relies on a
+// wait expiring (checked: no `.rejects` on a findBy/waitFor).
+configure({ asyncUtilTimeout: 3000 });
 
 // The page's language comes from the address; jsdom's is `/`, so Georgian, as
 // every test written before English existed expects. A test that switches to

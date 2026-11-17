@@ -23,6 +23,10 @@ import ToastViewport from '../../components/common/Toast.jsx';
 import { forgetDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { t } from '../../i18n/index.js';
 
+// No pause between key events: the typing is incidental here, and each pause is
+// a timer that stretches under CPU load.
+const NO_DELAY = { delay: null };
+
 const reply = (body, status = 200) => ({
   ok: status >= 200 && status < 300,
   status,
@@ -105,7 +109,7 @@ describe('the list', () => {
 
   it('shows the empty state, which also opens the add form', async () => {
     fakeApi({ list: [] });
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderPage();
 
     expect(await screen.findByText(t('account.noAddresses'))).toBeInTheDocument();
@@ -120,7 +124,7 @@ describe('the list', () => {
       if (url.endsWith('/delivery')) return reply(RULES);
       return failing ? reply({ error: { code: 'INTERNAL', message: 'boom' } }, 500) : reply([HOME]);
     });
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderPage();
 
     const retry = await screen.findByRole('button', { name: t('common.retry') });
@@ -136,7 +140,7 @@ describe('the list', () => {
 describe('adding an address', () => {
   it('sends the form, shows the list the server answers with, and closes the form', async () => {
     fakeApi({ list: [], onWrite: () => reply([WORK], 201) });
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderPage();
     const dialog = await openForm(user);
 
@@ -164,7 +168,7 @@ describe('adding an address', () => {
       list: [HOME],
       onWrite: () => reply([{ ...HOME, isDefault: false }, { ...WORK, isDefault: true }], 201),
     });
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderPage();
     const dialog = await openForm(user);
 
@@ -180,7 +184,7 @@ describe('adding an address', () => {
 
   it('does not send an empty form, and says what is missing', async () => {
     fakeApi({ list: [] });
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderPage();
     const dialog = await openForm(user);
 
@@ -194,7 +198,7 @@ describe('adding an address', () => {
 
   it('refuses an address that is too short', async () => {
     fakeApi({ list: [] });
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderPage();
     const dialog = await openForm(user);
 
@@ -214,7 +218,7 @@ describe('adding an address', () => {
           409,
         ),
     });
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderPage();
     const dialog = await openForm(user);
 
@@ -233,7 +237,7 @@ describe('adding an address', () => {
       if ((init.method || 'GET') === 'GET') return reply([]);
       throw new TypeError('Failed to fetch');
     });
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderPage();
     const dialog = await openForm(user);
 
@@ -248,7 +252,7 @@ describe('adding an address', () => {
 describe('deleting an address', () => {
   it('sends DELETE for that address and shows the list the server answers with', async () => {
     fakeApi({ list: [HOME, WORK], onWrite: () => reply([HOME]) });
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderPage();
     const items = await screen.findAllByRole('listitem');
 
@@ -267,7 +271,7 @@ describe('deleting an address', () => {
       list: [HOME],
       onWrite: () => reply({ error: { code: 'SOME_UNMAPPED_CODE', message: 'Address not found' } }, 404),
     });
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderPage();
     const items = await screen.findAllByRole('listitem');
 

@@ -24,6 +24,10 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { readSession, writeSession } from '../../services/session.js';
 import { t } from '../../i18n/index.js';
 
+// No pause between key events: the typing is incidental here, and each pause is
+// a timer that stretches under CPU load.
+const NO_DELAY = { delay: null };
+
 const reply = (body, status = 200) => ({
   ok: status >= 200 && status < 300,
   status,
@@ -78,7 +82,7 @@ describe('a successful password change', () => {
     renderForm();
     expect(await screen.findByTestId('user')).toHaveTextContent(USER.email);
 
-    await fillAndSubmit(userEvent.setup());
+    await fillAndSubmit(userEvent.setup(NO_DELAY));
 
     await waitFor(() => expect(screen.getByText('login page')).toBeInTheDocument());
     expect(readSession()).toBeNull();
@@ -111,7 +115,7 @@ describe('a new password the server refuses', () => {
     renderForm();
     expect(await screen.findByTestId('user')).toHaveTextContent(USER.email);
 
-    await fillAndSubmit(userEvent.setup());
+    await fillAndSubmit(userEvent.setup(NO_DELAY));
 
     expect(await screen.findByText(t(key))).toBeInTheDocument();
     expect(screen.getByLabelText(new RegExp('^' + t('auth.newPassword')))).toHaveAttribute(
@@ -137,7 +141,7 @@ describe('a new password the server refuses', () => {
     renderForm();
     expect(await screen.findByTestId('user')).toHaveTextContent(USER.email);
 
-    await fillAndSubmit(userEvent.setup());
+    await fillAndSubmit(userEvent.setup(NO_DELAY));
 
     // The toast says the same words, so the field is what tells them apart.
     const field = screen.getByLabelText(new RegExp('^' + t('auth.newPassword')));
@@ -180,7 +184,7 @@ describe('a refusal shown at its field only', () => {
     renderForm();
     expect(await screen.findByTestId('user')).toHaveTextContent(USER.email);
 
-    await fillAndSubmit(userEvent.setup());
+    await fillAndSubmit(userEvent.setup(NO_DELAY));
 
     expect(await screen.findByText(t('auth.passwordRefused'))).toBeInTheDocument();
     expect(screen.queryByText(generic())).not.toBeInTheDocument();
@@ -193,7 +197,7 @@ describe('a refusal shown at its field only', () => {
     renderForm();
     expect(await screen.findByTestId('user')).toHaveTextContent(USER.email);
 
-    await fillAndSubmit(userEvent.setup());
+    await fillAndSubmit(userEvent.setup(NO_DELAY));
 
     const field = screen.getByLabelText(t('account.currentPassword'), { exact: false });
     await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'));
@@ -211,7 +215,7 @@ describe('a rejected password change', () => {
     renderForm();
     expect(await screen.findByTestId('user')).toHaveTextContent(USER.email);
 
-    await fillAndSubmit(userEvent.setup());
+    await fillAndSubmit(userEvent.setup(NO_DELAY));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByRole('button', { name: t('account.updatePassword') })).toBeEnabled());

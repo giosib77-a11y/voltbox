@@ -16,7 +16,7 @@
  * is pinned exactly in services/httpApi.test.js.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { RouterProvider, createMemoryRouter } from 'react-router';
 
@@ -30,8 +30,21 @@ import { basename, i18n } from './index.js';
 // The storefront over its real http implementation instead of the mock data.
 vi.mock('virtual:api-impl', async () => import('../services/httpApi.js'));
 
-// A lazy page's first import is transformed on demand.
+// A lazy page's first import is transformed on demand. Left to the first
+// render, that cost counted against a 3 s wait and failed under CPU load (seen
+// with three suites running at once: "Unable to find role=complementary"), so
+// the pages are imported once in beforeAll, whose budget is generous. What is
+// left for the wait is rendering the page.
 const LAZY_PAGE = 3000;
+const PRELOAD_BUDGET = 60_000;
+
+beforeAll(async () => {
+  await Promise.all([
+    import('../pages/ProductDetails.jsx'),
+    import('../pages/SearchResults.jsx'),
+    import('../pages/Category.jsx'),
+  ]);
+}, PRELOAD_BUDGET);
 
 const category = (en) => ({
   id: '6c0ffee0-0000-4000-8000-000000000001',

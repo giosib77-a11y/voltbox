@@ -177,6 +177,14 @@ export default defineConfig(({ mode }) => {
       setupFiles: [fileURLToPath(new URL('./vitest.setup.js', import.meta.url))],
       include: ['src/**/*.test.{js,jsx}'],
       restoreMocks: true,
+      // The timeout detects a hang; it is not a performance assertion.
+      // Measured: the slowest test takes about 1.5 s on a quiet machine, and
+      // three suites at once (vitest beside pytest, or beside the Stop hook's
+      // `npm test`) run about 6x slower. At the default 5 s, 2 of 6 such suites
+      // still failed after the avoidable costs were removed (module re-import
+      // per test, keystroke delays, real debounce waits) - always the first,
+      // cold test of a file. 15 s is 10x the quiet worst case.
+      testTimeout: 15000,
     },
   };
 });

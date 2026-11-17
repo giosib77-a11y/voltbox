@@ -9,10 +9,14 @@
  * longer returns shows up as that page's not-found state.
  *
  * Notes: useCategories keeps its first answer for the whole module, so each
- * test loads the modules afresh to give it a different list.
+ * test clears that cache (and the delivery rules') to give it a different list.
+ * The modules are imported once, at the top: re-importing the whole page graph
+ * inside the test (`vi.resetModules()`) took about half of its time - 0.7 s of
+ * 1.3 s measured on a quiet machine - and under CPU load that pushed it over
+ * the 5 s timeout.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -20,6 +24,12 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 // A product card has an add-to-cart button; the cart itself is not what these check
 vi.mock('../hooks/useCart.js', () => ({ useCart: () => ({ addItem: () => {}, quantities: {} }) }));
 vi.mock('../hooks/useToast.js', () => ({ useToast: () => ({ success: () => {} }) }));
+
+import * as api from '../services/api.js';
+import Home from './Home.jsx';
+import Category from './Category.jsx';
+import { forgetCategories } from '../hooks/useProducts.js';
+import { forgetDeliveryRules } from '../hooks/useDeliveryRules.js';
 
 const category = (slug, name, position, parentId = null) => ({
   id: `c-${slug}`,
@@ -40,14 +50,14 @@ const AFTER_PHONES_DELETED = [
   category('chargers', 'დამტენები', 4),
 ];
 
+beforeEach(() => {
+  forgetCategories();
+  forgetDeliveryRules();
+});
+
 afterEach(() => vi.restoreAllMocks());
 
 async function mountHome(categories) {
-  vi.resetModules();
-  const api = await import('../services/api.js');
-  const { default: Home } = await import('./Home.jsx');
-  const { default: Category } = await import('./Category.jsx');
-
   vi.spyOn(api, 'getCategories').mockResolvedValue(categories);
   vi.spyOn(api, 'getHomeSections').mockResolvedValue({
     newArrivals: [],

@@ -371,6 +371,25 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-11-17 — vitest waits are sized for a loaded machine: testTimeout 15 s, findBy/waitFor 3 s
+- Decision: the owner's one-off vitest failure "while pytest ran" was reproduced: three full suites at once
+  (`≈`3–6× slower) timed out HomeHero "each opens a category…" in 2 of 6 suites, and Register / catalogNames /
+  BrandList once each. Avoidable cost was removed first — HomeHero's per-test `vi.resetModules()` + dynamic
+  imports (683 ms of 1.3 s; now `forgetCategories()` beside `forgetDeliveryRules()`), the userEvent keystroke delay
+  in the typing-heavy tests (`delay: null`; Register 14 s → 3.7 s), one CartAccountSync test's real 2×800 ms
+  debounce (fake timers there), lazy pages preloaded in `beforeAll` where a test waits for them. Quiet: 23 → 6
+  tests over 1 s, none over 2 s. What still failed was the cold first test of a file against vitest's 5 s
+  `testTimeout` and testing-library's 1 s `findBy*` default, so `testTimeout: 15000` (vite.config.js) and
+  `asyncUtilTimeout: 3000` (vitest.setup.js). After: 6 of 6 suites green with the full backend pytest running at
+  the same time (≈ 160–211 s per suite).
+- Why not tighter tests only: a timeout is a hang detector, not a performance check; the residual was CPU
+  oversubscription (vitest beside pytest, the Stop hook's `npm test` beside agents), which no test change removes.
+  No test relies on a wait expiring (checked), so a passing test means the same; only a failure takes longer.
+- What still holds: CI runs vitest alone; a test that really hangs still fails. CartAccountSync's other real-time
+  debounce waits (`waitFor` 2 s against an 800 ms wall-clock debounce) are unchanged — wall time does not stretch
+  with CPU load.
+- Changes if: a load heavier than the measured one fails again — then the slow test itself, not the limit.
+
 ### 2026-11-17 — English is its own chunk; admin-only error texts ship with the admin panel; field errors at their field (A-047, A-089)
 - Decision (owner-approved beforehand):
   - **English loads only on `/en`** (A-047). `i18n/index.js` bundles Georgian alone; on an English page

@@ -250,15 +250,34 @@ describe('CartAccountSync', () => {
     // the failure below is what takes that back. (The merge's own result is
     // not sent back, so this save is a change made here.)
     await waitFor(() => expect(localStorage.getItem('cart-unsynced:v1')).toBeNull());
-    fireEvent.click(screen.getByText('add'));
-    await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(1), { timeout: 2000 });
-    await api.saveCart.mock.results[0].value;
 
+    // Two saves, each behind the 800 ms debounce. The clock is faked for this
+    // part only (setTimeout; RTL's waitFor polls with setInterval), so the test
+    // does not wait out 1.6 s of real time - which is what made it the
+    // slowest in the suite and the one with the least margin under CPU load.
+    // Do not use waitFor/findBy between useFakeTimers and useRealTimers: its
+    // overall timeout is a setTimeout, RTL cannot see vitest's fake clock, so
+    // it would hang until testTimeout instead of failing after 1 s.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    api.saveCart.mockRejectedValueOnce(new Error('the server is not there'));
-    fireEvent.click(screen.getByText('add'));
-    await waitFor(() => expect(api.saveCart).toHaveBeenCalledTimes(2), { timeout: 2000 });
-    await expect(api.saveCart.mock.results[1].value).rejects.toThrow();
+    try {
+      fireEvent.click(screen.getByText('add'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(800);
+      });
+      expect(api.saveCart).toHaveBeenCalledTimes(1);
+      await api.saveCart.mock.results[0].value;
+
+      api.saveCart.mockRejectedValueOnce(new Error('the server is not there'));
+      fireEvent.click(screen.getByText('add'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(800);
+      });
+      expect(api.saveCart).toHaveBeenCalledTimes(2);
+      await expect(api.saveCart.mock.results[1].value).rejects.toThrow();
+    } finally {
+      vi.useRealTimers();
+    }
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('saveCart'), expect.any(Error));
 
     authValue = { user: null, initializing: false };

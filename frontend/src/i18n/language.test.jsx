@@ -13,7 +13,7 @@
  * running page (index.js).
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RouterProvider, createMemoryRouter } from 'react-router';
@@ -26,8 +26,20 @@ import { forgetDeliveryRules } from '../hooks/useDeliveryRules.js';
 import { loginRedirectTarget } from '../services/session.js';
 import { basename, i18n, languageFromPath, localizedPath, stripLanguage } from './index.js';
 
-// A lazy page's first import is transformed on demand.
+// A lazy page's first import is transformed on demand. Left to the first
+// render, that cost counted against a 3 s wait and failed under CPU load (the
+// same flake seen in catalogNames.test.jsx), so the pages are imported once in
+// beforeAll, whose budget is generous.
 const LAZY_PAGE = 3000;
+const PRELOAD_BUDGET = 60_000;
+
+beforeAll(async () => {
+  await Promise.all([
+    import('../pages/Cart.jsx'),
+    import('../pages/NotFound.jsx'),
+    import('../pages/Info/DeliveryTerms.jsx'),
+  ]);
+}, PRELOAD_BUDGET);
 
 beforeEach(() => {
   forgetDeliveryRules();

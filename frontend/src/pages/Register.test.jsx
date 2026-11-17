@@ -24,6 +24,10 @@ import ToastViewport from '../components/common/Toast.jsx';
 import { ConflictError, ValidationError } from '../services/errors.js';
 import { t } from '../i18n/index.js';
 
+// No pause between key events: the typing is incidental here, and each pause is
+// a timer that stretches under CPU load (about 50 keystrokes per submit).
+const NO_DELAY = { delay: null };
+
 const refusal = (message) =>
   new ValidationError(
     t('errors.invalid'),
@@ -39,7 +43,7 @@ const passwordField = () =>
   screen.getByLabelText(new RegExp('^' + t('fields.password')), { selector: 'input' });
 
 async function submit(password) {
-  const user = userEvent.setup();
+  const user = userEvent.setup(NO_DELAY);
   render(
     <ToastProvider>
       <MemoryRouter initialEntries={['/register']}>
@@ -137,7 +141,7 @@ async function fill(user, { password = 'sakartvelo', confirm = password } = {}) 
 
 describe('client-side validation', () => {
   it('shows a message at every empty field and does not call the API', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderAt('/register');
 
     await user.click(submitButton());
@@ -151,7 +155,7 @@ describe('client-side validation', () => {
   });
 
   it('refuses a malformed email', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderAt('/register');
     await fill(user);
     await user.clear(field('fields.email'));
@@ -164,7 +168,7 @@ describe('client-side validation', () => {
   });
 
   it('refuses a password shorter than the minimum', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderAt('/register');
     await fill(user, { password: 'short' });
 
@@ -175,7 +179,7 @@ describe('client-side validation', () => {
   });
 
   it('refuses a repeat that differs from the password', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderAt('/register');
     await fill(user, { password: 'sakartvelo', confirm: 'sakartvelO' });
 
@@ -186,7 +190,7 @@ describe('client-side validation', () => {
   });
 
   it('clears the mismatch once the password is changed to match', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderAt('/register');
     await fill(user, { password: 'sakartvelo', confirm: 'sakartvelO' });
     await user.click(submitButton());
@@ -202,7 +206,7 @@ describe('client-side validation', () => {
 describe('a successful registration', () => {
   it('sends the form values, says so, and goes to the orders page by default', async () => {
     register.mockResolvedValue({});
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderAt('/register');
     await fill(user);
 
@@ -222,7 +226,7 @@ describe('a successful registration', () => {
 
   it('follows a safe redirect parameter', async () => {
     register.mockResolvedValue({});
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderAt('/register?redirect=%2Fcheckout');
     await fill(user);
 
@@ -237,7 +241,7 @@ describe('a successful registration', () => {
     ['a backslash variant', '/\\evil.example'],
   ])('does not follow %s', async (_name, target) => {
     register.mockResolvedValue({});
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderAt(`/register?redirect=${encodeURIComponent(target)}`);
     await fill(user);
 
@@ -250,7 +254,7 @@ describe('a successful registration', () => {
 describe('a refusal that belongs to no field', () => {
   it('shows the server message in a toast and stays on the form', async () => {
     register.mockRejectedValue(new Error('Server is on fire'));
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderAt('/register');
     await fill(user);
 
@@ -263,7 +267,7 @@ describe('a refusal that belongs to no field', () => {
 
   it('falls back to the generic text when the error has no message', async () => {
     register.mockRejectedValue({});
-    const user = userEvent.setup();
+    const user = userEvent.setup(NO_DELAY);
     renderAt('/register');
     await fill(user);
 

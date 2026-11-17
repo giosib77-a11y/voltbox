@@ -85,6 +85,11 @@ export function useRelatedProducts(productId, limit = 4) {
  */
 let categoriesPromise = null;
 
+/** For tests: each test brings its own category list, so it starts the cache empty. */
+export function forgetCategories() {
+  categoriesPromise = null;
+}
+
 export function useCategories() {
   const fetcher = useCallback(() => {
     if (!categoriesPromise) categoriesPromise = api.getCategories();
