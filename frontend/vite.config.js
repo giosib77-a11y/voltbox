@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
+import { englishPreload } from './vite-plugins/englishPreload.js';
 
 /**
  * ტუნელის სერვისების დომენები.
@@ -136,7 +137,7 @@ export default defineConfig(({ mode }) => {
   return {
     root: rootDir,
     envDir: rootDir,
-    plugins: [react(), siteUrlPlugin],
+    plugins: [react(), siteUrlPlugin, englishPreload()],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),

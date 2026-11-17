@@ -371,6 +371,20 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-11-17 — On `/en` the English chunk is preloaded from the built `theme-init.js` (A-109)
+- Decision (owner-approved beforehand): a build-only Vite plugin (`frontend/vite-plugins/englishPreload.js`)
+  finds the chunk that holds `i18n/en.json` and appends to `dist/theme-init.js` a check that adds
+  `<link rel="modulepreload">` for it when the path is `/en` or `/en/...`. `public/theme-init.js` is unchanged;
+  dev and vitest preload nothing. Seen in a browser (vite preview, entry delayed 1.5 s): the en request starts
+  beside the entry's instead of after it.
+- Why there: the name is hashed, so known only after the build; the CSP forbids an inline script; a static link
+  in index.html would put English on Georgian pages (A-047); a new script file would cost every page a request;
+  code in the entry runs too late. theme-init.js is the classic head script every page already loads.
+- What still holds: a Georgian page requests no English (≈ 330 bytes more in theme-init.js, no request). The
+  real `import()` still loads the chunk, so a missing or stale preload costs only time.
+- Changes if: theme-init.js gets a long cache lifetime (an unhashed file — a stale copy would preload an old
+  name, a wasted 404), or the site gets per-language HTML.
+
 ### 2026-11-17 — vitest waits are sized for a loaded machine: testTimeout 15 s, findBy/waitFor 3 s
 - Decision: the owner's one-off vitest failure "while pytest ran" was reproduced: three full suites at once
   (`≈`3–6× slower) timed out HomeHero "each opens a category…" in 2 of 6 suites, and Register / catalogNames /
@@ -410,7 +424,8 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
     the field.
 - What still holds: on `/en` the English chunk is requested only after the entry runs (one more round trip, not
   preloaded). The admin panel is Georgian only; `/en/admin` is not a route. `Profile.jsx`'s taken-email error
-  still shows only as a toast in http mode (nit, open).
+  still shows only as a toast in http mode (nit, open). *Later the same day: the chunk is preloaded (A-109,
+  entry above) and Profile shows both refusals at their field (A-107).*
 - Changes if: an admin English UI is wanted (the admin file then needs `en`), or the new-password rules get their
   own codes/types (then the storefront matches `type`, not words).
 
