@@ -22,6 +22,11 @@ describe('robots.txt', () => {
     expect(lines).toContain(`Disallow: /en${path}`);
   });
 
+  it('disallows search results in both languages', () => {
+    expect(lines).toContain('Disallow: /search?');
+    expect(lines).toContain('Disallow: /en/search?');
+  });
+
   it('still allows the rest of the site', () => {
     expect(lines).toContain('Allow: /');
   });
