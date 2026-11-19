@@ -11,15 +11,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Request, status
 
+from app.core.client_ip import client_ip
 from app.core.deps import AdminUser, Db
 from app.schemas.admin_catalog import BrandAdminOut, BrandCreate, BrandUpdate
 from app.services import admin_catalog, audit
 
 router = APIRouter(prefix="/brands", tags=["admin"])
-
-
-def _client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
 
 
 @router.get("", summary="List brands", response_model=list[BrandAdminOut])
@@ -46,7 +43,7 @@ async def create_brand(
         entity_type="brand",
         entity_id=str(brand.id),
         changes={"slug": brand.slug, "name": brand.name},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return BrandAdminOut.model_validate(await admin_catalog.get_brand(db, brand.id))
@@ -66,7 +63,7 @@ async def update_brand(
         entity_type="brand",
         entity_id=str(brand_id),
         changes=audit.diff(before, after),
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return BrandAdminOut.model_validate(await admin_catalog.get_brand(db, brand_id))
@@ -83,6 +80,6 @@ async def delete_brand(request: Request, db: Db, admin: AdminUser, brand_id: UUI
         entity_type="brand",
         entity_id=str(brand_id),
         changes={"slug": snapshot["slug"], "name": snapshot["name"]},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()

@@ -12,6 +12,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 
+from app.core.client_ip import client_ip
 from app.core.deps import AdminUser, Db
 from app.schemas.admin_product import ImageOrderRequest, ProductImageOut
 from app.services import admin_image, audit
@@ -20,10 +21,6 @@ from app.services.storage import StorageBackend, get_storage
 router = APIRouter(prefix="/products/{product_id}/images", tags=["admin"])
 
 Storage = Annotated[StorageBackend, Depends(get_storage)]
-
-
-def _client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
 
 
 @router.post(
@@ -51,7 +48,7 @@ async def upload_image(
         entity_type="product",
         entity_id=str(product_id),
         changes={"imageId": str(image.id), "url": image.url},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return ProductImageOut.model_validate(image)
@@ -73,7 +70,7 @@ async def reorder_images(
         entity_type="product",
         entity_id=str(product_id),
         changes={"order": [str(image.id) for image in images]},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return [ProductImageOut.model_validate(image) for image in images]
@@ -93,7 +90,7 @@ async def set_primary(
         entity_type="product",
         entity_id=str(product_id),
         changes={"primaryId": str(image_id)},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return [ProductImageOut.model_validate(image) for image in images]
@@ -118,6 +115,6 @@ async def delete_image(
         entity_type="product",
         entity_id=str(product_id),
         changes={"imageId": str(image_id)},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()

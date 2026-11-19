@@ -149,7 +149,8 @@ async def _client_field(lines: list[str], address: str) -> str:
 
 
 class TestTheAccessLogsClientField:
-    """A-036: the limiter keys on `request.client.host`, and the log said nothing
+    """A-036: the limiter keys on `client_ip` (the peer, or `CF-Connecting-IP`
+    from a trusted peer, A-117), and the log said nothing
     about it, so a wrong FORWARDED_ALLOW_IPS (every shopper = the proxy, one
     shared bucket) could not be seen. The raw address stays out of the log."""
 
@@ -208,13 +209,11 @@ class TestTheAccessLogsClientField:
         """Same source as slowapi's key function, so the log shows what the
         limiter sees: one value for all shoppers means one shared bucket."""
         from app.core.logging import client_pseudonym
-        from slowapi.util import get_remote_address
+        from app.core.rate_limit import client_key
 
         request = Request({"type": "http", "client": (CLIENT_IP, 1), "headers": []})
 
-        assert await _client_field(access_lines, CLIENT_IP) == client_pseudonym(
-            get_remote_address(request)
-        )
+        assert await _client_field(access_lines, CLIENT_IP) == client_pseudonym(client_key(request))
 
     def test_a_request_without_a_client_gets_a_fixed_marker(self) -> None:
         from app.core.logging import NO_CLIENT, RequestContextMiddleware

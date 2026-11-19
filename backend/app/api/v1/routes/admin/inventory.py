@@ -15,6 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query, Request
 from sqlalchemy import ColumnElement, func, or_, select
 
+from app.core.client_ip import client_ip
 from app.core.config import settings
 from app.core.deps import AdminUser, Db
 from app.core.errors import NotFoundError
@@ -25,10 +26,6 @@ from app.schemas.admin_product import StockAdjustRequest
 from app.services import audit, inventory
 
 router = APIRouter(prefix="/inventory", tags=["admin"])
-
-
-def _client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
 
 
 def _row(product: Product) -> InventoryRow:
@@ -108,7 +105,7 @@ async def adjust(
         entity_type="product",
         entity_id=str(product_id),
         changes={"change": payload.change, "reason": payload.reason},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
 

@@ -13,6 +13,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, status
 
+from app.core.client_ip import client_ip
 from app.core.config import settings
 from app.core.deps import AdminUser, Db
 from app.core.pagination import MAX_PAGE
@@ -28,10 +29,6 @@ from app.services.storage import StorageBackend, get_storage
 router = APIRouter(prefix="/products", tags=["admin"])
 
 Storage = Annotated[StorageBackend, Depends(get_storage)]
-
-
-def _client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
 
 
 @router.get("", summary="List products", response_model=ProductPage)
@@ -94,7 +91,7 @@ async def create_product(
         entity_type="product",
         entity_id=str(product.id),
         changes={"slug": product.slug, "name": product.name, "sku": product.sku},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return ProductAdminOut.model_validate(await admin_product.get_product(db, product.id))
@@ -114,7 +111,7 @@ async def update_product(
         entity_type="product",
         entity_id=str(product_id),
         changes=audit.diff(before, after),
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return ProductAdminOut.model_validate(await admin_product.get_product(db, product_id))
@@ -132,7 +129,7 @@ async def archive_product(
         entity_type="product",
         entity_id=str(product_id),
         changes={"archivedAt": product.archived_at.isoformat() if product.archived_at else None},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return ProductAdminOut.model_validate(await admin_product.get_product(db, product_id))
@@ -152,7 +149,7 @@ async def unarchive_product(
         entity_type="product",
         entity_id=str(product_id),
         changes={"archivedAt": None},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return ProductAdminOut.model_validate(await admin_product.get_product(db, product_id))
@@ -175,7 +172,7 @@ async def duplicate_product(
         entity_type="product",
         entity_id=str(copy.id),
         changes={"sourceId": str(product_id), "slug": copy.slug},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return ProductAdminOut.model_validate(await admin_product.get_product(db, copy.id))
@@ -194,6 +191,6 @@ async def delete_product(
         entity_type="product",
         entity_id=str(product_id),
         changes=removed,
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()

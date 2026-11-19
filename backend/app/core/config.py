@@ -153,6 +153,12 @@ class Settings(BaseSettings):
     #: exist. No trailing slash.
     site_url: str = "http://localhost:5173"
 
+    #: The proxies whose `CF-Connecting-IP` is believed besides loopback (which is
+    #: always believed). The very variable gunicorn and uvicorn read for
+    #: `X-Forwarded-For`, so one value serves both; see app/core/client_ip.py for
+    #: the syntax and why `*` is ignored there. Empty = loopback only.
+    forwarded_allow_ips: str = ""
+
     # --- rate limiting --------------------------------------------------------
     # Empty means in-process counters. Those are per worker, so with the two
     # gunicorn workers the Dockerfile starts, "5 logins per minute" silently

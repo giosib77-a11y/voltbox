@@ -12,6 +12,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, Request
 
+from app.core.client_ip import client_ip
 from app.core.config import settings
 from app.core.deps import AdminUser, Db
 from app.core.pagination import MAX_PAGE
@@ -19,10 +20,6 @@ from app.schemas.admin_customers import BlockRequest, CustomerDetailOut, Custome
 from app.services import admin_customers, audit
 
 router = APIRouter(prefix="/customers", tags=["admin"])
-
-
-def _client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
 
 
 @router.get("", summary="List customers", response_model=CustomerPage)
@@ -56,7 +53,7 @@ async def set_active(
         entity_type="user",
         entity_id=str(user_id),
         changes={"isActive": payload.is_active},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return CustomerDetailOut.model_validate(await admin_customers.get_customer(db, user_id))

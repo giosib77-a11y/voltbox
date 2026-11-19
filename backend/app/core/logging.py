@@ -21,6 +21,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.core.client_ip import client_ip
 from app.core.config import settings
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -77,7 +78,7 @@ def client_pseudonym(host: str | None) -> str:
 
     What still holds: the same address under the same JWT_SECRET always gives
     the same value, so an operator can see whether the rate limiter - which keys
-    on this same `request.client.host` - is looking at many clients or one. A
+    on this same `client_ip(request)` - is looking at many clients or one. A
     rotated JWT_SECRET changes every value, which is acceptable for a log.
     """
     if host is None:
@@ -154,8 +155,8 @@ SERVER_LOGGERS = ("uvicorn", "uvicorn.error", "gunicorn.error")
 #: The format string slowapi logs a refused request with
 #: (`Limiter.__evaluate_limits`): limit, the limiter's KEY, endpoint. The key is
 #: what `key_func` returned, i.e. the raw client address
-#: (`get_remote_address`), so the line would carry the one value the access
-#: line's `client` pseudonym exists to keep out of the log.
+#: (`rate_limit.client_key`, which is `client_ip`), so the line would carry the
+#: one value the access line's `client` pseudonym exists to keep out of the log.
 SLOWAPI_EXCEEDED_FORMAT = "ratelimit %s (%s) exceeded at endpoint: %s"
 
 
@@ -177,9 +178,11 @@ class PseudonymiseRateLimitKey(logging.Filter):
             args = record.args
             if record.msg == SLOWAPI_EXCEEDED_FORMAT and isinstance(args, tuple) and len(args) == 3:
                 key = args[1]
+                # NO_CLIENT is what the key function returns for a request with no
+                # client; the access line says the same marker for it, not a hash.
                 record.args = (
                     args[0],
-                    client_pseudonym(None if key is None else str(key)),
+                    client_pseudonym(None if key is None or key == NO_CLIENT else str(key)),
                     args[2],
                 )
         except Exception:  # see the docstring: a filter must not break the log call
@@ -257,9 +260,9 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                     "request_id": request_id,
                     "method": request.method,
                     "path": request.url.path,
-                    # The very value the rate limiter keys on (slowapi's
-                    # get_remote_address), so this shows what the limiter sees.
-                    "client": client_pseudonym(request.client.host if request.client else None),
+                    # The very value the rate limiter keys on (`client_ip`, via
+                    # rate_limit.client_key), so this shows what the limiter sees.
+                    "client": client_pseudonym(client_ip(request)),
                     "query": "" if is_sensitive else str(request.url.query),
                     "status": status,
                     "duration_ms": round((time.perf_counter() - started) * 1000, 2),

@@ -5,11 +5,15 @@ counting in Redis when one is configured.
 
 Two things have to be true for a limit to mean anything, and neither is free:
 
-  1. **The key must be the client, not the proxy.** `get_remote_address` returns
-     `request.client.host`, which Uvicorn fills in from `X-Forwarded-For` only
-     for proxies gunicorn has been told to trust (`--forwarded-allow-ips`, see
-     gunicorn.conf.py). Parsing the header here instead would mean trusting it
-     from anyone, and a forged header would hand every caller their own bucket.
+  1. **The key must be the client, not the proxy.** The key is `client_ip`
+     (app/core/client_ip.py): `request.client.host`, which Uvicorn fills in from
+     `X-Forwarded-For` only for proxies gunicorn has been told to trust
+     (`--forwarded-allow-ips`, see gunicorn.conf.py) - except that when the
+     direct peer is trusted (loopback, or FORWARDED_ALLOW_IPS) and carries one
+     valid `CF-Connecting-IP`, that address is used. On Render the peer is always
+     loopback, so without it every shopper shared one bucket. The header is read
+     only from a trusted peer: parsing it from anyone would mean a forged header
+     hands every caller their own bucket.
   2. **The counter must be shared.** In-process counters live in one worker, so
      the Dockerfile's two workers would allow twice the configured rate, and the
      sixth login attempt would pass or fail depending on which worker answered.
@@ -52,10 +56,11 @@ from limits.storage import MemoryStorage
 from limits.strategies import FixedWindowRateLimiter
 from slowapi import Limiter
 from slowapi.middleware import _should_exempt
-from slowapi.util import get_remote_address
 from starlette.requests import Request
 
+from app.core.client_ip import client_ip
 from app.core.config import settings
+from app.core.logging import NO_CLIENT
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +161,16 @@ def storage_uri_for(redis_url: str) -> str:
     return redis_url.strip() or MEMORY_STORAGE
 
 
+def client_key(request: Request) -> str:
+    """The limiter's key: the same `client_ip` the access line pseudonymises.
+
+    A request with no client at all gets the access line's own `NO_CLIENT`
+    marker (one shared bucket, and `PseudonymiseRateLimitKey` maps it back to
+    that marker), where slowapi's default would have counted it as 127.0.0.1.
+    """
+    return client_ip(request) or NO_CLIENT
+
+
 def build_limiter(*, enabled: bool, storage_uri: str) -> Limiter:
     """Construct a limiter. Split out of module scope so tests can vary it."""
     if storage_uri == MEMORY_STORAGE and enabled:
@@ -165,7 +180,7 @@ def build_limiter(*, enabled: bool, storage_uri: str) -> Limiter:
             "Set REDIS_URL to share them."
         )
     return Limiter(
-        key_func=get_remote_address,
+        key_func=client_key,
         # An application limit, not slowapi's `default_limits`: see
         # `enforce_default_limit` for why, and for what it is applied to.
         application_limits=[DEFAULT_LIMIT],

@@ -11,15 +11,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Request, status
 
+from app.core.client_ip import client_ip
 from app.core.deps import AdminUser, Db
 from app.schemas.admin_catalog import CategoryAdminOut, CategoryCreate, CategoryUpdate
 from app.services import admin_catalog, audit
 
 router = APIRouter(prefix="/categories", tags=["admin"])
-
-
-def _client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
 
 
 @router.get("", summary="List categories", response_model=list[CategoryAdminOut])
@@ -55,7 +52,7 @@ async def create_category(
         entity_type="category",
         entity_id=str(category.id),
         changes={"slug": category.slug, "name": category.name},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return CategoryAdminOut.model_validate(await admin_catalog.get_category(db, category.id))
@@ -77,7 +74,7 @@ async def update_category(
         entity_type="category",
         entity_id=str(category_id),
         changes=audit.diff(before, after),
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return CategoryAdminOut.model_validate(await admin_catalog.get_category(db, category_id))
@@ -96,6 +93,6 @@ async def delete_category(request: Request, db: Db, admin: AdminUser, category_i
         entity_type="category",
         entity_id=str(category_id),
         changes={"slug": snapshot["slug"], "name": snapshot["name"]},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()

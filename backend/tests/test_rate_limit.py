@@ -7,7 +7,10 @@ at once, or allowed twice what was configured.
   1. The key is the client, not a header the client controls. `X-Forwarded-For`
      is only believable from a proxy gunicorn has been told to trust, and it is
      Uvicorn that turns it into `request.client.host`. Reading the header here
-     would mean honouring it from anyone.
+     would mean honouring it from anyone. The same goes for Cloudflare's
+     `CF-Connecting-IP` (A-117): `client_ip` reads it only from a trusted peer
+     (loopback or FORWARDED_ALLOW_IPS), which is what makes one bucket per
+     shopper on Render, where every peer is loopback.
   2. The counter is shared. Two gunicorn workers with in-process counters give
      each caller two buckets.
 
@@ -43,6 +46,7 @@ from app.core.rate_limit import (
     DEFAULT_LIMIT,
     MEMORY_STORAGE,
     build_limiter,
+    client_key,
     hit_per_address,
     storage_uri_for,
 )
@@ -54,7 +58,6 @@ from limits.strategies import FixedWindowRateLimiter
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 
 #: Database 1, so a developer's own Redis keys are never touched.
@@ -142,6 +145,86 @@ async def test_two_clients_do_not_share_a_bucket(redis_limiter: Limiter) -> None
     # A different visitor arrives to a bucket of their own.
     async with client_from(app, "198.51.100.2") as second:
         assert (await second.get("/ping")).status_code == 200
+
+
+async def test_behind_a_trusted_proxy_each_cloudflare_address_has_its_own_bucket(
+    redis_limiter: Limiter,
+) -> None:
+    """A-117: on Render every request arrives from loopback, so the peer says
+    nothing; the client is in CF-Connecting-IP. Two shoppers, two buckets - one
+    exhausting its limit must not lock out the other."""
+    app = build_app(redis_limiter)
+
+    async with client_from(app, "127.0.0.1") as proxy:
+        first = {"CF-Connecting-IP": "203.0.113.1"}
+        for _ in range(OVER - 1):
+            assert (await proxy.get("/ping", headers=first)).status_code == 200
+        assert (await proxy.get("/ping", headers=first)).status_code == 429
+
+        second = {"CF-Connecting-IP": "203.0.113.2"}
+        assert (await proxy.get("/ping", headers=second)).status_code == 200
+
+
+async def test_the_same_cloudflare_address_shares_one_bucket(redis_limiter: Limiter) -> None:
+    app = build_app(redis_limiter)
+    headers = {"CF-Connecting-IP": "203.0.113.1"}
+
+    async with client_from(app, "127.0.0.1") as proxy:
+        statuses = [(await proxy.get("/ping", headers=headers)).status_code for _ in range(OVER)]
+
+    assert statuses == [200] * (OVER - 1) + [429]
+
+
+async def test_a_peer_in_forwarded_allow_ips_is_counted_by_its_cloudflare_address(
+    redis_limiter: Limiter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "forwarded_allow_ips", "10.1.0.2")
+    app = build_app(redis_limiter)
+
+    async with client_from(app, "10.1.0.2") as proxy:
+        for _ in range(OVER - 1):
+            await proxy.get("/ping", headers={"CF-Connecting-IP": "203.0.113.1"})
+        assert (
+            await proxy.get("/ping", headers={"CF-Connecting-IP": "203.0.113.1"})
+        ).status_code == 429
+        assert (
+            await proxy.get("/ping", headers={"CF-Connecting-IP": "203.0.113.2"})
+        ).status_code == 200
+
+
+async def test_an_untrusted_peer_cannot_buy_fresh_buckets_with_cloudflare_headers(
+    redis_limiter: Limiter,
+) -> None:
+    """The header is honoured from a trusted hop only. A caller that reaches the
+    app directly and sends a new CF-Connecting-IP each time is still one bucket."""
+    app = build_app(redis_limiter)
+    statuses = []
+    async with client_from(app, "203.0.113.7") as client:
+        for n in range(OVER):
+            response = await client.get("/ping", headers={"CF-Connecting-IP": f"198.51.100.{n}"})
+            statuses.append(response.status_code)
+
+    assert statuses == [200] * (OVER - 1) + [429]
+
+
+async def test_the_limiter_warning_names_the_pseudonym_the_access_line_shows(
+    redis_limiter: Limiter, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The key is the forwarded address, and the filter pseudonymises exactly it."""
+    app = build_app(redis_limiter)
+    slowapi_logger = logging.getLogger("slowapi")
+    key_filter = PseudonymiseRateLimitKey()
+    slowapi_logger.addFilter(key_filter)
+    try:
+        with caplog.at_level(logging.WARNING, logger="slowapi"):
+            async with client_from(app, "127.0.0.1") as proxy:
+                for _ in range(OVER):
+                    await proxy.get("/ping", headers={"CF-Connecting-IP": "203.0.113.1"})
+    finally:
+        slowapi_logger.removeFilter(key_filter)
+
+    assert "203.0.113.1" not in caplog.text
+    assert f"({client_pseudonym('203.0.113.1')})" in caplog.text
 
 
 async def test_two_workers_share_one_counter_through_redis(redis_limiter: Limiter) -> None:
@@ -900,7 +983,7 @@ async def test_the_default_bucket_is_one_per_client_across_routes(
 
 def _default_limits_of(limit: str) -> Any:
     """slowapi's own representation of a default limit, so a test can lower it."""
-    return Limiter(key_func=get_remote_address, application_limits=[limit])._application_limits
+    return Limiter(key_func=client_key, application_limits=[limit])._application_limits
 
 
 LIVE = "/api/v1/health/live"

@@ -7,7 +7,9 @@ Where it fits: thin routes over services/admin_orders.py,
 services/order_status.py and services/order_trash.py, mounted on admin_router.
 Notes: a status change goes through the state machine and nowhere else, so the
 side effects (restocking a cancellation, writing history) cannot be skipped by
-adding another endpoint later. Trash, restore and delete never touch stock.
+adding another endpoint later. Trash, restore and delete never touch stock, and
+that is why only a cancelled or delivered order may be trashed or deleted - an
+active one is refused with 409 `ORDER_STILL_ACTIVE` (see services/order_trash.py).
 Trash and restore write an audit row only when they changed something - a
 repeated click is a no-op, not a second log entry; the delete writes its
 `order.purge` row inside the service. Opening the list first sweeps the
@@ -19,6 +21,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, Response
 
+from app.core.client_ip import client_ip
 from app.core.config import settings
 from app.core.deps import AdminUser, Db
 from app.core.pagination import MAX_PAGE
@@ -31,10 +34,6 @@ from app.schemas.admin_orders import (
 from app.services import admin_orders, audit, order_status, order_trash
 
 router = APIRouter(prefix="/orders", tags=["admin"])
-
-
-def _client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
 
 
 async def _detail(db: Db, order_id: UUID) -> OrderDetailOut:
@@ -95,7 +94,7 @@ async def change_status(
         entity_type="order",
         entity_id=str(order_id),
         changes={"status": order.status, "note": payload.note},
-        ip=_client_ip(request),
+        ip=client_ip(request),
     )
     await db.commit()
     return await _detail(db, order_id)
@@ -114,7 +113,7 @@ async def trash_order(request: Request, db: Db, admin: AdminUser, order_id: UUID
             entity_type="order",
             entity_id=str(order_id),
             changes={"status": order.status, "deletedAt": order.deleted_at},
-            ip=_client_ip(request),
+            ip=client_ip(request),
         )
     await db.commit()
     return await _detail(db, order_id)
@@ -135,7 +134,7 @@ async def restore_order(
             entity_type="order",
             entity_id=str(order_id),
             changes={"status": order.status, "deletedAt": None},
-            ip=_client_ip(request),
+            ip=client_ip(request),
         )
     await db.commit()
     return await _detail(db, order_id)
@@ -148,6 +147,6 @@ async def restore_order(
     response_class=Response,
 )
 async def delete_order(request: Request, db: Db, admin: AdminUser, order_id: UUID) -> Response:
-    await order_trash.delete_forever(db, order_id, actor_id=admin.id, ip=_client_ip(request))
+    await order_trash.delete_forever(db, order_id, actor_id=admin.id, ip=client_ip(request))
     await db.commit()
     return Response(status_code=204)

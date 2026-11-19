@@ -280,7 +280,10 @@ per-worker და არა საერთო, და ლოგში ჩან
 არარსებობა გაშვებას აჩერებს; `*` აკრძალულია, რადგან მაშინ ნებისმიერს შეუძლია
 header-ით თავისი IP აირჩიოს.
 
-ლიმიტის გასაღები `request.client.host`-ია — header-ს ხელით არსად ვპარსავთ.
+ლიმიტის გასაღები, access log-ის `client` და admin audit-ის `ip` ერთი ფუნქციიდან მოდის —
+`app/core/client_ip.py`-ის `client_ip`: თუ პირდაპირი peer სანდოა (loopback ან `FORWARDED_ALLOW_IPS`-ში)
+და `CF-Connecting-IP` ვალიდური IP-ია — ის, სხვა შემთხვევაში `request.client.host`. არასანდო peer-ის
+`CF-Connecting-IP` იგნორირდება (A-117).
 
 ## Supabase
 
