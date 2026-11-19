@@ -803,6 +803,14 @@ Unverified (check before acting):
 - Failed attempts: —
 
 ## Last Session
+- 2026-11-19 — `fix/a116-a117` (from `agent-system` at `f369c2f`; production findings, no new audit). Commits:
+  ee05559 audit; 7a5a0d1 A-116 (only cancelled/delivered orders can be trashed or purged, 409 ORDER_STILL_ACTIVE);
+  b578c42 A-117 (one `client_ip`: CF-Connecting-IP behind a trusted peer); c8c1eaf A-118 + A-122 (no purge date for a
+  trashed active order; trash button only on a final order); b918e1b audit/PROJECT/docs. Re-reviews: security-auditor
+  (A-117) and code-reviewer (all) closed; nits A-119–A-121, A-123–A-125 open in AUDIT.md. Final gates: ruff, format 190,
+  mypy 170, pytest 2056 passed / 1 skipped (55432 and a throwaway `postgres:17-alpine` on 5432 like CI, removed after),
+  alembic upgrade + check, eslint, vitest 797/71, both builds, `docker build`. Owner actions: Blockers (2026-11-19).
+  Tasks and Run State not touched (owner's instruction).
 - Date: 2026-10-19
 - Stage 3 in progress. Commits: 7449985 plan; T28 (screens.mjs: 98 shots on the pre-redesign mock build,
   exit 0; a renamed woff2 fails it — `vite preview` answers a missing file with 200 text/html, so the script

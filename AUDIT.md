@@ -1640,6 +1640,11 @@ A-102 security-auditor-მა იპოვა და მფლობელის
 მტკიცებულება მფლობელმა ლაივ ბაზიდან და Render-ის ლოგიდან მოიტანა; ახალი აუდიტი არ გაშვებულა. ორივე გამოსწორება მფლობელმა
 დაამტკიცა. ბრენჩი `fix/a116-a117`.
 
+საბოლოო შემოწმება (`b918e1b`, tester + ორკესტრატორი): ruff ✅ · format 190 ✅ · mypy 170 ✅ · **pytest 2056 passed, 1 skipped**
+(55432-ზე; ასევე CI-ის მსგავს დროებით `postgres:17-alpine`-ზე 5432-ით და `redis:7-alpine`-ზე 6379-ით — იგივე 2056/1, container-ები
+მერე წაიშალა) · alembic upgrade head + check ✅ · eslint ✅ · vitest **797 / 71** (ბრენჩამდე 794) · build http ✅ · build mock ✅ ·
+`docker build` ✅. ნამდვილ ბრაუზერში ადმინის გვერდები არ შემოწმებულა.
+
 #### A-116 · should-fix · აქტიური შეკვეთის სანაგვეში გადატანა და წაშლა მარაგს სამუდამოდ კარგავს
 - **ფაილი:** `backend/app/services/order_trash.py` (`trash`, `delete_forever`, `purge_expired`),
   `backend/app/services/order_status.py` (`TRANSITIONS`), `frontend/src/admin/pages/OrderDetail.jsx`, `frontend/src/admin/pages/OrderList.jsx`
