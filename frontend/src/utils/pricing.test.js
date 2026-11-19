@@ -2,12 +2,12 @@
  * Tests for the cart totals and the delivery quote.
  *
  * The rules are passed in as `GET /delivery` returns them; nothing here reads a
- * number of the frontend's own. RULES below is the owner's table written out -
- * Tbilisi 8, Rustavi 5, free from 50 - so these tests check the arithmetic,
+ * number of the frontend's own. RULES below is the owner's current table written
+ * out - Tbilisi 8, Rustavi 5, free from 100 - so these tests check the arithmetic,
  * and backend/tests/test_orders.py checks the same numbers against the server.
  *
- * The case that mattered is the threshold. A basket of 0.05 × 6 and 9.94 × 5 is
- * 50.00 to the tetri and 49.99999999999999 in IEEE754. Compared as floats, the
+ * The case that mattered is the threshold. A basket of 0.05 × 12 and 9.94 × 10 is
+ * 100.00 to the tetri and can come out a hair under in IEEE754. Compared as floats, the
  * page would quote the fee on exactly the basket the server delivers free.
  */
 
@@ -25,17 +25,17 @@ const RULES = {
     { name: 'თბილისი', fee: 8 },
     { name: 'რუსთავი', fee: 5 },
   ],
-  freeFrom: 50,
+  freeFrom: 100,
 };
 
 describe('deliveryFee', () => {
   it.each([
     ['თბილისი', 40, 8],
     ['რუსთავი', 40, 5],
-    ['თბილისი', 49.99, 8],
-    ['რუსთავი', 49.99, 5],
-    ['თბილისი', 50, 0],
-    ['რუსთავი', 50, 0],
+    ['თბილისი', 99.99, 8],
+    ['რუსთავი', 99.99, 5],
+    ['თბილისი', 100, 0],
+    ['რუსთავი', 100, 0],
     ['თბილისი', 200, 0],
   ])('%s, %s ₾ of goods: %s ₾', (city, subtotal, expected) => {
     expect(deliveryFee(subtotal, RULES, city)).toBe(expected);
@@ -51,7 +51,7 @@ describe('deliveryFee', () => {
   });
 
   it('is free everywhere from the threshold, with or without a city', () => {
-    expect(deliveryFee(50, RULES)).toBe(0);
+    expect(deliveryFee(100, RULES)).toBe(0);
   });
 
   it('says nothing before the rules have arrived', () => {
@@ -60,37 +60,37 @@ describe('deliveryFee', () => {
   });
 
   it('treats a float that is a hair under the threshold as reaching it', () => {
-    expect(deliveryFee(49.99999999999999, RULES, 'თბილისი')).toBe(0);
+    expect(deliveryFee(99.99999999999999, RULES, 'თბილისი')).toBe(0);
   });
 });
 
 describe('the threshold, to the tetri', () => {
   it.each([
-    [[{ price: 0.05, qty: 6 }, { price: 9.94, qty: 5 }]],
-    [[{ price: 0.01, qty: 5 }, { price: 16.65, qty: 3 }]],
-    [[{ price: 0.04, qty: 8 }, { price: 16.56, qty: 3 }]],
-  ])('%j reaches exactly 50.00 and delivers free', (lines) => {
+    [[{ price: 0.05, qty: 12 }, { price: 9.94, qty: 10 }]],
+    [[{ price: 0.01, qty: 10 }, { price: 16.65, qty: 6 }]],
+    [[{ price: 0.04, qty: 16 }, { price: 16.56, qty: 6 }]],
+  ])('%j reaches exactly 100.00 and delivers free', (lines) => {
     const { subtotal } = calcTotals(lines);
 
-    expect(subtotal).toBe(50);
+    expect(subtotal).toBe(100);
     expect(deliveryFee(subtotal, RULES, 'თბილისი')).toBe(0);
-    expect(totalWithDelivery(subtotal, 0)).toBe(50);
+    expect(totalWithDelivery(subtotal, 0)).toBe(100);
   });
 
   it('one tetri short still pays for delivery', () => {
-    const { subtotal } = calcTotals([{ price: 49.99, qty: 1 }]);
+    const { subtotal } = calcTotals([{ price: 99.99, qty: 1 }]);
 
     expect(deliveryFee(subtotal, RULES, 'თბილისი')).toBe(8);
-    expect(totalWithDelivery(subtotal, 8)).toBe(57.99);
+    expect(totalWithDelivery(subtotal, 8)).toBe(107.99);
   });
 });
 
 describe('amountToFreeDelivery', () => {
   it.each([
-    [0, 50],
-    [40, 10],
-    [49.99, 0.01],
-    [50, 0],
+    [0, 100],
+    [40, 60],
+    [99.99, 0.01],
+    [100, 0],
     [200, 0],
   ])('%s ₾ is %s ₾ away', (subtotal, expected) => {
     expect(amountToFreeDelivery(subtotal, RULES)).toBe(expected);

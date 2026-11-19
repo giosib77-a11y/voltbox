@@ -281,6 +281,10 @@ describe('the returns page', () => {
     expect(screen.getByText(/მიღებიდან 14 კალენდარული დღის განმავლობაში, მიზეზის მითითების გარეშე/)).toBeInTheDocument();
     expect(screen.getByText(/ყურში ჩასადები ყურსასმენები/)).toBeInTheDocument();
     expect(screen.getByText(/დაბრუნების პირობა არ არის/)).toBeInTheDocument();
+    // The exception is about the seal, not the packaging (packaging is no condition).
+    const exception = screen.getByText(/ყურში ჩასადები ყურსასმენები/).textContent;
+    expect(exception).toContain('ლუქი');
+    expect(exception).not.toContain('შეფუთვა გახსნილია');
   });
 
   it('lists the four steps, the pickup one always, and a legal guarantee of 2 years', async () => {
@@ -358,7 +362,7 @@ describe('the privacy page content', () => {
     const { container } = await mount(Privacy);
 
     const rights = screen.getByRole('heading', { name: 'თქვენი უფლებები' }).closest('section');
-    for (const right of ['შესწორება', 'წაშლა', 'დამუშავების შეზღუდვა', 'შეეწინააღმდეგოთ', 'გაიხმოთ თანხმობა']) {
+    for (const right of ['შესწორება', 'წაშლა', 'დამუშავების შეზღუდვა', 'შეეწინააღმდეგოთ', 'გამოიხმოთ თანხმობა']) {
       expect(rights).toHaveTextContent(right);
     }
     expect(rights).toHaveTextContent('სახელმწიფო აუდიტის სამსახურს');
@@ -573,5 +577,12 @@ describe('in English', () => {
     await mount(DeliveryTerms);
 
     expect(screen.getByText('You pay when you receive the product — in cash or by card.')).toBeInTheDocument();
+  });
+
+  it('names the seal in the legal exception on the returns page', async () => {
+    answer(rules(ENGLISH_CITIES));
+    await mount(ReturnsWarranty);
+
+    expect(screen.getByText(/in-ear earphones/).textContent).toContain('seal');
   });
 });

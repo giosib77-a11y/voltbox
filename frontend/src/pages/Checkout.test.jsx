@@ -626,6 +626,57 @@ describe('payment', () => {
     expect(screen.getByText(NOTE_CASH)).toBeInTheDocument();
   });
 
+  it('hides the card while the rules request is still pending', async () => {
+    let finish;
+    global.fetch = vi.fn((url) =>
+      isDelivery(url)
+        ? new Promise((resolve) => {
+            finish = () => resolve(reply(DELIVERY));
+          })
+        : Promise.reject(new Error('this test did not expect a request')),
+    );
+    renderPage();
+
+    expect(screen.queryByRole('radio', { name: CARD })).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: CASH })).toBeChecked();
+    expect(screen.getByText(NOTE_CASH)).toBeInTheDocument();
+
+    // Let the request end inside act() so nothing lands after the test.
+    await act(async () => {
+      finish();
+      await loadDeliveryRules();
+    });
+    expect(screen.getByRole('radio', { name: CARD })).toBeInTheDocument();
+  });
+
+  it('returns a card chosen before a saved city fills in to cash when that city does not take it', async () => {
+    authValue = {
+      user: { id: 'u1', firstName: 'გიორგი', lastName: 'ბერიძე', phone: '555123456' },
+      isAuthenticated: true,
+    };
+    let giveAddresses;
+    global.fetch = vi.fn((url) => {
+      if (isDelivery(url)) return Promise.resolve(reply(DELIVERY));
+      return new Promise((resolve) => {
+        giveAddresses = () =>
+          resolve(reply([{ id: 'a1', city: 'რუსთავი', address: 'რუსთაველის 1', isDefault: true }]));
+      });
+    });
+    renderPage();
+    await rulesLoaded();
+
+    fireEvent.click(screen.getByRole('radio', { name: CARD }));
+    expect(screen.getByRole('radio', { name: CARD })).toBeChecked();
+
+    await act(async () => {
+      giveAddresses();
+    });
+    await waitFor(() => expect(screen.getByLabelText(/^ქალაქი/)).toHaveValue('რუსთავი'));
+
+    expect(screen.queryByRole('radio', { name: CARD })).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: CASH })).toBeChecked();
+  });
+
   it('hides the card for a city that does not take it', async () => {
     renderPage();
     await rulesLoaded();

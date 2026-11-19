@@ -24,7 +24,7 @@ export default function Faq() {
   const emailEnabled = useEmailEnabled();
 
   const payment = cardVariant(rules);
-  const quoted =(text) => t('info.common.quoted', { text });
+  const quoted = (text) => t('info.common.quoted', { text });
 
   const items = [
     {
