@@ -78,7 +78,7 @@ Deployment state, as far as the repository shows (2026-10-10):
   `@playwright/test`.
 - Order trash extras: bulk delete / bulk restore, customer- or guest-side order deletion,
   a cron job for the 30-day purge (Decision Log 2026-10-18).
-- Online payment (cash on delivery only — ASSUMPTIONS §4.6).
+- Online payment (payment on delivery only, cash or card — ASSUMPTIONS §4.6).
 - Delivery outside Tbilisi and Rustavi (ASSUMPTIONS §4.5).
 - New features from ROADMAP P2/P3 (wishlist, reviews UI, promo codes, ...).
 - Migrating stack, ORM, router or styling.
@@ -106,8 +106,12 @@ Deployment state, as far as the repository shows (2026-10-10):
   the client never sends a price (`extra="forbid"` — ASSUMPTIONS §8.6). Money is
   `Numeric`/`Decimal`, never float.
 - **Delivery fee** by city: Tbilisi 8 ₾, Rustavi 5 ₾, free when the items total
-  is ≥ 50 ₾; other cities are refused (`app/services/delivery.py`).
-- **Payment**: cash on delivery only for new orders; old `card` orders still load.
+  is ≥ 100 ₾ (100.00 included; was 50 until 2026-11-19); other cities are refused
+  (`app/services/delivery.py`).
+- **Payment** (2026-11-19): on delivery only — `cash` everywhere, `card_on_delivery` in the cities
+  `delivery.py` marks as accepting card (Tbilisi and Rustavi today); card elsewhere → 400
+  `PAYMENT_METHOD_UNAVAILABLE`. `GET /delivery` says per city (`cardOnDelivery`); the checkout
+  shows card only there. No card data is ever collected.
 - **Order size** (decided 2026-10-10): at most 20 distinct products per order and 10 units
   of each. One source: `app/core/limits.py`; the cart has the same caps; the storefront copy is
   in `frontend/src/constants/index.js`.
@@ -377,6 +381,48 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
+
+### 2026-11-19 — Card on delivery is offered again, per city; free delivery from 100 ₾; new contact data
+- Decision (owner's request, branch `feat/card-and-info`): `card_on_delivery` is offered on new orders
+  (`OFFERED_PAYMENT_METHODS = PAYMENT_METHODS`). Which cities accept it lives in `app/services/delivery.py`
+  beside `CITY_FEES` (one place); `GET /delivery` returns `cardOnDelivery` per city and the checkout reads it
+  from there; `POST /orders` refuses card elsewhere with 400 `PAYMENT_METHOD_UNAVAILABLE`, checked next to
+  `CITY_NOT_SERVED` (before the idempotency key is claimed). Label: ka „ბარათით გადახდა მიღებისას“,
+  en "Card on delivery". The Telegram notice names the payment method (no personal data, as before).
+  `FREE_FROM = 100.00`. Phone `+995 557 18 20 18`; hours Mon–Fri 10:00–18:00, Sat–Sun closed; the shop's
+  physical address is shown nowhere (footer, contact list, email) — only the legal address from
+  `SHOP_FACTS.legalEntity` on the privacy page, while the owner has not filled it the section stays hidden.
+- Choices that are not obvious:
+  - With no city chosen yet the checkout shows card if any city accepts it; with the rules not loaded it shows
+    only cash. Picking a city without card returns a chosen card to cash. The note follows the card option.
+  - `SHOP_FACTS.returnPickup` and `warrantyPeriod` are removed: the pickup sentence and the warranty text are
+    now fixed texts, so they are i18n keys in both languages (a Georgian string in `constants` would also show
+    on `/en`). `SHOP_FACTS` keeps only `legalEntity`.
+  - No migration: the CHECK on `orders.payment_method` already allows `card_on_delivery`.
+- What still holds: no card data is ever collected or stored — "card" means the courier's terminal. Old orders
+  load as before. Prices and fees stay server-only.
+- Changes if: online payment is added (a new method and a provider), or a city stops accepting card — one line
+  in `delivery.py`, and the checkout, delivery page and FAQ follow `GET /delivery`.
+
+### 2026-11-19 — Info pages rewritten to the consumer, e-commerce and personal-data laws
+- Decision (owner's request): returns, warranty, privacy and FAQ texts follow the Law on Consumer Rights
+  Protection (arts. 5, 10, 13–15, 17, 20), the Law on Electronic Commerce (art. 4) and the Law on Personal
+  Data Protection (arts. 24, 37), in plain language, ka and en. Change of mind: 14 calendar days from receipt,
+  no reason, product back within 7 days of the notice, refund within 14 days of the notice incl. the standard
+  delivery fee, same means of payment (cash → bank transfer with the buyer's agreement), return shipping cost
+  on the buyer. "Unused" and "original packaging" are no longer conditions (packaging is a request; a
+  product used beyond inspection may lose value). One exception only — a sealed hygiene product opened after
+  delivery. Legal guarantee 2 years (6-month presumption) + manufacturer's warranty (usually 12 months, per
+  product). A copyable withdrawal form on the returns page. Privacy: purposes with legal bases, phone required
+  / email optional, recipients and transfers abroad as facts (Supabase EU; Render US company, server in
+  Frankfurt; Resend US), the six rights, complaints to the State Audit Office (successor of the Personal Data
+  Protection Service since 2026-03-02) or a court; IP only pseudonymised in logs, the admin's IP with admin
+  actions.
+- What still holds: the texts are the owner's statement of the shop's practice, not legal advice; whether
+  the US transfers (Render, Resend) need a further legal basis is an open owner/lawyer question
+  (PROGRESS.md Blockers). The page states facts only — no promise of safeguards.
+- Changes if: a lawyer reviews the texts, the hosting/email provider or region changes, or online payment is
+  added (refund to card then also covers online payments).
 
 ### 2026-11-19 — The client IP is `CF-Connecting-IP` behind a trusted peer, from one function (A-117)
 - Decision (owner-approved): `app/core/client_ip.py`'s `client_ip(request)` feeds the slowapi key

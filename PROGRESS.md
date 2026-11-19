@@ -436,6 +436,21 @@ final-check rule "new findings go to Blockers because the rounds are spent" did 
 
 ## Backlog (needs user decision)
 
+- Warranty claims outside the info pages (2026-11-19, `feat/card-and-info`, nit): `home.heroText` („ორიგინალი
+  პროდუქცია ოფიციალური გარანტიით“), `home.benefits.warranty` („ოფიციალური გარანტია — ყველა პროდუქტზე“) and the
+  demo products' `warranty: '24 თვე'` were left as they are. Not false (the legal 2-year guarantee covers every
+  product), but they read as a manufacturer's promise next to the returns page's "manufacturer's warranty, usually
+  12 months, per product". Owner: keep, or reword to the legal guarantee.
+- Two test pins missing (2026-11-19, nit): the en "seal" exception test checks only the substring `seal` (also in
+  "sealed"); and nothing ties the privacy page's "IP at most 24 hours" (`info.privacy.collectTech`) to
+  `app/core/rate_limit.py` — a longer IP-keyed window would make the page wrong silently. Fix: assert
+  `the seal was opened`; a test in `test_rate_limit.py` that every IP-keyed limit's window is ≤ 86 400 s.
+- Owner to confirm (2026-11-19): who pays for the courier when a change-of-mind return is picked up
+  (`info.returns.stepPickup` "we send a courier" next to `returnShipping` "the direct cost is yours"). The law puts
+  the direct cost on the buyer unless the shop takes it; the page currently implies the buyer pays either way.
+- `PAYMENT_METHOD_UNAVAILABLE`'s `details.cities` is alphabetical (`sorted`), `CITY_NOT_SERVED`'s follows
+  `CITY_FEES` (2026-11-19, nit): no reader depends on the order.
+
 - Font preload warning on live in Chrome, not reproducible locally (2026-10-21, nit): the console says
   `noto-serif-georgian-georgian-wght.woff2` and `noto-sans-georgian-georgian-400.woff2` were preloaded but not
   used. Checked and correct: `crossorigin` on both preloads, `href` = the `@font-face` `src` (also in the
@@ -796,6 +811,17 @@ Unverified (check before acting):
   `CF-Connecting-IP` changes `client` on neither your domain nor the `*.onrender.com` address. No Render env change is
   needed. If (დ) fails, report it at once: a caller could pick its own rate-limit bucket and audit IP.
 
+- **2026-11-19, owner / lawyer — personal data sent to the US (Render, Resend) (`feat/card-and-info`, privacy
+  page).** The privacy page now states, as facts: Supabase — EU; Render — a US company, the server in the EU
+  (Frankfurt); Resend — US (only while order email is on). To decide with a lawyer, under the Law on Personal
+  Data Protection: is the US on the list of countries with an adequate level of protection; if not, what basis the
+  transfer to Render (a US company, even with an EU server) and to Resend rests on (e.g. a contract with standard
+  clauses, or the customer's consent). Alternative for email: Resend's EU sending region. Same question for
+  Supabase: the data sits in the EU, but Supabase Inc. is a US company too (the page says only "EU"). Also
+  confirm what "our logs" covers: the app's own log lines carry only a pseudonym of the IP, but Render's
+  platform request logs (if enabled) and Cloudflare see the real IP. The site makes no promise either way;
+  change the text (`info.privacy.*` in both i18n files) once decided.
+
 ## Run State
 - Stage: Stage 3 — Storefront redesign
 - Finish-check this stage: done (2026-10-21; code-reviewer, security-auditor, browser-tester) → T42, T43
@@ -803,6 +829,17 @@ Unverified (check before acting):
 - Failed attempts: —
 
 ## Last Session
+- 2026-11-19 — `feat/card-and-info` (from `agent-system` at `46b3f3e`; owner's request, not a Stage, no new audit —
+  Tasks and Run State untouched). Commits: 8fc0f8d card on delivery per city (`CARD_ON_DELIVERY_CITIES`,
+  `cardOnDelivery` in GET /delivery, 400 `PAYMENT_METHOD_UNAVAILABLE`), free delivery from 100, new phone/hours,
+  no shop address, Telegram names the payment method, info pages rewritten to the consumer / e-commerce /
+  personal-data laws, withdrawal form; 757ca17 fix round 1 (seal not packaging in the ka exception, „გამოიხმოთ“,
+  „დაგიბრუნდებათ“, IP retention ≤ 24 h, test gaps). Reviews: code-reviewer (all) — 2 should-fix closed in the fix
+  round, re-review closed; security-auditor (POST /orders) — nothing found; browser-tester (mock, 1440/390,
+  light/dark) — nothing found. Final gates: ruff, format 191, mypy 171, pytest 2072 passed / 1 skipped (55432 and a
+  throwaway `postgres:17-alpine` on 5432 like CI, removed after), alembic check clean, frontend lint, vitest 826/826,
+  both builds. New Blocker: US transfers (Render, Resend, Supabase Inc.) for the owner/lawyer. Backlog: warranty
+  claims on the home page, two test pins, return-courier cost, error detail order.
 - 2026-11-19 — `fix/a116-a117` (from `agent-system` at `f369c2f`; production findings, no new audit). Commits:
   ee05559 audit; 7a5a0d1 A-116 (only cancelled/delivered orders can be trashed or purged, 409 ORDER_STILL_ACTIVE);
   b578c42 A-117 (one `client_ip`: CF-Connecting-IP behind a trusted peer); c8c1eaf A-118 + A-122 (no purge date for a
