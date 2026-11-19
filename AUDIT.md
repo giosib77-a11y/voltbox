@@ -1601,7 +1601,11 @@ A-102 security-auditor-მა იპოვა და მფლობელის
   (`backend/README.md`, „დამოკიდებულებების lock“); container-ში მხოლოდ საჭირო ფაილები, `.env`-ის გარეშე. შემოწმება:
   pip-audit CI-ის ბრძანებით = 0, hashed install + `pip check`, `docker build`.
 - **owner:** task-executor
-- **status:** open
+- **status:** fixed (verified) — `5bb591e`. lock-ები Dockerfile-ის base image-ში თავიდან დაგენერირდა; ორივეში შეიცვალა მხოლოდ
+  dnspython-ის pin და მისი ორი hash, `requirements-build.txt` ბაიტ-ბაიტ უცვლელი გამოვიდა, `pyproject.toml` უცვლელია
+  (dnspython `email-validator`-ის დამოკიდებულებაა, `>=2.0.0`). Linux container-ში: pip-audit CI-ის ბრძანებით —
+  „No known vulnerabilities found“, exit 0 (ორკესტრატორმაც ცალკე გაუშვა); hashed install + editable install + `pip check` —
+  „No broken requirements found“; `docker build` გადის, image-ში dnspython 2.9.2. re-review (code-reviewer): დახურულია.
 
 #### A-114 · should-fix · CI-ის image job-ი `app.core.uvicorn_worker`-ს „import-ით მიუღწეველ“ მოდულად თვლის
 - **ფაილი:** `.github/workflows/backend.yml:166-192` („The app must import and expose its full API surface“)
@@ -1610,7 +1614,10 @@ A-102 security-auditor-მა იპოვა და მფლობელის
 - **გამოსწორება:** იმავე შემოწმებაში, `missed`-ის გამოთვლამდე, ცალსახად `import app.core.uvicorn_worker` (image Linux-ია და
   gunicorn-ი მასშია), კომენტარით მიზეზზე. შემოწმება: იგივე `python -c` ლოკალურად აშენებულ `voltbox-api:check`-ში.
 - **owner:** task-executor
-- **status:** open
+- **status:** fixed (verified) — `a231694`. ლოკალურ `voltbox-api:check`-ში ძველი step-ის Python CI-ის assertion-ით ვარდება;
+  ახალი `run:` ბლოკი, YAML-იდან ამოღებული და CI-ის მსგავსად გაშვებული — `53 paths`, `95 modules, all imported`, exit 0
+  (ორკესტრატორმაც გაიმეორა). სხვა მოდულის გარანტია უცვლელია: `uvicorn_worker` `app.*`-დან არაფერს აიმპორტებს.
+  re-review (code-reviewer): დახურულია. GitHub Actions-ზე არ გაშვებულა.
 
 #### A-115 · should-fix · `test_settings_built_from_another_url_abort_the_run[other-port]` CI-ის ბაზაზე ვარდება
 - **ფაილი:** `backend/tests/test_database_guard.py:162-178`
@@ -1621,4 +1628,9 @@ A-102 security-auditor-მა იპოვა და მფლობელის
   არა ხელით; იმავე ფაილში და სხვა ტესტებში მსგავსი ჩაწერილი 5432/55432 დაშვება არ დარჩეს. შემოწმება: გადის 55432-იანი
   და 5432-იანი `TEST_DATABASE_URL`-ით; ძველ კოდზე 5432-ით ვარდება.
 - **owner:** backend-dev
-- **status:** open
+- **status:** fixed (verified) — `d90fd0f`. „სხვა“ URL-ები აქტიური `DATABASE_URL`-იდან ითვლება, თითო guard-ის ერთ შესადარებელ
+  ველში განსხვავებით: database (`_other`), port (+1), user (`_other`, ახალი), host (localhost ↔ 127.0.0.1, ახალი); remote
+  და garbage literal-ად რჩება. `backend/tests`-ის დანარჩენი 5432/55432 გადაიხედა — ყველა თავისთავად ფასდება (სახელის/host-ის
+  შემოწმება, საკუთარი env-ის child process, monkeypatch-ით შეცვლილი settings, stand-in engine) და არ შეცვლილა. 5432-იანი
+  ბაზით (`postgres:17`): ახალი — 43 passed, HEAD-ის ვერსია — `[other-port]` DID NOT RAISE (1 failed, 40 passed; `git stash`,
+  ორკესტრატორმაც გაიმეორა); 55432-ით + `test_conftest_guard.py` — 46 passed. re-review (code-reviewer): დახურულია.
