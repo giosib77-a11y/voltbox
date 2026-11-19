@@ -20,9 +20,10 @@ fails differently when it disagrees with the others:
 That last one is not hypothetical: the admin's detail page had a ternary on
 'cash' and printed the raw value for the other method.
 
-Card to the courier is no longer offered, so the two lists differ: a stored
-order may still carry it and every page must still name it, but the checkout
-must not show it, since the API would refuse the order.
+Both methods are offered today, so the two lists are equal. They stay two
+lists: if one is withdrawn again, a stored order may still carry it and every
+page must still name it, but the checkout must not show it, since the API would
+refuse the order.
 """
 
 import re
@@ -115,7 +116,9 @@ def test_a_new_order_may_choose_only_what_is_offered() -> None:
 
     assert set(get_args(field.annotation)) == set(OFFERED_PAYMENT_METHODS)
     assert set(OFFERED_PAYMENT_METHODS) <= set(PAYMENT_METHODS)
-    assert "card_on_delivery" not in OFFERED_PAYMENT_METHODS
+    # Card to the courier is offered again; what is left to the city is
+    # delivery.CARD_ON_DELIVERY_CITIES (tests/test_delivery_payment.py).
+    assert set(OFFERED_PAYMENT_METHODS) == set(PAYMENT_METHODS) == {"cash", "card_on_delivery"}
 
 
 def test_the_checkout_shows_only_what_the_api_accepts() -> None:

@@ -15,11 +15,12 @@
 export const SITE_NAME = 'VoltBox';
 
 export const CONTACT = {
-  phone: '+995 322 00 11 22',
-  phoneHref: 'tel:+995322001122',
+  phone: '+995 557 18 20 18',
+  phoneHref: 'tel:+995557182018',
   email: 'info@voltbox.ge',
-  // The address and the working hours are words: `contact.*` in the
-  // translation files.
+  // The working hours are words: `contact.workHours` in the translation files.
+  // The shop's physical address is not shown anywhere; the legal address is
+  // only in SHOP_FACTS.legalEntity (privacy page).
 };
 
 /**
@@ -45,11 +46,7 @@ export const INFO_PAGES = {
  * docs/info-pages-todo.md.
  */
 export const SHOP_FACTS = {
-  // დაბრუნების მე-2 ნაბიჯი, მთლიანი წინადადება
-  returnPickup: null,
-  // „პროდუქტზე ვრცელდება გარანტია, ვადით {warrantyPeriod}.“ — მაგ. 'ერთი წელი'
-  warrantyPeriod: null,
-  // „ვინ ვართ“ — { name, idCode, address }
+  // „ვინ ვართ“ — { name, idCode, address }, მაგ. { name: 'ი/მ …', idCode: '…', address: '…' }
   legalEntity: null,
 };
 
@@ -137,12 +134,15 @@ export const QUERY_KEYS = {
  * ყველა მეთოდი, რომლითაც შეკვეთა შეიძლება იყოს შენახული — ლეიბლი `payment.<value>`.
  * `offered: false` checkout-ში აღარ ჩანს (API მას ახალ შეკვეთაზე 400-ით
  * უარყოფს), მაგრამ ძველი შეკვეთის გვერდმა ის მაინც უნდა დაასახელოს.
+ * Both are offered now; the card is shown only for a city whose rule in
+ * GET /delivery says `cardOnDelivery` (the server refuses it elsewhere with
+ * PAYMENT_METHOD_UNAVAILABLE).
  * backend-ის PAYMENT_METHODS / OFFERED_PAYMENT_METHODS-ს ამოწმებს
  * backend/tests/test_payment_methods.py.
  */
 export const PAYMENT_METHODS = [
   { value: 'cash', offered: true },
-  { value: 'card_on_delivery', offered: false },
+  { value: 'card_on_delivery', offered: true },
 ];
 
 /** რასაც checkout სთავაზობს. */

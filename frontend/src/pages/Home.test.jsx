@@ -43,7 +43,7 @@ beforeEach(() => {
       { name: 'თბილისი', fee: 8 },
       { name: 'რუსთავი', fee: 5 },
     ],
-    freeFrom: 50,
+    freeFrom: 100,
     currency: 'GEL',
   });
 });
@@ -164,6 +164,6 @@ describe('Home benefits', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('50 ₾-ზე მეტ შეკვეთაზე')).toBeInTheDocument();
+    expect(await screen.findByText('100 ₾-ზე მეტ შეკვეთაზე')).toBeInTheDocument();
   });
 });

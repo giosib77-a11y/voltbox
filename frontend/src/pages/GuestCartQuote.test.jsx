@@ -33,7 +33,7 @@ const SIGNED_IN = { user: { id: 'u1' }, isAuthenticated: true, initializing: fal
 
 const DELIVERY = {
   cities: [{ name: 'თბილისი', fee: '8.00' }],
-  freeFrom: '50.00',
+  freeFrom: '100.00',
   currency: 'GEL',
   features: { email: false },
 };
@@ -110,8 +110,8 @@ describe('a guest opening checkout', () => {
   });
 
   it('gets free delivery when the new price crosses the line upwards', async () => {
-    seedCart([line('p1', 1, 40)]);
-    quoteReply = () => reply({ items: [quoted('p1', 1, '60.00')] });
+    seedCart([line('p1', 1, 80)]);
+    quoteReply = () => reply({ items: [quoted('p1', 1, '120.00')] });
     renderPage(Checkout);
 
     expect(await screen.findByText(MSG_PRICES)).toBeInTheDocument();
@@ -120,13 +120,13 @@ describe('a guest opening checkout', () => {
   });
 
   it('loses free delivery when the new price crosses the line downwards', async () => {
-    seedCart([line('p1', 1, 60)]);
-    quoteReply = () => reply({ items: [quoted('p1', 1, '40.00')] });
+    seedCart([line('p1', 1, 120)]);
+    quoteReply = () => reply({ items: [quoted('p1', 1, '80.00')] });
     renderPage(Checkout);
 
     expect(await screen.findByText(MSG_PRICES)).toBeInTheDocument();
-    // 50 - 40: ten lari short of free delivery, which the stale 60 hid.
-    expect(await screen.findByText('10 ₾')).toBeInTheDocument();
+    // 100 - 80: twenty lari short of free delivery, which the stale 120 hid.
+    expect(await screen.findByText('20 ₾')).toBeInTheDocument();
     expect(screen.queryByText('უფასო')).not.toBeInTheDocument();
   });
 

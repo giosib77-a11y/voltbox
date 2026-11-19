@@ -29,6 +29,9 @@ import { OFFERED_PAYMENT_METHODS } from '../constants/index.js';
 import { useGuestCartQuote } from '../hooks/useGuestCartQuote.js';
 import { t } from '../i18n/index.js';
 
+const CASH_METHOD = 'cash';
+const CARD_METHOD = 'card_on_delivery';
+
 const EMPTY_FORM = {
   firstName: '',
   lastName: '',
@@ -37,7 +40,7 @@ const EMPTY_FORM = {
   address: '',
   comment: '',
   guestEmail: '',
-  paymentMethod: OFFERED_PAYMENT_METHODS[0].value,
+  paymentMethod: CASH_METHOD,
 };
 
 /**
@@ -142,6 +145,27 @@ export default function Checkout() {
   // What this order will be charged, as the server will compute it; null until
   // a city is chosen (unless the basket is free everywhere).
   const shipping = deliveryFee(subtotal, rules, values.city);
+
+  // The card is offered only where the rules say a city takes it: for the chosen
+  // city, or - before one is chosen - when any city does. Until the rules are
+  // here (or if they failed) only cash is offered; the server refuses a card in
+  // any other city anyway (PAYMENT_METHOD_UNAVAILABLE).
+  const cardOffered = useMemo(() => {
+    const cities = rules?.cities || [];
+    return values.city
+      ? cities.some((city) => city.name === values.city && city.cardOnDelivery)
+      : cities.some((city) => city.cardOnDelivery);
+  }, [rules, values.city]);
+  const paymentOptions = OFFERED_PAYMENT_METHODS.filter(
+    (method) => method.value !== CARD_METHOD || cardOffered,
+  );
+  useEffect(() => {
+    if (!cardOffered) {
+      setValues((current) =>
+        current.paymentMethod === CARD_METHOD ? { ...current, paymentMethod: CASH_METHOD } : current,
+      );
+    }
+  }, [cardOffered]);
 
   function handleChange(name, rawValue) {
     const value = name === 'phone' ? formatPhone(rawValue) : rawValue;
@@ -351,7 +375,7 @@ export default function Checkout() {
           <fieldset className="rounded-card border border-line bg-surface p-5 sm:p-6">
             <legend className="px-1 font-serif text-lg font-normal text-fg">{t('checkout.payment')}</legend>
             <div className="mt-4 space-y-2.5">
-              {OFFERED_PAYMENT_METHODS.map((method) => {
+              {paymentOptions.map((method) => {
                 const selected = values.paymentMethod === method.value;
                 return (
                   <label
@@ -385,7 +409,7 @@ export default function Checkout() {
             </div>
             <p className="mt-3 flex items-center gap-2 text-xs text-ink-500">
               <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
-              {t('checkout.onlinePaymentNote')}
+              {t(cardOffered ? 'checkout.onlinePaymentNoteCard' : 'checkout.onlinePaymentNote')}
             </p>
           </fieldset>
         </div>

@@ -65,10 +65,11 @@ const cart = (items, subtotal = 80) => ({
 /** GET /delivery as the API sends it: money as strings. */
 const DELIVERY = {
   cities: [
-    { name: 'თბილისი', fee: '8.00' },
-    { name: 'რუსთავი', fee: '5.00' },
+    { name: 'თბილისი', fee: '8.00', cardOnDelivery: true },
+    // A city that takes cash only, to show the card option follows the rules
+    { name: 'რუსთავი', fee: '5.00', cardOnDelivery: false },
   ],
-  freeFrom: '50.00',
+  freeFrom: '100.00',
   currency: 'GEL',
   // As the API answers while no email provider is configured.
   features: { email: false },
@@ -549,16 +550,16 @@ describe('the delivery fee before ordering', () => {
     renderPage();
 
     const nudge = await screen.findByText(/და მიწოდება უფასო იქნება/);
-    expect(nudge).toHaveTextContent('დაამატე კიდევ 10 ₾ და მიწოდება უფასო იქნება (ზღვარი — 50 ₾).');
+    expect(nudge).toHaveTextContent('დაამატე კიდევ 60 ₾ და მიწოდება უფასო იქნება (ზღვარი — 100 ₾).');
   });
 
-  it('delivers free from exactly 50, whatever the city', async () => {
-    cartValue = cart(ITEMS, 50);
+  it('delivers free from exactly 100, whatever the city', async () => {
+    cartValue = cart(ITEMS, 100);
     renderPage();
     await screen.findByRole('option', { name: /^რუსთავი/ });
 
     expect(summaryRow('მიწოდება')).toHaveTextContent('უფასო');
-    expect(summaryRow('სულ გადასახდელი')).toHaveTextContent('50 ₾');
+    expect(summaryRow('სულ გადასახდელი')).toHaveTextContent('100 ₾');
     expect(screen.queryByText(/და მიწოდება უფასო იქნება/)).not.toBeInTheDocument();
   });
 
@@ -589,12 +590,107 @@ describe('the delivery fee before ordering', () => {
 });
 
 describe('payment', () => {
-  it('offers cash on delivery and not card to the courier', async () => {
+  const CASH = 'ნაღდი ანგარიშსწორება მიღებისას';
+  const CARD = 'ბარათით გადახდა მიღებისას';
+  const NOTE_CASH = 'ონლაინ გადახდა დროებით მიუწვდომელია — ანგარიშსწორება ხდება მიღებისას.';
+  const NOTE_CARD =
+    'ონლაინ გადახდა დროებით მიუწვდომელია — გადახდა ხდება პროდუქტის მიღებისას, ნაღდად ან ბარათით.';
+
+  const chooseCity = (city) =>
+    fireEvent.change(screen.getByLabelText(/^ქალაქი/), { target: { value: city } });
+
+  it('selects cash by default', async () => {
     renderPage();
     await rulesLoaded();
 
-    expect(screen.getByRole('radio', { name: 'ნაღდი ანგარიშსწორება მიღებისას' })).toBeChecked();
-    expect(screen.queryByRole('radio', { name: 'ბარათით კურიერთან' })).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: CASH })).toBeChecked();
+  });
+
+  it('offers the card once the rules say some city takes it, with the note that names it', async () => {
+    renderPage();
+    await rulesLoaded();
+
+    expect(screen.getByRole('radio', { name: CARD })).not.toBeChecked();
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+    expect(screen.getByText(NOTE_CARD)).toBeInTheDocument();
+    expect(screen.queryByText(NOTE_CASH)).not.toBeInTheDocument();
+  });
+
+  it('hides the card while the rules are not loaded, and when they failed', async () => {
+    global.fetch = vi.fn(async () => reply({}, 500));
+    renderPage();
+    await screen.findByText('ქალაქების სია ვერ ჩაიტვირთა.');
+
+    expect(screen.queryByRole('radio', { name: CARD })).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: CASH })).toBeChecked();
+    expect(screen.getByText(NOTE_CASH)).toBeInTheDocument();
+  });
+
+  it('hides the card for a city that does not take it', async () => {
+    renderPage();
+    await rulesLoaded();
+
+    chooseCity('რუსთავი');
+
+    expect(screen.queryByRole('radio', { name: CARD })).not.toBeInTheDocument();
     expect(screen.getAllByRole('radio')).toHaveLength(1);
+    expect(screen.getByText(NOTE_CASH)).toBeInTheDocument();
+    expect(screen.queryByText(NOTE_CARD)).not.toBeInTheDocument();
+
+    chooseCity('თბილისი');
+    expect(screen.getByRole('radio', { name: CARD })).toBeInTheDocument();
+  });
+
+  it('sends card_on_delivery when it is chosen', async () => {
+    const createOrder = vi
+      .spyOn(api, 'createOrder')
+      .mockResolvedValue({ orderNumber: 'VB-20260918-1000' });
+    renderPage();
+
+    await fillValidForm();
+    fireEvent.click(screen.getByRole('radio', { name: CARD }));
+    expect(screen.getByRole('radio', { name: CARD })).toBeChecked();
+    fireEvent.click(submitButton());
+
+    await waitFor(() => expect(navigate).toHaveBeenCalled());
+    expect(createOrder.mock.calls[0][0].paymentMethod).toBe('card_on_delivery');
+  });
+
+  it('returns a chosen card to cash when the city changes to one without card', async () => {
+    const createOrder = vi
+      .spyOn(api, 'createOrder')
+      .mockResolvedValue({ orderNumber: 'VB-20260918-1000' });
+    renderPage();
+
+    await fillValidForm();
+    fireEvent.click(screen.getByRole('radio', { name: CARD }));
+    chooseCity('რუსთავი');
+
+    expect(screen.getByRole('radio', { name: CASH })).toBeChecked();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(navigate).toHaveBeenCalled());
+    expect(createOrder.mock.calls[0][0].paymentMethod).toBe('cash');
+  });
+
+  it('shows the server answer when it refuses the card for the city', async () => {
+    global.fetch = vi.fn(async (url) => {
+      if (isDelivery(url)) return reply(DELIVERY);
+      return reply(
+        { error: { code: 'PAYMENT_METHOD_UNAVAILABLE', message: 'card not available', details: null } },
+        400,
+      );
+    });
+    renderPage();
+
+    await fillValidForm();
+    fireEvent.click(screen.getByRole('radio', { name: CARD }));
+    fireEvent.click(submitButton());
+
+    expect(
+      await screen.findByText(
+        'ამ ქალაქში ბარათით გადახდა მიღებისას ჯერ არ ხერხდება. აირჩიეთ ნაღდი ანგარიშსწორება.',
+      ),
+    ).toBeInTheDocument();
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

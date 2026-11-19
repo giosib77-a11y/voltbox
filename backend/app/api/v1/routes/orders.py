@@ -151,6 +151,7 @@ def _announce(background: BackgroundTasks, order: Order, user: User | None) -> N
                 shipping=order.shipping,
                 total=order.total,
                 currency=order.currency,
+                payment_method=order.payment_method,
                 item_count=sum(item.quantity for item in order.items),
             ),
         )

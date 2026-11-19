@@ -136,7 +136,11 @@ function rememberGuestOrder(orderNumber, token) {
 export async function getDeliveryRules() {
   const rules = await request('/delivery');
   return {
-    cities: (rules?.cities || []).map((city) => ({ name: city.name, fee: Number(city.fee) })),
+    cities: (rules?.cities || []).map((city) => ({
+      name: city.name,
+      fee: Number(city.fee),
+      cardOnDelivery: city.cardOnDelivery === true,
+    })),
     freeFrom: Number(rules?.freeFrom),
     currency: rules?.currency,
     // რას შეუძლია ეს deployment — იხ. hooks/useEmailEnabled.js

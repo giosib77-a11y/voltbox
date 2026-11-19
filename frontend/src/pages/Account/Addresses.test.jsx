@@ -38,7 +38,7 @@ const RULES = {
     { name: 'თბილისი', fee: '8.00' },
     { name: 'ბათუმი', fee: '12.00' },
   ],
-  freeFrom: '50.00',
+  freeFrom: '100.00',
   currency: 'GEL',
   features: { email: false },
 };

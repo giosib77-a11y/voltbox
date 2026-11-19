@@ -135,12 +135,12 @@ describe('Header free-delivery strip', () => {
         { name: 'თბილისი', fee: 8 },
         { name: 'რუსთავი', fee: 5 },
       ],
-      freeFrom: 50,
+      freeFrom: 100,
       currency: 'GEL',
     });
     mountAt('/');
 
-    expect(await screen.findByText('უფასო მიწოდება 50 ₾-ზე მეტ შეკვეთაზე')).toBeInTheDocument();
+    expect(await screen.findByText('უფასო მიწოდება 100 ₾-ზე მეტ შეკვეთაზე')).toBeInTheDocument();
   });
 
   it('says no amount at all until the rules arrive', () => {

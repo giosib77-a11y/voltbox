@@ -53,10 +53,14 @@ CUSTOMER = {
     "lastName": "კაპანაძე",
     "phone": "555123456",
     "city": "თბილისი",
-    "address": "ჭავჭავაძის გამზირი 42",
+    "address": "აბაშიძის ქუჩა 15",
     "comment": "",
     "email": GUEST_EMAIL,
 }
+
+#: The shop's street address as the email once printed it. It is gone from the
+#: email; no customer fixture here may use it, or the check below proves nothing.
+OLD_SHOP_ADDRESS = "ჭავჭავაძის გამზირი 42"
 
 Handler = Callable[[httpx.Request], Awaitable[httpx.Response]]
 
@@ -222,23 +226,69 @@ class TestAConfirmation:
             "",
             "პროდუქტები:",
             "",
-            # 179.99 of goods: 50 or more, so delivery is free
+            # 179.99 of goods: 100 or more, so delivery is free
             "პროდუქტები სულ: 179.99 ₾",
             "მიწოდება: 0.00 ₾",
             "ჯამი: 179.99 ₾",
             "",
-            "მიწოდების მისამართი: თბილისი, ჭავჭავაძის გამზირი 42",
+            "მიწოდების მისამართი: თბილისი, აბაშიძის ქუჩა 15",
             "გადახდის მეთოდი: ნაღდი ანგარიშსწორება მიღებისას",
             "",
             "კითხვების შემთხვევაში დაგვიკავშირდით — VoltBox:",
-            "ტელეფონი: +995 322 00 11 22",
+            "ტელეფონი: +995 557 18 20 18",
             "ელფოსტა: info@voltbox.ge",
-            "მისამართი: თბილისი, ჭავჭავაძის გამზირი 42",
-            "სამუშაო საათები: ორშ.–შაბ. 10:00–20:00",
+            "სამუშაო საათები: ორშ.–პარ. 10:00–18:00, შაბ.–კვ. დასვენება",
         ]
         html = sent["html"]
-        for part in (number, "One", "2 × 40.00 ₾", "179.99 ₾", "ჭავჭავაძის გამზირი 42"):
+        for part in (number, "One", "2 × 40.00 ₾", "179.99 ₾", "აბაშიძის ქუჩა 15"):
             assert part in html, part
+
+    async def test_the_shops_own_address_is_not_in_it(
+        self,
+        client: httpx.AsyncClient,
+        fake_resend: FakeResend,
+        products: tuple[Product, Product],
+    ) -> None:
+        """The footer dropped the shop's street address, and the email with it.
+
+        The customer's delivery address stays - `მიწოდების მისამართი` is theirs -
+        so what is refused is the shop's old street and a contact line named
+        `მისამართი:`, in the plain text and in the HTML alike.
+        """
+        assert OLD_SHOP_ADDRESS not in CUSTOMER["address"]
+
+        response = await _place(client, products)
+
+        assert response.status_code == 201, response.text
+        sent = fake_resend.sent()
+        for body in (sent["text"], sent["html"]):
+            assert OLD_SHOP_ADDRESS not in body
+            assert "+995 557 18 20 18" in body
+            assert "ორშ.–პარ. 10:00–18:00, შაბ.–კვ. დასვენება" in body
+            assert "+995 322 00 11 22" not in body
+        # A contact line named just `მისამართი:`: not the customer's
+        # `მიწოდების მისამართი:`, which contains the word but not at a line start
+        # (text) or after a tag (HTML).
+        assert not re.search(r"^მისამართი:", sent["text"], re.M)
+        assert "<br>მისამართი:" not in sent["html"]
+        assert "address" not in order_email.SHOP_CONTACT
+
+    async def test_a_card_order_names_the_method_as_the_checkout_does(
+        self,
+        client: httpx.AsyncClient,
+        fake_resend: FakeResend,
+        products: tuple[Product, Product],
+    ) -> None:
+        response = await client.post(
+            "/api/v1/orders",
+            json={**_checkout_body(products), "paymentMethod": "card_on_delivery"},
+            headers={"Idempotency-Key": str(uuid.uuid4())},
+        )
+
+        assert response.status_code == 201, response.text
+        sent = fake_resend.sent()
+        assert "გადახდის მეთოდი: ბარათით გადახდა მიღებისას" in sent["text"].splitlines()
+        assert "გადახდის მეთოდი: ბარათით გადახდა მიღებისას" in sent["html"]
 
     async def test_the_delivery_fee_is_its_own_line(
         self,
@@ -255,7 +305,7 @@ class TestAConfirmation:
         assert response.status_code == 201, response.text
 
         lines = fake_resend.sent()["text"].splitlines()
-        # 40.00 of goods to Tbilisi: below 50, so its 8.00 fee is charged.
+        # 40.00 of goods to Tbilisi: below 100, so its 8.00 fee is charged.
         assert lines[7:10] == ["პროდუქტები სულ: 40.00 ₾", "მიწოდება: 8.00 ₾", "ჯამი: 48.00 ₾"]
 
     async def test_goes_to_a_signed_in_customer_at_their_account_address(
@@ -515,10 +565,10 @@ class TestTheEmailNamesThingsAsTheShopDoes:
     checkout show.
 
     The footer's contacts are split since the site has two languages: the
-    phone and email are CONTACT in the constants, the address and the hours
-    are words, `contact.*` in i18n/ka.json. The checkout names a payment
-    method `payment.<value>` there too. The email is Georgian, so it is held
-    to the Georgian file."""
+    phone and email are CONTACT in the constants, the hours are words,
+    `contact.*` in i18n/ka.json (the shop's street address is shown nowhere).
+    The checkout names a payment method `payment.<value>` there too. The email
+    is Georgian, so it is held to the Georgian file."""
 
     def test_the_contacts_are_the_footers(self) -> None:
         constants = dict(re.findall(r"^\s{2}(\w+): '([^']*)'", _frontend_object("CONTACT"), re.M))

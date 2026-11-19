@@ -18,6 +18,7 @@ import { readJSON, writeJSON } from '../utils/storage.js';
 import { DEFAULT_SORT, LOW_STOCK_THRESHOLD, PAGE_SIZE, STORAGE_KEYS } from '../constants/index.js';
 import { calcTotals, deliveryFee, totalWithDelivery } from '../utils/pricing.js';
 import { ApiError, AuthError, NotFoundError, ValidationError } from './errors.js';
+import { t } from '../i18n/index.js';
 
 /* -------------------------------------------------------------------------- */
 /*  დამხმარეები                                                                */
@@ -236,6 +237,13 @@ export async function createOrder(payload) {
   const shipping = deliveryFee(subtotal, deliveryRules, payload.customer.city);
   if (shipping === null) {
     throw new ValidationError('ამ ქალაქში მიწოდება ჯერ არ ხორციელდება. აირჩიეთ ქალაქი სიიდან.');
+  }
+  // The card is taken only in a city whose rule says so, as the server does.
+  const city = deliveryRules.cities.find((c) => c.name === payload.customer.city);
+  if (payload.paymentMethod === 'card_on_delivery' && !city?.cardOnDelivery) {
+    throw new ValidationError(t('apiErrors.PAYMENT_METHOD_UNAVAILABLE'), {
+      code: 'PAYMENT_METHOD_UNAVAILABLE',
+    });
   }
   const session = readJSON(STORAGE_KEYS.auth, null);
 

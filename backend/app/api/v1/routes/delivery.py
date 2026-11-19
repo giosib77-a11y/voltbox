@@ -13,8 +13,9 @@ router = APIRouter(tags=["orders"])
     "/delivery",
     summary="Delivery rules",
     description=(
-        "The cities the shop delivers to, the fee for each, and the goods total "
-        "from which delivery is free. The storefront renders its prices from this "
+        "The cities the shop delivers to, the fee for each, whether the courier "
+        "takes a card there (`cardOnDelivery`), and the goods total from which "
+        "delivery is free. The storefront renders its prices from this "
         "and keeps no copy; POST /orders computes the fee from the same table. "
         "`features` says what this deployment can do - `email` is false while "
         "no email provider is configured, and the storefront then promises none."
@@ -23,7 +24,14 @@ router = APIRouter(tags=["orders"])
 )
 async def delivery_rules() -> DeliveryRulesOut:
     return DeliveryRulesOut(
-        cities=[DeliveryCityOut(name=name, fee=fee) for name, fee in delivery.CITY_FEES.items()],
+        cities=[
+            DeliveryCityOut(
+                name=name,
+                fee=fee,
+                card_on_delivery=name in delivery.CARD_ON_DELIVERY_CITIES,
+            )
+            for name, fee in delivery.CITY_FEES.items()
+        ],
         free_from=delivery.FREE_FROM,
         currency=settings.currency,
         features=ShopFeaturesOut(email=settings.order_email_enabled),

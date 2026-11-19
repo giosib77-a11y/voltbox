@@ -8,6 +8,7 @@ import { useEmailEnabled } from '../../hooks/useEmailEnabled.js';
 import InfoPage, { InfoSection, TEXT_LINK_CLASS } from './InfoPage.jsx';
 import DeliveryTable from './DeliveryTable.jsx';
 import { ContactList } from './Contact.jsx';
+import { cardVariant } from './cardCities.js';
 
 /**
  * ხშირად დასმული კითხვები.
@@ -22,7 +23,8 @@ export default function Faq() {
   const { rules, loading } = useDeliveryRules();
   const emailEnabled = useEmailEnabled();
 
-  const quoted = (text) => t('info.common.quoted', { text });
+  const payment = cardVariant(rules);
+  const quoted =(text) => t('info.common.quoted', { text });
 
   const items = [
     {
@@ -49,7 +51,7 @@ export default function Faq() {
     },
     {
       question: t('info.faq.payQuestion'),
-      answer: <p>{t('info.faq.payAnswer')}</p>,
+      answer: <p>{t(`info.faq.payAnswer${payment.suffix}`, { cities: payment.cities })}</p>,
     },
     {
       question: t('info.faq.timeQuestion'),

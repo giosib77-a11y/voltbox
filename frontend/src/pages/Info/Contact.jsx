@@ -1,4 +1,4 @@
-import { Clock, Mail, MapPin, Phone } from 'lucide-react';
+import { Clock, Mail, Phone } from 'lucide-react';
 import { CONTACT } from '../../constants/index.js';
 import { t } from '../../i18n/index.js';
 import { TEXT_LINK_CLASS } from './InfoPage.jsx';
@@ -23,7 +23,7 @@ export function ContactInline() {
   );
 }
 
-/** ცალკე ბლოკად: ტელეფონი, ელფოსტა, მისამართი, სამუშაო საათები. */
+/** ცალკე ბლოკად: ტელეფონი, ელფოსტა, სამუშაო საათები (მისამართი არ ჩანს). */
 export function ContactList() {
   return (
     <ul className="space-y-2.5">
@@ -38,10 +38,6 @@ export function ContactList() {
         <a href={`mailto:${CONTACT.email}`} className={TEXT_LINK_CLASS}>
           {CONTACT.email}
         </a>
-      </li>
-      <li className="flex items-start gap-2.5">
-        <MapPin className="mt-1 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
-        {t('contact.address')}
       </li>
       <li className="flex items-start gap-2.5">
         <Clock className="mt-1 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />

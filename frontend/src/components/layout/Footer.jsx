@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { Clock, Mail, MapPin, Phone } from 'lucide-react';
+import { Clock, Mail, Phone } from 'lucide-react';
 import { LogoMark } from './Logo.jsx';
 import { CONTACT, INFO_PAGES, SITE_NAME } from '../../constants/index.js';
 import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
@@ -77,10 +77,6 @@ export default function Footer({ categories = [] }) {
                 <Mail className="h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
                 {CONTACT.email}
               </a>
-            </li>
-            <li className="flex items-start gap-3">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
-              {t('contact.address')}
             </li>
             <li className="flex items-start gap-3">
               <Clock className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />

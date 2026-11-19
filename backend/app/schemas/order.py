@@ -53,17 +53,20 @@ class CustomerRequest(ApiRequest):
 #: idea, applied to the other field an operator acts on.
 PAYMENT_METHODS = ("cash", "card_on_delivery")
 
-#: What a new order may choose - a subset of the above. Card to the courier is
-#: no longer offered, but orders placed with it are still stored under that
-#: value and must still load, so it stays in PAYMENT_METHODS and in the
-#: column's CHECK; only POST /orders refuses it.
-OFFERED_PAYMENT_METHODS = ("cash",)
+#: What a new order may choose. Today that is every stored method, but the two
+#: lists stay separate: a method withdrawn again would leave PAYMENT_METHODS
+#: (and the column's CHECK) alone, because orders already stored under it must
+#: still load, and only this one - and the Literal below - would shrink.
+#: Whether the courier takes a card in a given city is not decided here but in
+#: `services.delivery.CARD_ON_DELIVERY_CITIES`; POST /orders refuses a card
+#: order to any other city with PAYMENT_METHOD_UNAVAILABLE.
+OFFERED_PAYMENT_METHODS = ("cash", "card_on_delivery")
 
 
 class CreateOrderRequest(ApiRequest):
     items: list[OrderItemRequest] = Field(min_length=1, max_length=MAX_ORDER_LINES)
     customer: CustomerRequest
-    payment_method: Literal["cash"] = "cash"
+    payment_method: Literal["cash", "card_on_delivery"] = "cash"
 
 
 class OrderItemSnapshot(ApiModel):
@@ -134,6 +137,9 @@ class PlacedOrderOut(OrderOut):
 class DeliveryCityOut(ApiModel):
     name: str
     fee: Decimal
+    #: Whether the courier takes a card there; the checkout offers the card
+    #: option for this city only when it is true.
+    card_on_delivery: bool
 
 
 class ShopFeaturesOut(ApiModel):

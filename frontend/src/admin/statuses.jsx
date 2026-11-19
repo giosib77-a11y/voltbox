@@ -27,7 +27,7 @@ export const ORDER_STATUSES = {
  */
 export const PAYMENT_METHODS = {
   cash: 'ნაღდი მიწოდებისას',
-  card_on_delivery: 'ბარათით კურიერთან',
+  card_on_delivery: 'ბარათით გადახდა მიღებისას',
 };
 
 export const MOVEMENT_REASONS = {

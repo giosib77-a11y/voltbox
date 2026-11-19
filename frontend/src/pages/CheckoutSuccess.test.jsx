@@ -130,13 +130,13 @@ describe('the amounts on the order page', () => {
     expect(screen.queryByText('მიწოდება')).not.toBeInTheDocument();
   });
 
-  it('still names card to the courier on an order placed with it', async () => {
+  it('names card on delivery on an order placed with it', async () => {
     vi.spyOn(api, 'getOrderByNumber').mockResolvedValue({
       ...order('delivered'),
       paymentMethod: 'card_on_delivery',
     });
     renderPage();
 
-    expect(await screen.findByText('ბარათით კურიერთან')).toBeInTheDocument();
+    expect(await screen.findByText('ბარათით გადახდა მიღებისას')).toBeInTheDocument();
   });
 });

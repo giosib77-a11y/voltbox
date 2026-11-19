@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.logging import JsonFormatter
 from app.core.rate_limit import LOOKUP_RATE_LIMIT, ORDER_RATE_LIMIT, limiter
 from app.db.models import ROLE_ADMIN, Order, Product, ProductImage
+from app.services import delivery
 from limits import parse_many
 from pydantic import SecretStr
 from sqlalchemy import delete, func, select, text
@@ -116,7 +117,7 @@ async def test_the_ten_thousand_and_first_order_of_a_day_gets_a_number_of_its_ow
 async def test_totals_are_computed_from_database_prices(
     client: httpx.AsyncClient, shop: dict[str, Product]
 ) -> None:
-    # 1 × 40.00 → 50-ზე ნაკლებია, თბილისში მიწოდება 8.00
+    # 1 × 40.00 → 100-ზე ნაკლებია, თბილისში მიწოდება 8.00
     body = (await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}])).json()
 
     assert body["totals"] == {"subtotal": "40.00", "shipping": "8.00", "total": "48.00"}
@@ -125,7 +126,7 @@ async def test_totals_are_computed_from_database_prices(
 async def test_free_shipping_above_the_threshold(
     client: httpx.AsyncClient, shop: dict[str, Product]
 ) -> None:
-    # 1 × 200.00 ≥ 50 → მიწოდება უფასოა
+    # 1 × 200.00 ≥ 100 → მიწოდება უფასოა
     body = (await _place(client, [{"productId": str(shop["pricey"].id), "qty": 1}])).json()
 
     assert body["totals"] == {"subtotal": "200.00", "shipping": "0.00", "total": "200.00"}
@@ -891,9 +892,30 @@ class TestPaymentMethod:
     applied to the other field an operator acts on, and it was free text from
     the request body all the way to the order list.
 
-    Card to the courier is no longer offered. New orders are refused it; orders
-    already stored with it keep it and must still load.
+    Card to the courier is offered again, in the cities where
+    `delivery.CARD_ON_DELIVERY_CITIES` lists it; to any other city a card order
+    is refused with PAYMENT_METHOD_UNAVAILABLE. Orders already stored with it
+    keep it and must still load.
     """
+
+    @staticmethod
+    async def _checkout(
+        client: httpx.AsyncClient,
+        product: Product,
+        *,
+        method: str,
+        city: str = "თბილისი",
+        key: str | None = None,
+    ) -> httpx.Response:
+        return await client.post(
+            "/api/v1/orders",
+            json={
+                "items": [{"productId": str(product.id), "qty": 1}],
+                "customer": {**CUSTOMER, "city": city},
+                "paymentMethod": method,
+            },
+            headers={"Idempotency-Key": key or str(uuid.uuid4())},
+        )
 
     async def test_cash_is_accepted(
         self, client: httpx.AsyncClient, shop: dict[str, Product]
@@ -911,29 +933,78 @@ class TestPaymentMethod:
         assert response.status_code == 201
         assert response.json()["paymentMethod"] == "cash"
 
-    async def test_card_to_the_courier_is_refused_on_a_new_order(
-        self, client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+    @pytest.mark.parametrize("city", ["თბილისი", "რუსთავი"])
+    async def test_card_to_the_courier_is_accepted_where_the_courier_takes_it(
+        self, client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product], city: str
     ) -> None:
-        response = await client.post(
-            "/api/v1/orders",
-            json={
-                "items": [{"productId": str(shop["cheap"].id), "qty": 1}],
-                "customer": CUSTOMER,
-                "paymentMethod": "card_on_delivery",
-            },
-            headers={"Idempotency-Key": str(uuid.uuid4())},
+        response = await self._checkout(client, shop["cheap"], method="card_on_delivery", city=city)
+
+        assert response.status_code == 201, response.text
+        assert response.json()["paymentMethod"] == "card_on_delivery"
+        stored = await db.scalar(
+            select(Order).where(Order.order_number == response.json()["orderNumber"])
+        )
+        assert stored is not None
+        assert stored.payment_method == "card_on_delivery"
+
+    @pytest.mark.parametrize("city", ["თბილისი", "რუსთავი"])
+    async def test_cash_is_accepted_in_every_served_city(
+        self, client: httpx.AsyncClient, shop: dict[str, Product], city: str
+    ) -> None:
+        response = await self._checkout(client, shop["cheap"], method="cash", city=city)
+
+        assert response.status_code == 201, response.text
+        assert response.json()["paymentMethod"] == "cash"
+
+    async def test_card_to_a_city_that_does_not_take_it_is_refused_and_leaves_no_trace(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        client: httpx.AsyncClient,
+        db: AsyncSession,
+        shop: dict[str, Product],
+    ) -> None:
+        """Checked before the key is claimed, so a refusal is not a half-made order.
+
+        Rustavi is served but, here, not a card city - the case the table exists
+        for. What still holds: the same city with cash is accepted.
+        """
+        monkeypatch.setattr(delivery, "CARD_ON_DELIVERY_CITIES", frozenset({"თბილისი"}))
+        key = str(uuid.uuid4())
+
+        response = await self._checkout(
+            client, shop["cheap"], method="card_on_delivery", city="რუსთავი", key=key
         )
 
         assert response.status_code == 400
         error = response.json()["error"]
-        assert error["code"] == "VALIDATION_ERROR"
-        assert "paymentMethod" in str(error["details"])
+        assert error["code"] == "PAYMENT_METHOD_UNAVAILABLE"
+        assert error["details"] == [{"field": "paymentMethod", "cities": ["თბილისი"]}]
+        assert await _order_count(db) == 0
+        stock = await db.scalar(select(Product.stock).where(Product.id == shop["cheap"].id))
+        assert stock == 5
+        # The key was not claimed: the same checkout, paid in cash, is a new
+        # order and not a conflict with, or a replay of, the refused one.
+        retry = await self._checkout(client, shop["cheap"], method="cash", city="რუსთავი", key=key)
+        assert retry.status_code == 201, retry.text
+        assert retry.json()["paymentMethod"] == "cash"
+        assert await _order_count(db) == 1
+
+    async def test_the_payment_is_checked_after_the_city(
+        self, client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
+    ) -> None:
+        """Card to a city the shop does not serve says so, not "no card there"."""
+        response = await self._checkout(
+            client, shop["cheap"], method="card_on_delivery", city="ბათუმი"
+        )
+
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "CITY_NOT_SERVED"
         assert await _order_count(db) == 0
 
     async def test_an_old_order_paid_by_card_still_loads(
         self, client: httpx.AsyncClient, db: AsyncSession, shop: dict[str, Product]
     ) -> None:
-        """Stored before the method was withdrawn: the owner and the admin read it."""
+        """Stored under the old flat fee in a city no longer served: still readable."""
         owner = await make_user(db, email="card@example.ge")
         admin = await make_user(db, email="admin@example.ge", role=ROLE_ADMIN)
         order = Order(
@@ -1016,7 +1087,7 @@ class TestPaymentMethod:
 class TestDelivery:
     """The fee comes from the city and the goods, and from nothing the client says.
 
-    The owner's rules: Tbilisi 8, Rustavi 5, free from 50 of goods, and no other
+    The owner's rules: Tbilisi 8, Rustavi 5, free from 100 of goods, and no other
     city. They live in app/services/delivery.py; these tests write the numbers
     out rather than reading them from there, so a change to the table has to
     change a test too.
@@ -1067,10 +1138,10 @@ class TestDelivery:
     @pytest.mark.parametrize("city", ["თბილისი", "რუსთავი"])
     @pytest.mark.parametrize(
         ("price", "free"),
-        [("50.00", True), ("49.99", False)],
-        ids=["exactly-50-is-free", "one-tetri-below-is-charged"],
+        [("100.00", True), ("99.99", False)],
+        ids=["exactly-100-is-free", "one-tetri-below-is-charged"],
     )
-    async def test_the_threshold_is_fifty_inclusive(
+    async def test_the_threshold_is_one_hundred_inclusive(
         self,
         client: httpx.AsyncClient,
         db: AsyncSession,
@@ -1162,8 +1233,11 @@ class TestDelivery:
 
         assert response.status_code == 200
         assert response.json() == {
-            "cities": [{"name": "თბილისი", "fee": "8.00"}, {"name": "რუსთავი", "fee": "5.00"}],
-            "freeFrom": "50.00",
+            "cities": [
+                {"name": "თბილისი", "fee": "8.00", "cardOnDelivery": True},
+                {"name": "რუსთავი", "fee": "5.00", "cardOnDelivery": True},
+            ],
+            "freeFrom": "100.00",
             "currency": "GEL",
             "features": {"email": False},
         }

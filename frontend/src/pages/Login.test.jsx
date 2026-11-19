@@ -28,7 +28,7 @@ const LINK = { name: 'დაგავიწყდათ პაროლი?' };
 /** GET /delivery, with or without email. */
 const rules = (email) => ({
   cities: [{ name: 'თბილისი', fee: '8.00' }],
-  freeFrom: '50.00',
+  freeFrom: '100.00',
   currency: 'GEL',
   features: { email },
 });

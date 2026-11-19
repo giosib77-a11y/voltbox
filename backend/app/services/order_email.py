@@ -17,8 +17,13 @@ with the order number and without the recipient's address.
 
 SHOP_CONTACT and PAYMENT_METHOD_LABELS are copies of what the Georgian
 storefront shows - the phone and email from `frontend/src/constants/index.js`,
-the address, hours and payment labels from `frontend/src/i18n/ka.json`: the
-backend image does not carry the frontend. tests/test_order_email.py fails when the two disagree.
+the hours and payment labels from `frontend/src/i18n/ka.json`: the backend
+image does not carry the frontend. tests/test_order_email.py fails when the two
+disagree. The shop's own street address is deliberately not shown (the owner
+dropped it from the storefront too), so the email gives a phone, an email and
+hours only. (The customer's delivery address, further up, is theirs and stays.)
+PAYMENT_METHOD_LABELS is also the Telegram notice's one table (`telegram`
+imports it).
 """
 
 from __future__ import annotations
@@ -36,10 +41,9 @@ logger = logging.getLogger("voltbox.email")
 
 #: The footer's "კონტაქტი" column.
 SHOP_CONTACT = {
-    "phone": "+995 322 00 11 22",
+    "phone": "+995 557 18 20 18",
     "email": "info@voltbox.ge",
-    "address": "თბილისი, ჭავჭავაძის გამზირი 42",
-    "workHours": "ორშ.–შაბ. 10:00–20:00",
+    "workHours": "ორშ.–პარ. 10:00–18:00, შაბ.–კვ. დასვენება",
 }
 
 SHOP_NAME = "VoltBox"
@@ -47,7 +51,7 @@ SHOP_NAME = "VoltBox"
 #: What the checkout calls each method.
 PAYMENT_METHOD_LABELS = {
     "cash": "ნაღდი ანგარიშსწორება მიღებისას",
-    "card_on_delivery": "ბარათით კურიერთან",
+    "card_on_delivery": "ბარათით გადახდა მიღებისას",
 }
 
 
@@ -128,7 +132,6 @@ def text_body(order: OrderConfirmation) -> str:
             f"კითხვების შემთხვევაში დაგვიკავშირდით — {SHOP_NAME}:",
             f"ტელეფონი: {SHOP_CONTACT['phone']}",
             f"ელფოსტა: {SHOP_CONTACT['email']}",
-            f"მისამართი: {SHOP_CONTACT['address']}",
             f"სამუშაო საათები: {SHOP_CONTACT['workHours']}",
             "",
         ]
@@ -186,7 +189,6 @@ def html_body(order: OrderConfirmation) -> str:
         f"{escape(SHOP_NAME)}<br>"
         f"ტელეფონი: {escape(contact['phone'])}<br>"
         f"ელფოსტა: {escape(contact['email'])}<br>"
-        f"მისამართი: {escape(contact['address'])}<br>"
         f"სამუშაო საათები: {escape(contact['workHours'])}</p>"
         "</div></body></html>"
     )

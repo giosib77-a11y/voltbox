@@ -7,10 +7,10 @@
  */
 export const deliveryRules = {
   cities: [
-    { name: 'თბილისი', fee: 8 },
-    { name: 'რუსთავი', fee: 5 },
+    { name: 'თბილისი', fee: 8, cardOnDelivery: true },
+    { name: 'რუსთავი', fee: 5, cardOnDelivery: true },
   ],
-  freeFrom: 50,
+  freeFrom: 100,
   currency: 'GEL',
   // mock რეჟიმი წერილს ვერ აგზავნის
   features: { email: false },

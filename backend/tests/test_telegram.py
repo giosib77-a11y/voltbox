@@ -178,13 +178,36 @@ class TestAPlacedOrder:
         assert sent["chat_id"] == CHAT_ID
         assert sent["text"].splitlines() == [
             f"ახალი შეკვეთა {body['orderNumber']}",
-            # 2 x 40.00 + 99.99; 50 or more, so delivery is free
+            # 2 x 40.00 + 99.99; 100 or more, so delivery is free
             "პროდუქტები: 179.99 GEL",
             "მიწოდება: 0.00 GEL",
             "ჯამი: 179.99 GEL",
+            "გადახდა: ნაღდი ანგარიშსწორება მიღებისას",
             "ნივთები: 3",
             f"{settings.site_url}/admin/orders/{order.id}",
         ]
+
+    async def test_says_how_the_courier_is_paid(
+        self,
+        client: httpx.AsyncClient,
+        fake_telegram: FakeTelegram,
+        products: tuple[Product, Product],
+    ) -> None:
+        """The owner packing the order needs to know whether to bring a card terminal."""
+        response = await client.post(
+            "/api/v1/orders",
+            json={**_checkout_body(products), "paymentMethod": "card_on_delivery"},
+            headers={"Idempotency-Key": str(uuid.uuid4())},
+        )
+        assert response.status_code == 201, response.text
+
+        [request] = fake_telegram.requests
+        lines = json.loads(request.content)["text"].splitlines()
+        assert "გადახდა: ბარათით გადახდა მიღებისას" in lines
+        # Right after the total, before the item count.
+        assert (
+            lines.index("გადახდა: ბარათით გადახდა მიღებისას") == lines.index("ჯამი: 179.99 GEL") + 1
+        )
 
     async def test_the_delivery_fee_is_its_own_line(
         self,
@@ -206,7 +229,7 @@ class TestAPlacedOrder:
 
         [request] = fake_telegram.requests
         lines = json.loads(request.content)["text"].splitlines()
-        # 40.00 of goods to Tbilisi: below 50, so its 8.00 fee is charged.
+        # 40.00 of goods to Tbilisi: below 100, so its 8.00 fee is charged.
         assert lines[1:4] == [
             "პროდუქტები: 40.00 GEL",
             "მიწოდება: 8.00 GEL",

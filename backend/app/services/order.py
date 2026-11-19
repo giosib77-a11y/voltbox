@@ -335,7 +335,10 @@ async def place_order(
 
     # Before the key is claimed: a city the shop does not deliver to is the
     # customer's mistake to correct, not an order to half-create and roll back.
-    delivery.require_served(str(customer.get("city", "")))
+    city = delivery.require_served(str(customer.get("city", "")))
+    # Same reason: a card the courier cannot take in this city is a choice to
+    # correct, and it must not use up the key - a retry with cash is a new order.
+    delivery.require_payment_method(city, payment_method)
 
     # The key is claimed here, before any check that can fail or block. A
     # duplicate arriving now waits on the unique index instead of racing us to

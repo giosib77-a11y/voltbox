@@ -2,6 +2,8 @@ import { INFO_PAGES } from '../../constants/index.js';
 import { t } from '../../i18n/index.js';
 import InfoPage, { InfoSection } from './InfoPage.jsx';
 import DeliveryTable from './DeliveryTable.jsx';
+import { cardVariant } from './cardCities.js';
+import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
 
 /**
  * მიწოდების პირობები — ქალაქები და ფასები `GET /delivery`-დან.
@@ -11,6 +13,9 @@ import DeliveryTable from './DeliveryTable.jsx';
  * itself is `shipping.etaDays`, the one the cart shows.
  */
 export default function DeliveryTerms() {
+  const { rules } = useDeliveryRules();
+  const payment = cardVariant(rules);
+
   return (
     <InfoPage page={INFO_PAGES.delivery} description={t('info.delivery.description')}>
       <InfoSection title={t('info.delivery.whereTitle')}>
@@ -27,7 +32,7 @@ export default function DeliveryTerms() {
       </InfoSection>
 
       <InfoSection title={t('info.delivery.paymentTitle')}>
-        <p>{t('info.delivery.paymentText')}</p>
+        <p>{t(`info.delivery.paymentText${payment.suffix}`, { cities: payment.cities })}</p>
       </InfoSection>
 
       <InfoSection title={t('info.delivery.receiptTitle')}>

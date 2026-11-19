@@ -45,7 +45,7 @@ const PAGES = [INFO_PAGES.delivery, INFO_PAGES.returns, INFO_PAGES.privacy, INFO
 /** GET /delivery as the server sends it; every other request answers an empty list. */
 const RULES = {
   cities: [{ name: 'თბილისი', fee: '8.00' }],
-  freeFrom: '50.00',
+  freeFrom: '100.00',
   currency: 'GEL',
   features: { email: false },
 };

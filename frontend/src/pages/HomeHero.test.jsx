@@ -66,7 +66,7 @@ async function mountHome(categories) {
     latest: [],
     popularCategories: categories,
   });
-  vi.spyOn(api, 'getDeliveryRules').mockResolvedValue({ cities: [], freeFrom: 50, currency: 'GEL' });
+  vi.spyOn(api, 'getDeliveryRules').mockResolvedValue({ cities: [], freeFrom: 100, currency: 'GEL' });
   vi.spyOn(api, 'getProducts').mockResolvedValue({
     items: [],
     total: 0,

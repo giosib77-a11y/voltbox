@@ -10,10 +10,10 @@ import { MemoryRouter } from 'react-router';
 import Footer from './Footer.jsx';
 import * as api from '../../services/api.js';
 import { forgetDeliveryRules } from '../../hooks/useDeliveryRules.js';
-import { t } from '../../i18n/index.js';
+import { i18n, t } from '../../i18n/index.js';
 import { formatPrice } from '../../utils/format.js';
 
-const RULES = { cities: [], freeFrom: 50, currency: 'GEL' };
+const RULES = { cities: [], freeFrom: 100, currency: 'GEL' };
 
 /**
  * The footer reads the delivery rules, which arrive after the first paint. A
@@ -49,6 +49,23 @@ describe('Footer', () => {
       .getAllByRole('link')
       .map((link) => link.textContent);
     expect(names).toEqual(['ტელეფონები', 'კაბელები']);
+  });
+
+  it('shows the shop phone and email, and no address', async () => {
+    await renderFooter();
+
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByRole('link', { name: '+995 557 18 20 18' })).toHaveAttribute(
+      'href',
+      'tel:+995557182018',
+    );
+    expect(within(footer).getByRole('link', { name: 'info@voltbox.ge' })).toBeInTheDocument();
+    expect(within(footer).getByText(t('contact.workHours'))).toBeInTheDocument();
+    expect(t('contact.workHours')).toBe('ორშ.–პარ. 10:00–18:00, შაბ.–კვ. დასვენება');
+    // The shop's physical address is not shown anywhere
+    expect(footer).not.toHaveTextContent('ჭავჭავაძის');
+    expect(footer).not.toHaveTextContent('contact.address');
+    expect(i18n.exists('contact.address')).toBe(false);
   });
 
   describe('demo notice', () => {

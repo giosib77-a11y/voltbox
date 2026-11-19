@@ -40,7 +40,7 @@ export default function Privacy() {
       <InfoSection title={t('info.privacy.collectTitle')}>
         <p>
           <strong className="font-semibold text-ink-900">{t('info.privacy.collectOrderLabel')}</strong>{' '}
-          {t('info.privacy.collectOrder')}
+          {t('info.privacy.collectOrder')} {t('info.privacy.collectPhoneNote')}
         </p>
         <p>
           <strong className="font-semibold text-ink-900">
@@ -55,6 +55,13 @@ export default function Privacy() {
       </InfoSection>
 
       <InfoSection title={t('info.privacy.useTitle')}>
+        <p>{t('info.privacy.useIntro')}</p>
+        <ul className={DIAMOND_LIST_CLASS}>
+          <li>{t('info.privacy.usePurposeOrder')}</li>
+          <li>{t('info.privacy.usePurposeTax')}</li>
+          <li>{t('info.privacy.usePurposeAccount')}</li>
+          <li>{t('info.privacy.usePurposeSecurity')}</li>
+        </ul>
         <p>{t('info.privacy.useText')}</p>
       </InfoSection>
 
@@ -81,6 +88,7 @@ export default function Privacy() {
         <p>
           <Rich k="info.privacy.rightsText" values={{ contact: <ContactInline /> }} />
         </p>
+        <p>{t('info.privacy.rightsComplaint')}</p>
       </InfoSection>
     </InfoPage>
   );

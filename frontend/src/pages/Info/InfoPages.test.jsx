@@ -38,14 +38,14 @@ const PAGES = [
 
 const TBILISI_RUSTAVI = {
   cities: [
-    { name: 'თბილისი', fee: '8.00' },
-    { name: 'რუსთავი', fee: '5.00' },
+    { name: 'თბილისი', fee: '8.00', cardOnDelivery: true },
+    { name: 'რუსთავი', fee: '5.00', cardOnDelivery: true },
   ],
-  freeFrom: '50.00',
+  freeFrom: '100.00',
 };
 
 const BATUMI = {
-  cities: [{ name: 'ბათუმი', fee: '12.50' }],
+  cities: [{ name: 'ბათუმი', fee: '12.50', cardOnDelivery: false }],
   freeFrom: '80.00',
 };
 
@@ -93,6 +93,14 @@ const passwordAnswer = () =>
 
 const returnSteps = () => screen.getByRole('list', { name: t('info.returns.steps') });
 
+const MIXED = {
+  cities: [
+    { name: 'თბილისი', fee: '8.00', cardOnDelivery: true },
+    { name: 'ბათუმი', fee: '12.50', cardOnDelivery: false },
+  ],
+  freeFrom: '100.00',
+};
+
 const UNKNOWN = { ...SHOP_FACTS };
 
 beforeEach(() => {
@@ -111,7 +119,7 @@ describe('delivery prices', () => {
       [
         ['თბილისი', '8 ₾'],
         ['რუსთავი', '5 ₾'],
-        ['შეკვეთა 50 ₾-დან', 'უფასო'],
+        ['შეკვეთა 100 ₾-დან', 'უფასო'],
       ],
     ],
     [
@@ -197,33 +205,166 @@ describe('facts the owner has not supplied yet', () => {
   it('leave their sentences out', async () => {
     answer(rules());
 
-    const returns = await mount(ReturnsWarranty);
-    expect(within(returnSteps()).getAllByRole('listitem')).toHaveLength(2);
-    expect(screen.queryByText(/ვადით/)).not.toBeInTheDocument();
-    returns.unmount();
-
+    expect(SHOP_FACTS.legalEntity).toBeNull();
     await mount(Privacy);
     expect(screen.queryByRole('heading', { name: 'ვინ ვართ' })).not.toBeInTheDocument();
   });
 
   it('appear once written into SHOP_FACTS', async () => {
     Object.assign(SHOP_FACTS, {
-      returnPickup: 'კურიერი პროდუქტს თქვენი მისამართიდან წაიღებს',
-      warrantyPeriod: 'ერთი წელი',
-      legalEntity: { name: 'შპს ვოლტბოქსი', idCode: '400000000', address: 'თბილისი' },
+      legalEntity: { name: 'ი/მ ნინო ბერიძე', idCode: '01001000000', address: 'თბილისი, რუსთაველის 1' },
     });
     answer(rules());
 
-    const returns = await mount(ReturnsWarranty);
-    const steps = within(returnSteps()).getAllByRole('listitem');
-    expect(steps).toHaveLength(3);
-    expect(steps[1]).toHaveTextContent('კურიერი პროდუქტს თქვენი მისამართიდან წაიღებს');
-    expect(screen.getByText('პროდუქტზე ვრცელდება გარანტია, ვადით ერთი წელი.')).toBeInTheDocument();
-    returns.unmount();
-
     await mount(Privacy);
-    expect(screen.getByRole('heading', { name: 'ვინ ვართ' })).toBeInTheDocument();
-    expect(screen.getByText('400000000')).toBeInTheDocument();
+    const who = screen.getByRole('heading', { name: 'ვინ ვართ' }).closest('section');
+    expect(who).toHaveTextContent('ი/მ ნინო ბერიძე');
+    expect(who).toHaveTextContent('პირადი ნომერი / საიდენტიფიკაციო კოდი');
+    expect(who).toHaveTextContent('01001000000');
+    expect(who).toHaveTextContent('იურიდიული მისამართი');
+    expect(who).toHaveTextContent('თბილისი, რუსთაველის 1');
+  });
+
+  it('is the only place a postal address can appear: no page shows the old shop address', async () => {
+    answer(rules());
+    for (const [, Page] of PAGES) {
+      const { container, unmount } = await mount(Page);
+      expect(container.textContent).not.toContain('ჭავჭავაძის გამზირი');
+      unmount();
+    }
+  });
+});
+
+describe('payment by card on delivery', () => {
+  it.each([
+    ['delivery', DeliveryTerms],
+    ['faq', Faq],
+  ])('the %s page says cash or card when every city takes the card', async (_, Page) => {
+    answer(rules());
+    await mount(Page);
+
+    expect(screen.getByText(/ნაღდი ფულით ან ბარათით/)).toBeInTheDocument();
+    expect(screen.queryByText(/მალე დაემატება/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['delivery', DeliveryTerms],
+    ['faq', Faq],
+  ])('the %s page lists the card cities when only some take it', async (_, Page) => {
+    answer(rules(MIXED));
+    await mount(Page);
+
+    expect(
+      screen.getByText(/ბარათით გადახდა შესაძლებელია მხოლოდ ამ ქალაქებში: თბილისი\./),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    ['delivery', DeliveryTerms],
+    ['faq', Faq],
+  ])('the %s page claims no card when no city takes it', async (_, Page) => {
+    answer(rules(BATUMI));
+    await mount(Page);
+
+    expect(screen.queryByText(/ბარათით/)).not.toBeInTheDocument();
+    expect(screen.getByText(/ნაღდი ფულით/)).toBeInTheDocument();
+  });
+});
+
+describe('the returns page', () => {
+  it('sets no condition on a return, and keeps the one legal exception', async () => {
+    answer(rules());
+    const { container } = await mount(ReturnsWarranty);
+
+    expect(container.textContent).not.toContain('პირობები:');
+    expect(container.textContent).not.toContain('არ უნდა იყოს გამოყენებული');
+    expect(screen.getByText(/მიღებიდან 14 კალენდარული დღის განმავლობაში, მიზეზის მითითების გარეშე/)).toBeInTheDocument();
+    expect(screen.getByText(/ყურში ჩასადები ყურსასმენები/)).toBeInTheDocument();
+    expect(screen.getByText(/დაბრუნების პირობა არ არის/)).toBeInTheDocument();
+  });
+
+  it('lists the four steps, the pickup one always, and a legal guarantee of 2 years', async () => {
+    answer(rules());
+    await mount(ReturnsWarranty);
+
+    const steps = within(returnSteps()).getAllByRole('listitem');
+    expect(steps).toHaveLength(4);
+    expect(steps[1]).toHaveTextContent(
+      'დაგვიკავშირდით — შევათანხმებთ, კურიერს გამოვგზავნით თუ თავად გამოგვიგზავნით.',
+    );
+    expect(screen.getByText(/გარანტია 2 წელია მიწოდებიდან/)).toBeInTheDocument();
+    expect(screen.getByText(/მწარმოებლის გარანტია, როგორც წესი 12 თვის/)).toBeInTheDocument();
+  });
+
+  it('shows the withdrawal form as copyable text, with the shop email from CONTACT', async () => {
+    answer(rules());
+    await mount(ReturnsWarranty);
+
+    expect(screen.getByRole('heading', { name: 'უარის განცხადების ნიმუში' })).toBeInTheDocument();
+    const form = screen.getByText(/ადრესატი: VoltBox/);
+    expect(form.tagName).toBe('PRE');
+    expect(form).toHaveTextContent(`ადრესატი: VoltBox, ${CONTACT.email}`);
+    for (const line of [
+      'ვაცხადებ, რომ ვამბობ უარს შემდეგი პროდუქტის ნასყიდობაზე: …',
+      'შეკვეთის ნომერი: …',
+      'მიღების თარიღი: …',
+      'სახელი, გვარი: …',
+      'თარიღი: …',
+    ]) {
+      expect(form.textContent).toContain(line);
+    }
+    // one line each, so it pastes into an email as it reads
+    expect(form.textContent.split('\n')).toHaveLength(6);
+  });
+});
+
+describe('the privacy page content', () => {
+  it('gives each purpose its legal basis', async () => {
+    answer(rules());
+    await mount(Privacy);
+
+    const uses = screen.getByRole('heading', { name: 'რისთვის ვიყენებთ' }).closest('section');
+    expect(uses).toHaveTextContent('ხელშეკრულების შესასრულებლად');
+    expect(uses).toHaveTextContent('კანონით დადგენილი ვალდებულების შესასრულებლად');
+    expect(uses).toHaveTextContent('კანონიერი ინტერესის საფუძველზე');
+  });
+
+  it('says the phone is required, the email optional, and what the IP is used for', async () => {
+    answer(rules());
+    await mount(Privacy);
+
+    const collected = screen.getByRole('heading', { name: 'რა მონაცემებს ვაგროვებთ' }).closest('section');
+    expect(collected).toHaveTextContent('ტელეფონის ნომერი შეკვეთისთვის სავალდებულოა');
+    expect(collected).toHaveTextContent('ფსევდონიმიზებული');
+    expect(collected).toHaveTextContent('ადმინისტრატორის IP მისამართიც ფიქსირდება');
+  });
+
+  it('names the transfers abroad, Resend only while email is on', async () => {
+    answer(rules(TBILISI_RUSTAVI, false));
+    const off = await mount(Privacy);
+    expect(screen.getByText(/Render — .*აშშ-ისაა.*ფრანკფურტი/)).toBeInTheDocument();
+    expect(screen.getByText(/Supabase — .*ევროკავშირში/)).toBeInTheDocument();
+    expect(screen.queryByText(/Resend/)).not.toBeInTheDocument();
+    off.unmount();
+
+    forgetDeliveryRules();
+    answer(rules(TBILISI_RUSTAVI, true));
+    await mount(Privacy);
+    expect(screen.getByText(/Resend — .*აშშ-ის კომპანიაა/)).toBeInTheDocument();
+  });
+
+  it('lists the rights and the State Audit Office, not the abolished service', async () => {
+    answer(rules());
+    const { container } = await mount(Privacy);
+
+    const rights = screen.getByRole('heading', { name: 'თქვენი უფლებები' }).closest('section');
+    for (const right of ['შესწორება', 'წაშლა', 'დამუშავების შეზღუდვა', 'შეეწინააღმდეგოთ', 'გაიხმოთ თანხმობა']) {
+      expect(rights).toHaveTextContent(right);
+    }
+    expect(rights).toHaveTextContent('სახელმწიფო აუდიტის სამსახურს');
+    expect(rights).toHaveTextContent('სასამართლოს');
+    expect(rights.textContent).not.toMatch(/მიმართოთ პერსონალურ მონაცემთა დაცვის სამსახურს/);
+    expect(container.textContent).toContain('პერსონალურ მონაცემთა დაცვის სამსახურის ფუნქციები გადაიბარა');
   });
 });
 
@@ -255,6 +396,7 @@ describe('the privacy page against the code', () => {
       shipping: 'მიწოდების საფასური',
       total: 'ჯამი',
       item_count: 'ნივთების რაოდენობა',
+      payment_method: 'გადახდის მეთოდი',
       order_id: 'ბმული შეკვეთაზე',
     };
     const source = readFileSync(
@@ -351,10 +493,10 @@ describe('in English', () => {
   const GEORGIAN = /[ა-ჿ]/;
   const ENGLISH_CITIES = {
     cities: [
-      { name: 'Tbilisi', fee: '8.00' },
-      { name: 'Rustavi', fee: '5.00' },
+      { name: 'Tbilisi', fee: '8.00', cardOnDelivery: true },
+      { name: 'Rustavi', fee: '5.00', cardOnDelivery: true },
     ],
-    freeFrom: '50.00',
+    freeFrom: '100.00',
   };
 
   beforeEach(() => i18n.changeLanguage('en'));
@@ -383,7 +525,7 @@ describe('in English', () => {
     expect(tableRows()).toEqual([
       ['თბილისი', '8 ₾'],
       ['რუსთავი', '5 ₾'],
-      ['Orders from 50 ₾', 'Free'],
+      ['Orders from 100 ₾', 'Free'],
     ]);
   });
 
@@ -406,12 +548,30 @@ describe('in English', () => {
     );
   });
 
-  it('puts the owner facts in the sentences when they are written', async () => {
-    Object.assign(SHOP_FACTS, { returnPickup: 'The courier collects it', warrantyPeriod: 'one year' });
+  it('puts the legal entity in the privacy page when it is written', async () => {
+    Object.assign(SHOP_FACTS, {
+      legalEntity: { name: 'Nino Beridze, sole proprietor', idCode: '01001000000', address: 'Tbilisi' },
+    });
+    answer(rules(ENGLISH_CITIES));
+    await mount(Privacy);
+
+    const who = screen.getByRole('heading', { name: 'Who we are' }).closest('section');
+    expect(who).toHaveTextContent('Personal number / identification code');
+    expect(who).toHaveTextContent('01001000000');
+  });
+
+  it('keeps the returns steps, the withdrawal form and the card sentence in English', async () => {
     answer(rules(ENGLISH_CITIES));
     await mount(ReturnsWarranty);
 
-    expect(within(returnSteps()).getAllByRole('listitem')).toHaveLength(3);
-    expect(screen.getByText('The product is covered by a warranty for a period of one year.')).toBeInTheDocument();
+    expect(within(returnSteps()).getAllByRole('listitem')).toHaveLength(4);
+    expect(screen.getByText(/^To: VoltBox, info@voltbox\.ge/)).toBeInTheDocument();
+  });
+
+  it('says cash or card on the delivery page', async () => {
+    answer(rules(ENGLISH_CITIES));
+    await mount(DeliveryTerms);
+
+    expect(screen.getByText('You pay when you receive the product — in cash or by card.')).toBeInTheDocument();
   });
 });
