@@ -181,6 +181,16 @@ jobs:
           # dependencies were found that way (email-validator, python-multipart,
           # httpx). One module left out of the import graph, or one import moved
           # inside a function, and the guarantee is gone with nothing to say so.
+          #
+          # One module is deliberately not reached by app.main: gunicorn's
+          # worker class, which gunicorn.conf.py loads by import path. It
+          # needs gunicorn, which does not install on Windows, where the app
+          # is also developed and tested. The image is Linux and has
+          # gunicorn, so importing it here also proves the image has
+          # gunicorn and uvicorn.workers. Every other module must still be
+          # reached by importing app.main.
+          import app.core.uvicorn_worker
+
           root = pathlib.Path('app')
           on_disk = {
               '.'.join(f.relative_to(root.parent).with_suffix('').parts).removesuffix('.__init__')
