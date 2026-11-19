@@ -156,7 +156,8 @@ export async function listOrders(params = {}) {
   return request('/admin/orders', { params });
 }
 
-// POST /admin/orders/:id/trash - idempotent; the stock is not touched
+// POST /admin/orders/:id/trash - idempotent; the stock is not touched;
+// 409 ORDER_STILL_ACTIVE unless the order is cancelled or delivered
 export async function trashOrder(id) {
   return request(`/admin/orders/${encodeURIComponent(id)}/trash`, { method: 'POST' });
 }
@@ -166,7 +167,8 @@ export async function restoreOrder(id) {
   return request(`/admin/orders/${encodeURIComponent(id)}/restore`, { method: 'POST' });
 }
 
-// DELETE /admin/orders/:id - permanent; 409 ORDER_NOT_IN_TRASH for a live order
+// DELETE /admin/orders/:id - permanent; 409 ORDER_NOT_IN_TRASH for a live order,
+// 409 ORDER_STILL_ACTIVE for an order that is not cancelled or delivered
 export async function deleteOrderForever(id) {
   return request(`/admin/orders/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }

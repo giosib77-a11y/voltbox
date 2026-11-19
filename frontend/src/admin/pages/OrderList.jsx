@@ -190,7 +190,13 @@ export default function OrderList() {
         <span className="whitespace-nowrap">
           <span className="block text-ink-600">{dateTime(order.deletedAt)}</span>
           <span className="text-xs text-ink-500">
-            დარჩა <span className="tabular-nums">{daysLeft(order.purgeAt)} დღე</span>
+            {order.purgeAt ? (
+              <>
+                დარჩა <span className="tabular-nums">{daysLeft(order.purgeAt)} დღე</span>
+              </>
+            ) : (
+              'ავტომატურად არ წაიშლება'
+            )}
           </span>
         </span>
       ),

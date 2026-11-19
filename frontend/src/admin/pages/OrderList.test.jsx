@@ -109,6 +109,16 @@ describe('OrderList trash toggle', () => {
     expect(within(second).getByText('0 დღე')).toBeInTheDocument();
   });
 
+  it('says an order with purgeAt null is never purged, and shows no days left', async () => {
+    vi.spyOn(adminApi, 'listOrders').mockResolvedValue(pageOf([trashed({ purgeAt: null })]));
+    renderList('/admin/orders?trash=true');
+
+    const row = (await screen.findByText('VB-1001')).closest('tr');
+    expect(within(row).getByText('ავტომატურად არ წაიშლება')).toBeInTheDocument();
+    expect(within(row).queryByText(/დარჩა/)).not.toBeInTheDocument();
+    expect(within(row).queryByText(/დღე/)).not.toBeInTheDocument();
+  });
+
   it('says so when the trash is empty', async () => {
     vi.spyOn(adminApi, 'listOrders').mockResolvedValue(pageOf([]));
     renderList('/admin/orders?trash=true');

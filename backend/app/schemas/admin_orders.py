@@ -5,8 +5,10 @@ the dashboard payload.
 Where it fits: the routes under app/api/v1/routes/admin/.
 Notes: the order detail carries `allowedTransitions` so the UI renders only the
 moves the server would accept, instead of re-implementing the state machine
-(empty while the order is in the trash). `deletedAt`/`purgeAt` are null for a
-live order.
+(empty while the order is in the trash). `deletedAt` is null for a live order.
+`purgeAt` is null for a live order and for a trashed order that will not be
+purged because it is still active (trashed before A-116): restore and cancel it
+first.
 """
 
 from __future__ import annotations
@@ -33,7 +35,9 @@ class OrderListItem(ApiModel):
     item_count: int
     payment_method: str
     created_at: datetime
-    #: Set while the order is in the trash; `purge_at` is deleted_at + retention.
+    #: `deleted_at` is set while the order is in the trash. `purge_at` is
+    #: deleted_at + retention for a trashed order in a final status; null for a
+    #: live order and for a trashed order that is still active (the purge skips it).
     deleted_at: datetime | None
     purge_at: datetime | None
 

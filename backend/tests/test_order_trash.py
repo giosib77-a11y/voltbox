@@ -517,6 +517,66 @@ async def test_trashing_an_already_trashed_active_order_is_still_a_no_op(
     assert await _audit_rows(db, order, "order.trash") == []
 
 
+async def test_a_legacy_trashed_active_order_has_no_purge_date(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+) -> None:
+    """The purge never deletes an active order, so the admin must not be told
+    when it will be: `purgeAt` is null while `deletedAt` stays set (A-118)."""
+    order = await _order(db, slug="legacy-no-purge-date")
+    await transition(db, order.id, "confirmed", actor_id=None)
+    await _legacy_trashed(db, order)
+
+    detail = await client.get(f"{ADMIN}/orders/{order.id}", headers=headers)
+    trash = await client.get(f"{ADMIN}/orders", headers=headers, params={"trash": "true"})
+
+    assert detail.status_code == 200
+    assert detail.json()["deletedAt"] is not None
+    assert detail.json()["purgeAt"] is None
+    assert trash.status_code == 200
+    row = trash.json()["items"][0]
+    assert row["orderNumber"] == order.order_number
+    assert row["deletedAt"] is not None
+    assert row["purgeAt"] is None
+
+
+@pytest.mark.parametrize("status", ["cancelled", "delivered"])
+async def test_a_trashed_final_order_keeps_its_purge_date_and_a_live_one_has_none(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession, status: str
+) -> None:
+    make = _cancelled if status == "cancelled" else _delivered
+    order = await make(db, slug=f"purge-date-{status}")
+    live = await _order(db, slug=f"purge-date-live-{status}")
+    await _trash(client, headers, order)
+
+    detail = (await client.get(f"{ADMIN}/orders/{order.id}", headers=headers)).json()
+    live_detail = (await client.get(f"{ADMIN}/orders/{live.id}", headers=headers)).json()
+    trash = (await client.get(f"{ADMIN}/orders", headers=headers, params={"trash": "true"})).json()
+
+    assert datetime.fromisoformat(detail["purgeAt"]) - datetime.fromisoformat(
+        detail["deletedAt"]
+    ) == timedelta(days=30)
+    assert trash["items"][0]["purgeAt"] == detail["purgeAt"]
+    assert live_detail["deletedAt"] is None
+    assert live_detail["purgeAt"] is None
+
+
+async def test_a_legacy_trashed_order_gets_a_purge_date_once_restored_cancelled_and_trashed(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+) -> None:
+    order = await _order(db, slug="legacy-purge-date-later")
+    await _legacy_trashed(db, order)
+    await _restore(client, headers, order)
+    await client.post(
+        f"{ADMIN}/orders/{order.id}/status", headers=headers, json={"to": "cancelled"}
+    )
+
+    body = (await _trash(client, headers, order)).json()
+
+    assert datetime.fromisoformat(body["purgeAt"]) - datetime.fromisoformat(
+        body["deletedAt"]
+    ) == timedelta(days=30)
+
+
 async def test_a_legacy_trashed_active_order_restores_and_cancelling_returns_its_stock(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:

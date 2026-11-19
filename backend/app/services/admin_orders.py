@@ -142,7 +142,7 @@ def _summary(order: Order, item_count: int) -> dict[str, Any]:
         "payment_method": order.payment_method,
         "created_at": order.created_at,
         "deleted_at": order.deleted_at,
-        "purge_at": purge_at(order.deleted_at),
+        "purge_at": purge_at(order.deleted_at, order.status),
     }
 
 

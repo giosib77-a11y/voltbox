@@ -47,9 +47,16 @@ from app.services.order_status import FINAL_STATUSES, is_final, lock_order
 TRASH_RETENTION = timedelta(days=30)
 
 
-def purge_at(deleted_at: datetime | None) -> datetime | None:
-    """When a trashed order becomes eligible for the purge; None for a live one."""
-    return None if deleted_at is None else deleted_at + TRASH_RETENTION
+def purge_at(deleted_at: datetime | None, status: str) -> datetime | None:
+    """When a trashed order becomes eligible for the purge.
+
+    None for a live order, and for a trashed order that is still active (trashed
+    before A-116): the purge skips it, so a date would promise a deletion that
+    never comes. Restore and cancel it first.
+    """
+    if deleted_at is None or not is_final(status):
+        return None
+    return deleted_at + TRASH_RETENTION
 
 
 def _require_final_status(order: Order) -> None:

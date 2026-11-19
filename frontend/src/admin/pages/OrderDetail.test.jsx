@@ -48,6 +48,9 @@ function makeOrder(overrides = {}) {
   };
 }
 
+// A final order: no status moves left, so the page offers the trash button.
+const FINAL = makeOrder({ status: 'cancelled', allowedTransitions: [] });
+
 const TRASHED = makeOrder({
   deletedAt: '2026-10-10T10:00:00Z',
   purgeAt: '2026-11-09T10:00:00Z',
@@ -79,8 +82,20 @@ beforeEach(() => {
 });
 
 describe('OrderDetail move to trash', () => {
+  it('offers the trash button on a final order but not on an active one', async () => {
+    const get = vi.spyOn(adminApi, 'getOrder').mockResolvedValue(makeOrder());
+    const active = renderDetail();
+    await screen.findByRole('button', { name: 'დადასტურებული' });
+    expect(screen.queryByRole('button', { name: 'წაშლა' })).not.toBeInTheDocument();
+    active.unmount();
+
+    get.mockResolvedValue(makeOrder({ status: 'delivered', allowedTransitions: [] }));
+    renderDetail();
+    expect(await screen.findByRole('button', { name: 'წაშლა' })).toBeInTheDocument();
+  });
+
   it('no longer claims the units stay reserved: the server refuses an active order', async () => {
-    vi.spyOn(adminApi, 'getOrder').mockResolvedValue(makeOrder());
+    vi.spyOn(adminApi, 'getOrder').mockResolvedValue(FINAL);
     renderDetail();
 
     await userEvent.click(await screen.findByRole('button', { name: 'წაშლა' }));
@@ -89,8 +104,8 @@ describe('OrderDetail move to trash', () => {
     expect(screen.queryByText(/ერთეულები დარჩება დაკავებული/)).not.toBeInTheDocument();
   });
 
-  it('shows ORDER_STILL_ACTIVE when trashing an active order is refused, and stays on the page', async () => {
-    vi.spyOn(adminApi, 'getOrder').mockResolvedValue(makeOrder());
+  it('shows ORDER_STILL_ACTIVE when the server refuses the trash, and stays on the page', async () => {
+    vi.spyOn(adminApi, 'getOrder').mockResolvedValue(FINAL);
     vi.spyOn(adminApi, 'trashOrder').mockRejectedValue(
       new ConflictError(STILL_ACTIVE, {
         code: 'ORDER_STILL_ACTIVE',
@@ -109,7 +124,7 @@ describe('OrderDetail move to trash', () => {
   });
 
   it('trashes once on confirm and lands on the list with a toast', async () => {
-    vi.spyOn(adminApi, 'getOrder').mockResolvedValue(makeOrder());
+    vi.spyOn(adminApi, 'getOrder').mockResolvedValue(FINAL);
     const trash = vi.spyOn(adminApi, 'trashOrder').mockResolvedValue(TRASHED);
     renderDetail();
 
@@ -124,7 +139,7 @@ describe('OrderDetail move to trash', () => {
   });
 
   it('shows the server message and keeps the page usable when trashing fails', async () => {
-    vi.spyOn(adminApi, 'getOrder').mockResolvedValue(makeOrder());
+    vi.spyOn(adminApi, 'getOrder').mockResolvedValue(FINAL);
     vi.spyOn(adminApi, 'trashOrder').mockRejectedValue(new ApiError('ქსელის შეცდომა', 0));
     renderDetail();
 
@@ -148,9 +163,20 @@ describe('OrderDetail trashed order', () => {
     expect(screen.queryByRole('button', { name: 'წაშლა' })).not.toBeInTheDocument();
   });
 
+  it('says a trashed active order (purgeAt null) is never purged, with no date', async () => {
+    vi.spyOn(adminApi, 'getOrder').mockResolvedValue(makeOrder({ ...TRASHED, purgeAt: null }));
+    renderDetail();
+
+    const note = await screen.findByText(/ავტომატურად არ წაიშლება/);
+    expect(note).toHaveTextContent('აღადგინეთ და გააუქმეთ');
+    expect(note).not.toHaveTextContent('2026');
+    expect(screen.queryByText(/სამუდამოდ წაიშლება/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'აღდგენა' })).toBeEnabled();
+  });
+
   it('restores in one click, without a dialog, and shows the live order', async () => {
     vi.spyOn(adminApi, 'getOrder').mockResolvedValue(TRASHED);
-    const restore = vi.spyOn(adminApi, 'restoreOrder').mockResolvedValue(makeOrder());
+    const restore = vi.spyOn(adminApi, 'restoreOrder').mockResolvedValue(FINAL);
     renderDetail();
 
     await userEvent.click(await screen.findByRole('button', { name: 'აღდგენა' }));
@@ -237,6 +263,5 @@ describe('OrderDetail status change on a trashed order', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('შეკვეთა სანაგვეშია');
     expect(screen.getByRole('button', { name: 'დადასტურებული' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'წაშლა' })).toBeEnabled();
   });
 });

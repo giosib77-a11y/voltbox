@@ -123,10 +123,18 @@ export default function OrderDetail() {
         <div className="mb-4 space-y-3">
           <p className="flex flex-wrap items-center gap-1 rounded-lg bg-warning-50 px-3 py-2 text-sm text-warning-600">
             <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>
-              შეკვეთა სანაგვეშია და {dateOnly(order.purgeAt)} სამუდამოდ წაიშლება. სტატუსი არ
-              იცვლება.
-            </span>
+            {order.purgeAt ? (
+              <span>
+                შეკვეთა სანაგვეშია და {dateOnly(order.purgeAt)} სამუდამოდ წაიშლება. სტატუსი არ
+                იცვლება.
+              </span>
+            ) : (
+              // A legacy order trashed while still active: the server never purges it.
+              <span>
+                შეკვეთა სანაგვეშია, მაგრამ აქტიურია და ავტომატურად არ წაიშლება. მარაგის
+                დასაბრუნებლად აღადგინეთ და გააუქმეთ.
+              </span>
+            )}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={restore} loading={restoring}>
@@ -153,10 +161,14 @@ export default function OrderDetail() {
           {order.allowedTransitions.length ? null : (
             <p className="text-sm text-ink-600">ეს შეკვეთა დასრულებულია — სტატუსი აღარ იცვლება.</p>
           )}
-          <Button variant="danger" size="sm" onClick={() => setTrashDialog('trash')}>
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-            წაშლა
-          </Button>
+          {/* Only a final order (no moves left) can be trashed; the server enforces
+              it too (409 ORDER_STILL_ACTIVE). */}
+          {order.allowedTransitions.length === 0 ? (
+            <Button variant="danger" size="sm" onClick={() => setTrashDialog('trash')}>
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              წაშლა
+            </Button>
+          ) : null}
         </div>
       )}
 
