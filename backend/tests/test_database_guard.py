@@ -159,15 +159,47 @@ def test_settings_built_for_this_run_pass_the_check() -> None:
     suite.require_settings_built_for_this_run()
 
 
+def _differing_in_one_field(
+    *,
+    host: str | None = None,
+    port: int | None = None,
+    database: str | None = None,
+    username: str | None = None,
+) -> str:
+    """The active test URL with the one field that is given altered.
+
+    A-115: these URLs used to be literals, and the literal `localhost:5432/voltbox_test`
+    IS the test database in CI (`TEST_DATABASE_URL` there is that URL), so the guard
+    rightly accepted it and the test failed. Computed from the URL the run uses,
+    each one differs from it in one compared field whatever `TEST_DATABASE_URL` is.
+    tests/conftest.py has set `DATABASE_URL` before this module is collected.
+    """
+    active = make_url(os.environ["DATABASE_URL"])
+    url = active.set(
+        drivername="postgresql+asyncpg",
+        host=host or active.host,
+        port=port or active.port,
+        database=database or active.database,
+        username=username or active.username,
+    )
+    return url.render_as_string(hide_password=False)
+
+
+_ACTIVE = make_url(os.environ["DATABASE_URL"])
+_OTHER_HOST = "127.0.0.1" if _ACTIVE.host == "localhost" else "localhost"
+
+
 @pytest.mark.parametrize(
     "url",
     [
         REMOTE,
-        "postgresql+asyncpg://voltbox:voltbox@localhost:55432/voltbox",
-        "postgresql+asyncpg://voltbox:voltbox@localhost:5432/voltbox_test",
+        _differing_in_one_field(database=f"{_ACTIVE.database}_other"),
+        _differing_in_one_field(port=(_ACTIVE.port or 5432) + 1),
+        _differing_in_one_field(username=f"{_ACTIVE.username}_other"),
+        _differing_in_one_field(host=_OTHER_HOST),
         "not a url",
     ],
-    ids=["remote", "other-database", "other-port", "garbage"],
+    ids=["remote", "other-database", "other-port", "other-user", "other-host", "garbage"],
 )
 def test_settings_built_from_another_url_abort_the_run(
     monkeypatch: pytest.MonkeyPatch, url: str
