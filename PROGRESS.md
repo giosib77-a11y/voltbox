@@ -777,6 +777,24 @@ Unverified (check before acting):
   bucket — so run the A-036 check first; a burst of 429 `RATE_LIMITED` on catalogue pages right after the deploy points
   there. Also new: an admin password needs 12 characters when it is next set (existing ones keep working), and a
   locked admin account sends a Telegram message.
+- **2026-11-19, owner — correct the stock the four purged active orders took (AUDIT.md A-116).** The code fix
+  (`fix/a116-a117`) stops new losses but does not repair old ones: VB-20261119-01011 and three earlier orders were
+  trashed and purged while active, so their `order_placed` movements (`order_id` now NULL) were never returned. Find
+  them read-only in the SQL Editor —
+  `select created_at, action, changes from public.admin_audit_log where action = 'order.purge' and changes->>'status' not in ('cancelled','delivered') order by created_at;`
+  gives the four orders (number, status, when). Their units are in
+  `select product_id, change, previous_stock, new_stock, created_at from public.inventory_movements where order_id is null and reason in ('order_placed','order_cancelled') order by created_at;`
+  — a correctly purged cancelled order shows an `order_placed` and an `order_cancelled` pair there; the lost ones are
+  `order_placed` rows with no pair, created on the date the order number carries (`VB-YYYYMMDD-…`). Add those units back through the admin
+  panel's stock adjustment, with a note naming the order number. Also check
+  whether any active order is still in the trash:
+  `select order_number, status, deleted_at from public.orders where deleted_at is not null and status not in ('cancelled','delivered');`
+  — after deploy these show "ავტომატურად არ წაიშლება"; restore and cancel them to return their stock.
+- **2026-11-19, owner — after deploying `fix/a116-a117`, run the client-IP check (AUDIT.md A-117).** `docs/deployment.md`
+  §10, "rate limit-ის IP": (ა) two networks → two different `client` in `voltbox.access`; (ბ) both differ from Render's
+  health check; (გ) an admin action's `admin_audit_log.ip` is your real public IP, not `127.0.0.1`; (დ) a forged
+  `CF-Connecting-IP` changes `client` on neither your domain nor the `*.onrender.com` address. No Render env change is
+  needed. If (დ) fails, report it at once: a caller could pick its own rate-limit bucket and audit IP.
 
 ## Run State
 - Stage: Stage 3 — Storefront redesign

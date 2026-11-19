@@ -138,9 +138,16 @@ Deployment state, as far as the repository shows (2026-10-10):
     order — 30+ days after checkout, not a realistic retry.)
   - **Stock is never touched** by trash, restore or purge: no `adjust_stock` call, no
     `inventory_movements` row written or deleted. Purge leaves the ledger rows in place with
-    `order_id` set to NULL (FK `ON DELETE SET NULL`). Trashing a pending, confirmed or
-    processing order keeps its units out of stock; the confirmation dialog says so and tells
-    the admin to cancel first if the units should come back. No restriction by status.
+    `order_id` set to NULL (FK `ON DELETE SET NULL`).
+  - **Only a final-status order leaves** (A-116, owner's decision 2026-11-19, replaces "No
+    restriction by status"): trash, `DELETE` and the automatic purge accept only an order whose
+    status has no way out in `order_status.TRANSITIONS` (`FINAL_STATUSES`: `cancelled`,
+    `delivered`) — its stock has come back or no longer belongs to the shop. An active order
+    (`pending`, `confirmed`, `processing`, `shipped`) → 409 `ORDER_STILL_ACTIVE` ("cancel it
+    first"); the purge leaves an expired active order in the trash. Restore has no status rule,
+    so an active order trashed before 2026-11-19 is restored, cancelled (stock returns), then
+    trashed again. Such an order has `purgeAt: null` (it will never be purged), and the admin
+    trash says so instead of a date (A-118).
   - **Status is frozen while trashed**: `order_status.transition` refuses it with 409
     `ORDER_IN_TRASH` (checked after the row lock); the detail returns
     `allowedTransitions: []`. Restore returns the order to the status it had, unchanged.
@@ -234,7 +241,8 @@ Shapes used below:
   `customerName` string, `phone` string|null, `email` string|null, `city` string|null,
   `total` decimal string, `itemCount` int, `paymentMethod` string, `createdAt` datetime,
   **`deletedAt` datetime|null** (null = live order), **`purgeAt` datetime|null**
-  (`deletedAt` + 30 days; null for a live order).
+  (`deletedAt` + 30 days; null for a live order and for a trashed order that is not `cancelled`/`delivered`,
+  which the purge never deletes — A-118).
 - `OrderDetailOut` = `OrderListItem` + `customer` object, `shippingAddress` object,
   `subtotal` decimal string, `shipping` decimal string, `currency` string, `notes`
   string|null, `items` [`{id, productId, productName, productSlug, imageUrl, unitPrice,
@@ -247,13 +255,13 @@ Shapes used below:
 | GET | `/admin/orders` | query: `page` int ≥1 (1), `limit` int 1..max (default page size), `q`, `status`, `dateFrom`, `dateTo` (YYYY-MM-DD) — as today; **new** `trash` bool (default `false`) | 200 `OrderPage`. `trash=false`: live orders only, newest `createdAt` first. `trash=true`: trashed orders only, newest `deletedAt` first; the other filters apply the same way | 400 `INVALID_DATE`, 400 `VALIDATION_ERROR` (bad `page`/`limit`/`trash`) |
 | GET | `/admin/orders/{id}` | — | 200 `OrderDetailOut` — live **or trashed** | 404 `ORDER_NOT_FOUND` |
 | POST | `/admin/orders/{id}/status` | `{to: string, note?: string\|null}` — unchanged | 200 `OrderDetailOut` | 400 `UNKNOWN_STATUS`, 404 `ORDER_NOT_FOUND`, 409 `INVALID_TRANSITION`, **409 `ORDER_IN_TRASH`** (order is trashed; nothing changes) |
-| POST | `/admin/orders/{id}/trash` | no body | 200 `OrderDetailOut` with `deletedAt`/`purgeAt` set. Idempotent: an order already in the trash → the same response, `deletedAt` unchanged, no new audit row | 404 `ORDER_NOT_FOUND` |
+| POST | `/admin/orders/{id}/trash` | no body | 200 `OrderDetailOut` with `deletedAt` set, `purgeAt` as in the shape above. Idempotent: an order already in the trash → the same response, `deletedAt` unchanged, no new audit row | 404 `ORDER_NOT_FOUND`, **409 `ORDER_STILL_ACTIVE`** (status not `cancelled`/`delivered`; nothing changes; `details: {status}`) |
 | POST | `/admin/orders/{id}/restore` | no body | 200 `OrderDetailOut` with `deletedAt`/`purgeAt` null, `status` as before the trash. Idempotent: a live order → the same response, no audit row | 404 `ORDER_NOT_FOUND` (also when it was purged meanwhile) |
-| DELETE | `/admin/orders/{id}` | no body | 204, empty body. Order, its items and status history are gone; stock and `inventory_movements` rows unchanged (their `order_id` becomes NULL) | 404 `ORDER_NOT_FOUND`, **409 `ORDER_NOT_IN_TRASH`** (a live order; trash it first) |
+| DELETE | `/admin/orders/{id}` | no body | 204, empty body. Order, its items and status history are gone; stock and `inventory_movements` rows unchanged (their `order_id` becomes NULL) | 404 `ORDER_NOT_FOUND`, **409 `ORDER_NOT_IN_TRASH`** (a live order; trash it first — checked first), **409 `ORDER_STILL_ACTIVE`** (a trashed order that is not `cancelled`/`delivered`) |
 
 Side effects:
-- `GET /admin/orders` (both modes) first purges every order whose `deletedAt` is more than
-  30 days old, in its own committed transaction, then runs the list query.
+- `GET /admin/orders` (both modes) first purges every `cancelled`/`delivered` order whose
+  `deletedAt` is more than 30 days old, in its own committed transaction, then runs the list query.
 - Audit rows (`admin_audit_log`, same transaction as the change; `entity_type = "order"`,
   `entity_id` = order id):
   `order.trash` (actor = admin, `changes: {status, deletedAt}`),
@@ -263,7 +271,7 @@ Side effects:
   address goes into the audit row.
 - New error codes `ORDER_IN_TRASH` and `ORDER_NOT_IN_TRASH`: `ORDER_IN_TRASH` (a customer can meet it on
   cancel) has Georgian and English text under `apiErrors` in `frontend/src/i18n/ka.json` and `en.json`;
-  `ORDER_NOT_IN_TRASH` (admin only) is Georgian only, in `frontend/src/admin/i18n/ka.json` (A-047)
+  `ORDER_NOT_IN_TRASH` and `ORDER_STILL_ACTIVE` (admin only) are Georgian only, in `frontend/src/admin/i18n/ka.json` (A-047)
   (`backend/tests/test_error_messages.py` enforces the Georgian text; `i18n.test.js` key parity).
 
 ## Integrations
@@ -309,8 +317,9 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
   10/min, client error reports 20/min, guest cart quote (`POST /cart/quote`) 30/min,
   every other route 300/min per client in one bucket shared across them (`/api/v1/health` and
   `/api/v1/health/live` exempt; a route with its own limit is counted only against that one — Decision Log
-  2026-11-16); password reset also 3/hour per email address. Redis-backed in production; client IP
-  only through `FORWARDED_ALLOW_IPS` (never `*`).
+  2026-11-16); password reset also 3/hour per email address. Redis-backed in production. The client IP
+  (limiter key, access-log `client`, admin audit `ip`) is `app/core/client_ip.py`'s `client_ip`: `CF-Connecting-IP`
+  only from a trusted peer (loopback or `FORWARDED_ALLOW_IPS`, never `*`), otherwise the peer (Decision Log 2026-11-19).
 - A new password (register, change, reset, `manage_admin.py`): at least 8 characters, 12 for an administrator;
   not on the common list (SecLists 10k + the shop's own words, also with digits/punctuation trimmed off the ends);
   not a repetition or simple sequence. Never checked at sign-in, so older passwords keep working (Decision Log
@@ -340,12 +349,10 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
   The `admin_audit_log` row (`order.purge`: order number, status, total, who, when,
   automatic or not) is the only record. Not accepted by this proposal: losing anything
   while the order is only in the trash — restore must bring it back unchanged.
-- **Proposed, owner to confirm (Stage 2) — deleting never returns stock** (the owner's rule;
-  this records its consequence). An order trashed
-  or purged while pending, confirmed or processing keeps its units out of stock for good;
-  the admin must cancel it first (cancellation returns stock) or adjust stock by hand. The
-  confirmation dialog says this. What still holds: the stock ledger is never edited, so
-  `inventory_movements` still adds up to the product's stock.
+- ~~**Proposed, owner to confirm (Stage 2) — deleting never returns stock.**~~ **Closed 2026-11-19 (A-116):**
+  an active order can no longer be trashed or purged (409 `ORDER_STILL_ACTIVE`), so no order leaves while it holds
+  units. What still holds: trash and purge never write the stock ledger, so `inventory_movements` still adds up to
+  the product's stock. Four orders lost before the fix need a manual stock correction (PROGRESS.md Blockers).
 - **A noisy-alpha WebP can go over the image decode budget** (owner, 2026-11-16, AUDIT.md A-103, status: accepted).
   A 1601×1187 RGBA WebP whose alpha channel is noise peaks at 108–113 MiB on Linux during an upload, against
   the 100 MiB `MAX_IMAGE_DECODE_BYTES` budget (measured in the production image; decode is 47–55 MiB, libwebp's
@@ -370,6 +377,38 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
+
+### 2026-11-19 — The client IP is `CF-Connecting-IP` behind a trusted peer, from one function (A-117)
+- Decision (owner-approved): `app/core/client_ip.py`'s `client_ip(request)` feeds the slowapi key
+  (`rate_limit.client_key`), the access line's `client` pseudonym and every admin audit `ip`. A trusted peer
+  (any loopback address, or matched by `FORWARDED_ALLOW_IPS` — IPs and CIDRs) with exactly one `CF-Connecting-IP`
+  that is a bare IPv4/IPv6 address → that address (normalised); anything else → `request.client.host` as before.
+- Reason: on Render the peer is loopback (`admin_audit_log.ip = 127.0.0.1`; a browser and Render's health check had
+  one `client`), so the whole shop shared every rate limit and the audit log had no real address.
+- Choices that are not obvious: `*` in `FORWARDED_ALLOW_IPS` trusts nobody here (uvicorn reads it as everyone;
+  gunicorn.conf.py refuses it in a deployment); a request with no client is keyed `-` (`NO_CLIENT`), not slowapi's
+  `127.0.0.1`; an invalid allow-list entry is skipped with one warning, never a 500. No Render env change.
+- What still holds: when a trusted proxy's `X-Forwarded-For` already rewrote the client to a public address, that
+  address is used and the header is not read. The header is believable only because all public traffic reaches
+  Render through Cloudflare, which overwrites a client-sent value — a second front door would break that.
+- Changes if: the API gets another way in that bypasses Cloudflare, or the host stops being Render/Cloudflare.
+
+### 2026-11-19 — Only a cancelled or delivered order can be trashed or purged (A-116)
+- Decision (owner-approved, replaces the "No restriction by status" part of 2026-10-18 "Trash, restore and
+  purge never touch stock"): `order_trash.trash`, `delete_forever` and `purge_expired` accept only
+  `order_status.FINAL_STATUSES` (derived from `TRANSITIONS`: no way out — today `cancelled`, `delivered`).
+  An active order → 409 `ORDER_STILL_ACTIVE` after the row lock; the purge filters on status inside its one
+  DELETE and leaves an expired active order alone. A live order still answers `ORDER_NOT_IN_TRASH` first;
+  re-trashing an already-trashed order stays a 200 no-op. `shipped` is active (refused).
+- Reason: in production a pending order was trashed and purged; its `order_placed` movement stayed and nothing
+  returned the unit (four orders). Stock comes back only through cancellation, which a trashed order cannot
+  take, so the dialog's warning was not enough.
+- What still holds: trash and purge still never write `inventory_movements` (stock only through
+  order_status.py / inventory.py); restore has no status rule, so a legacy trashed active order is recovered by
+  restore → cancel → trash. The four orders already lost on the live database are not repaired by code: their
+  stock needs a manual correction by the owner.
+- Changes if: a new dead-end status is added to `TRANSITIONS` (it becomes final automatically — check that its
+  stock really is settled), or trash should cancel automatically.
 
 ### 2026-11-17 — On `/en` the English chunk is preloaded from the built `theme-init.js` (A-109)
 - Decision (owner-approved beforehand): a build-only Vite plugin (`frontend/vite-plugins/englishPreload.js`)
@@ -999,7 +1038,8 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
   operation; purge leaves the ledger rows with `order_id` NULL (existing FK
   `ON DELETE SET NULL`, `models/inventory.py:73-75`, migration 0003). No restriction by
   status; the confirmation dialog warns that a pending/confirmed/processing order keeps its
-  units reserved and that cancelling first returns them.
+  units reserved and that cancelling first returns them. **Superseded 2026-11-19 (A-116):**
+  only a cancelled or delivered order may be trashed or purged; the stock part still holds.
 - Reason: the owner's rule ("deletion does not change stock"); stock moves only through
   checkout, cancellation and admin adjustments, each with a ledger row.
 - Alternatives considered: auto-cancel (restock) before trashing; refusing to trash

@@ -1654,7 +1654,13 @@ A-102 security-auditor-მა იპოვა და მფლობელის
   ტოვებს. restore უცვლელია (ძველი, უკვე სანაგვეში მყოფი აქტიური შეკვეთა აღდგება და გაუქმდება). UI ამ შეცდომას აჩვენებს
   როგორც სხვებს (`OrderList`-ის 409-ის ჩუმი დახურვა მას არ უნდა გადაყლაპავდეს).
 - **owner:** backend-dev (სერვერი, `admin/i18n/ka.json`), frontend-dev (ადმინის გვერდები)
-- **status:** open
+- **status:** fixed (verified) — `7a5a0d1`. `order_status.FINAL_STATUSES`/`is_final` გრაფიდან ითვლება; trash და `delete_forever`
+  row lock-ის შემდეგ აქტიურს 409 `ORDER_STILL_ACTIVE`-ით უარყოფს (ცოცხალი შეკვეთა ჯერ ისევ `ORDER_NOT_IN_TRASH`-ს იღებს),
+  `purge_expired`-ის ერთი DELETE სტატუსზეც ფილტრავს. UI: dialog-ის ცრუ წინადადება წაიშალა, `OrderList` `ORDER_STILL_ACTIVE`-ს
+  აღარ ყლაპავს. 13 ახალი backend ტესტი ძველ `order_trash.py`-ზე ვარდება (`git stash`, ორკესტრატორმაც გაიმეორა: 13 failed,
+  39 passed), ახალზე გადის; `OrderList`-ის ახალი ტესტი ძველ კომპონენტზე ვარდება. არსებული ტესტები, რომლებიც pending შეკვეთას
+  აგდებდნენ სანაგვეში, ახლა ჯერ აუქმებენ, ან legacy მდგომარეობას პირდაპირ `deleted_at`-ით ქმნიან. re-review (code-reviewer):
+  დახურულია; იპოვა A-118 (გასწორდა), A-122. ლაივზე უკვე დაკარგული მარაგი კოდით არ ბრუნდება — PROGRESS.md Blockers.
 
 #### A-117 · should-fix · Render-ზე ყველა კლიენტი ერთ IP-დ ჩანს — rate limit-ები მთელ მაღაზიაზე ერთად მოქმედებს
 - **ფაილი:** `backend/app/core/rate_limit.py:168` (`key_func=get_remote_address`), `backend/app/core/logging.py:262`
@@ -1668,4 +1674,86 @@ A-102 security-auditor-მა იპოვა და მფლობელის
   ახლანდელი ქცევა; არასანდო peer-ის header იგნორირდება. `docs/deployment.md` + deploy-ის შემდგომი შემოწმება. Render-ის env
   უცვლელია.
 - **owner:** backend-dev
+- **status:** fixed (verified) — `b578c42` (+ docs). `app/core/client_ip.py`-ის `client_ip` — slowapi-ის key (`client_key`), access
+  line-ის `client` და შვიდივე ადმინ-route-ის audit `ip` (`_client_ip`-ის ასლები წაიშალა). `*` აქ არავის ენდობა; კლიენტის
+  გარეშე მოთხოვნის key `-`-ია. ძველ მომხმარებლებზე 6 ტესტი ვარდება (audit, access line, ორი CF IP-ის ცალკე ვედრო, allow-list
+  peer, limiter-ის warning); ორკესტრატორმა `git stash`-ით `logging.py`+`brands.py`-ზე გაიმეორა (2 failed). re-review:
+  security-auditor — დახურულია (A-119–A-121, nit); code-reviewer — დახურულია. ლაივზე შემოწმება — `docs/deployment.md` §10
+  (ა)–(დ), PROGRESS.md Blockers; Render/Cloudflare ცოცხლად არ შემოწმებულა.
+
+### A-116/A-117-ის re-review-ის მიგნებები (2026-11-19)
+
+#### A-118 · should-fix (პირობითი) · ძველი, სანაგვეში მყოფი აქტიური შეკვეთა წაშლის ცრუ თარიღს აჩვენებს
+- **ფაილი:** `backend/app/services/admin_orders.py:145` (`purge_at(order.deleted_at)`), `frontend/src/admin/pages/OrderDetail.jsx:127`,
+  `frontend/src/admin/pages/OrderList.jsx:193`, `:353`
+- **სცენარი (კოდით, code-reviewer):** A-116-ის შემდეგ purge აქტიურ შეკვეთას აღარ შლის, `purgeAt` კი სტატუსს არ უყურებს. deploy-მდე
+  სანაგვეში გადატანილ pending/confirmed შეკვეთაზე ადმინი ხედავს „X-ში სამუდამოდ წაიშლება“, მერე „დარჩა 0 დღე“ სამუდამოდ, მარაგი
+  კი დაკავებულია; „სამუდამოდ წაშლა“ „ჯერ გააუქმეთ“-ს ამბობს, სანაგვეში კი გაუქმება შეუძლებელია — ჯერ აღდგენა სჭირდება.
+  should-fix, თუ ლაივზე ასეთი შეკვეთა არსებობს (ბოლო 30 დღეში გადატანილი; უფრო ძველები უკვე წაიშალა); ამის შემოწმება
+  ბრენჩიდან შეუძლებელია, ამიტომ should-fix-ად ითვლება.
+- **გამოსწორება:** `purge_at` სტატუსსაც იღებს და არა-საბოლოოზე `None`-ს აბრუნებს; ადმინის სანაგვე `purgeAt: null`-ზე წერს, რომ
+  შეკვეთა ავტომატურად არ წაიშლება და მარაგის დასაბრუნებლად ჯერ უნდა აღდგეს და გაუქმდეს.
+- **owner:** backend-dev (`order_trash.purge_at`, `admin_orders.py`, schema), frontend-dev (ადმინის გვერდები)
+- **status:** fixed (verified) — `c8c1eaf`. `purge_at(deleted_at, status)` არა-საბოლოოზე `None`-ს აბრუნებს (იგივე `is_final`, რასაც
+  purge იყენებს); detail წერს „აქტიურია და ავტომატურად არ წაიშლება — აღადგინეთ და გააუქმეთ“, სანაგვის სია — „ავტომატურად არ
+  წაიშლება“. legacy-ის backend ტესტი და სამი UI ტესტი ძველ კოდზე ვარდება. re-review (code-reviewer): დახურულია; იპოვა
+  A-124, A-125 (nit), API Contract-ის nit PROJECT.md-ში გასწორდა.
+
+#### A-119 · nit · IPv6-ზე ერთ კლიენტს ბევრი rate-limit ვედრო აქვს
+- **ფაილი:** `backend/app/core/rate_limit.py` (`client_key`), `backend/app/core/client_ip.py`
+- **სცენარი (security-auditor):** IPv6 /64-ის მფლობელი ყოველ მოთხოვნას სხვა მისამართიდან აგზავნის; Cloudflare თითოეულს
+  `CF-Connecting-IP`-ში წერს — ახალი ვედრო. `POST /orders` 5/წთ·30/დღე ვეღარ აჩერებს სკრიპტს, რომელიც მარაგს pending
+  შეკვეთებით იკავებს. შესვლას ანგარიშის lockout იცავს. IPv4 proxy-ების როტაციის კლასია; A-117-მდე ერთი საერთო ვედრო ამას
+  შემთხვევით ფარავდა.
+- **გამოსწორება:** მხოლოდ limiter-ის key-ში IPv6 → /64 prefix; audit და log — სრული მისამართი.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-120 · nit · `FORWARDED_ALLOW_IPS=0.0.0.0/0,::/0` startup-ის შემოწმებას გადის (ჩვენამდეც ასე იყო)
+- **ფაილი:** `backend/gunicorn.conf.py:414`
+- **სცენარი (security-auditor):** იჭერს მხოლოდ ზუსტ `*`-ს; `/0` ქსელი ყველას ენდობა — uvicorn XFF-ს, `client_ip` კი
+  `CF-Connecting-IP`-ს დაუჯერებს ნებისმიერისგან. Render-ზე, სადაც მხოლოდ Cloudflare უკავშირდება, გამოყენებადი არ არის.
+- **გამოსწორება:** უარყოს ნებისმიერი ჩანაწერი prefixlen 0-ით.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-121 · nit · `client_ip.py`-ის docstring „სანდო მნიშვნელობა მხოლოდ ნამდვილი peer შეიძლება იყოს“-ს ზედმეტად ამტკიცებს
+- **ფაილი:** `backend/app/core/client_ip.py:36-40`
+- **სცენარი (security-auditor):** uvicorn-ი, როცა ყველა hop სანდოა, XFF-ის ყველაზე მარცხენა ჩანაწერს იღებს — მაშინ `client.host`
+  შეიძლება კლიენტის დაწერილი სანდო მისამართი იყოს. ამას სჭირდება, რომ ნამდვილი კლიენტიც სანდო დიაპაზონში იყოს, და header-ს
+  Cloudflare მაინც ანაცვლებს — ქცევის ცვლილება საჭირო არ არის.
+- **გამოსწორება:** ფრაზის დაზუსტება („the real peer, or a client already inside the trusted ranges").
+- **owner:** backend-dev
+- **status:** open
+
+#### A-122 · nit · აქტიური შეკვეთის „წაშლა“ ღილაკი ჩანს, confirm-ის შემდეგ 409 მოდის
+- **ფაილი:** `frontend/src/admin/pages/OrderDetail.jsx:156`
+- **სცენარი (code-reviewer):** დამტკიცებული ქცევაა (შეცდომა ჩანს), მაგრამ dialog-ი გადატანას გპირდება. `allowedTransitions.length > 0`
+  ცოცხალ შეკვეთაზე ზუსტად „საბოლოო არ არის“-ს ნიშნავს.
+- **გამოსწორება:** ღილაკი დაიმალოს ან dialog-მა თქვას, რომ აქტიური შეკვეთა ჯერ უნდა გაუქმდეს.
+- **owner:** frontend-dev
+- **status:** fixed (verified) — `c8c1eaf` (A-118-თან ერთად, იმავე ფაილებში). ცოცხალ შეკვეთაზე „წაშლა“ ჩანს მხოლოდ
+  `allowedTransitions.length === 0`-ზე; ტესტი: pending-ზე დამალულია, delivered-ზე ჩანს. 409-ის გზა ტესტით რჩება დაფარული.
+
+#### A-123 · nit · slowapi-ის warning-ის filter-ის `NO_CLIENT` შტოს ტესტი არ აქვს
+- **ფაილი:** `backend/app/core/logging.py:185`
+- **სცენარი (code-reviewer):** `client_key(None) == "-"` შემოწმებულია, მაგრამ ის, რომ warning `-`-ს ჰეშად არ აქცევს — არა.
+- **გამოსწორება:** ერთი ტესტი.
+- **owner:** backend-dev
+- **status:** open
+
+#### A-124 · nit · legacy აქტიურ შეკვეთაზე სანაგვეში „სამუდამოდ წაშლა“ ყოველთვის 409-ს იღებს
+- **ფაილი:** `frontend/src/admin/pages/OrderDetail.jsx:143-146`, `frontend/src/admin/pages/OrderList.jsx:~219`
+- **სცენარი (code-reviewer):** `purgeAt: null` შეკვეთაზე ღილაკი ჩანს, dialog-ი „აღდგენა შეუძლებელი იქნება“-ს ამბობს, სერვერი კი
+  ყოველთვის `ORDER_STILL_ACTIVE`-ს აბრუნებს, რომლის ტექსტიც („ჯერ გააუქმეთ“) სანაგვიდან შეუსრულებელია. არაფერი ფუჭდება.
+- **გამოსწორება:** `purgeAt` null-ზე ღილაკი დაიმალოს ორივე ადგილას.
+- **owner:** frontend-dev
+- **status:** open
+
+#### A-125 · nit · `OrderDetail.test.jsx`-ის fixture-ები და სახელები სერვერის ახალ პასუხს აღარ ემთხვევა
+- **ფაილი:** `frontend/src/admin/pages/OrderDetail.test.jsx:54-58`, `:97`, `:107`, `:222-238`
+- **სცენარი (code-reviewer):** `TRASHED` არის `pending` თარიღიანი `purgeAt`-ით (სერვერი ამ წყვილს აღარ აგზავნის); ორი ტესტის
+  სახელი „active order“-ს ამბობს, `FINAL`-ს კი იყენებს. ტესტები სწორს ამოწმებენ, უბრალოდ შეცდომაში შემყვანია.
+- **გამოსწორება:** `TRASHED` → `cancelled`; legacy ტესტში `{...TRASHED, status: 'pending', purgeAt: null}`; სახელების შესწორება.
+- **owner:** frontend-dev
 - **status:** open
