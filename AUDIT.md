@@ -1634,3 +1634,38 @@ A-102 security-auditor-მა იპოვა და მფლობელის
   შემოწმება, საკუთარი env-ის child process, monkeypatch-ით შეცვლილი settings, stand-in engine) და არ შეცვლილა. 5432-იანი
   ბაზით (`postgres:17`): ახალი — 43 passed, HEAD-ის ვერსია — `[other-port]` DID NOT RAISE (1 failed, 40 passed; `git stash`,
   ორკესტრატორმაც გაიმეორა); 55432-ით + `test_conftest_guard.py` — 46 passed. re-review (code-reviewer): დახურულია.
+
+### production-ზე ნაპოვნი (deploy `f369c2f`-ის შემდეგ, 2026-11-19)
+
+მტკიცებულება მფლობელმა ლაივ ბაზიდან და Render-ის ლოგიდან მოიტანა; ახალი აუდიტი არ გაშვებულა. ორივე გამოსწორება მფლობელმა
+დაამტკიცა. ბრენჩი `fix/a116-a117`.
+
+#### A-116 · should-fix · აქტიური შეკვეთის სანაგვეში გადატანა და წაშლა მარაგს სამუდამოდ კარგავს
+- **ფაილი:** `backend/app/services/order_trash.py` (`trash`, `delete_forever`, `purge_expired`),
+  `backend/app/services/order_status.py` (`TRANSITIONS`), `frontend/src/admin/pages/OrderDetail.jsx`, `frontend/src/admin/pages/OrderList.jsx`
+- **სცენარი (ლაივ ბაზა):** pending შეკვეთა VB-20261119-01011 ადმინმა გადაიტანა სანაგვეში (`order.trash`), მერე სამუდამოდ წაშალა
+  (`order.purge`). `inventory_movements`-ში `order_placed`-ის ჩანაწერი (16→15) დარჩა `order_id = NULL`-ით, დამბრუნებელი ჩანაწერი
+  არ არის — ერთეული მაღაზიის მარაგს სამუდამოდ დააკლდა. იგივე მოხდა სამ ადრინდელ შეკვეთაზე. მიზეზი: trash/purge სტატუსს არ
+  ამოწმებს (2026-10-18-ის გადაწყვეტილება „No restriction by status“), მარაგი კი მხოლოდ `cancelled`-ზე გადასვლით ბრუნდება;
+  სანაგვეში მყოფი შეკვეთა გაუქმებას ვეღარ ღებულობს (`ORDER_IN_TRASH`), წაშლილი — საერთოდ.
+- **გამოსწორება (დამტკიცებული):** trash, ხელით purge და ავტომატური purge მხოლოდ საბოლოო სტატუსზე (`order_status.py`-ის
+  გრაფში გასასვლელის გარეშე: `cancelled`, `delivered`) — მარაგი ან დაბრუნებულია, ან მაღაზიას აღარ ეკუთვნის. აქტიურზე (ხელით) →
+  409 `ORDER_STILL_ACTIVE`, ადმინის ტექსტი „ჯერ გააუქმეთ შეკვეთა — ასე მარაგი დაბრუნდება“; ავტომატური purge აქტიურს
+  ტოვებს. restore უცვლელია (ძველი, უკვე სანაგვეში მყოფი აქტიური შეკვეთა აღდგება და გაუქმდება). UI ამ შეცდომას აჩვენებს
+  როგორც სხვებს (`OrderList`-ის 409-ის ჩუმი დახურვა მას არ უნდა გადაყლაპავდეს).
+- **owner:** backend-dev (სერვერი, `admin/i18n/ka.json`), frontend-dev (ადმინის გვერდები)
+- **status:** open
+
+#### A-117 · should-fix · Render-ზე ყველა კლიენტი ერთ IP-დ ჩანს — rate limit-ები მთელ მაღაზიაზე ერთად მოქმედებს
+- **ფაილი:** `backend/app/core/rate_limit.py:168` (`key_func=get_remote_address`), `backend/app/core/logging.py:262`
+  (access log-ის `client`), `backend/app/api/v1/routes/admin/*.py` (შვიდი `_client_ip`)
+- **სცენარი (ლაივ):** `admin_audit_log.ip = 127.0.0.1`; access log-ში ბრაუზერის მოთხოვნებს და Render-ის deploy-შემოწმებას ერთი
+  `client` აქვს. სამივე ადგილი `request.client.host`-ს კითხულობს, რომელიც Render-ზე loopback-ია, ასე რომ ყველა მყიდველი ერთ
+  ვედროშია (შესვლა 5/წთ, შეკვეთა 30/დღე — მთელ მაღაზიაზე) და audit-ში ნამდვილი IP არ ჩანს. Render Cloudflare-ის უკანაა;
+  ნამდვილი IP `CF-Connecting-IP`-შია.
+- **გამოსწორება (დამტკიცებული):** ერთი ფუნქცია კლიენტის IP-ისთვის — rate limit-ის key, admin audit-ის ip, access log-ის
+  `client`: სანდო peer (loopback ან `FORWARDED_ALLOW_IPS`-ში) + ვალიდური `CF-Connecting-IP` → header-ის IP; სხვა შემთხვევაში
+  ახლანდელი ქცევა; არასანდო peer-ის header იგნორირდება. `docs/deployment.md` + deploy-ის შემდგომი შემოწმება. Render-ის env
+  უცვლელია.
+- **owner:** backend-dev
+- **status:** open
