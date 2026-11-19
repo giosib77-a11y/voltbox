@@ -1588,3 +1588,37 @@ A-102 security-auditor-მა იპოვა და მფლობელის
 - **გამოსწორება:** `json()`-ის `SyntaxError`-ის გარდა ყველა შეცდომა ქსელის ჩავარდნად (სესია რჩება); ტესტი.
 - **owner:** frontend-dev
 - **status:** open
+
+### CI run #122-ის ჩავარდნა (`agent-system`, `375094e`, 2026-11-19)
+
+მიზეზები მფლობელმა დაადგინა CI-ის log-იდან; ახალი აუდიტი არ გაშვებულა. ბრენჩი `fix/ci-agent-system`.
+
+#### A-113 · should-fix · lock-ებში dnspython 2.9.0-ია (CVE-2026-128089) — CI-ის `pip-audit` წითელია
+- **ფაილი:** `backend/requirements.txt:248`, `backend/requirements-dev.txt:327` (`dnspython==2.9.0`); `.github/workflows/backend.yml:142-149`
+- **სცენარი (CI run #122):** `pip-audit --strict --disable-pip` dnspython 2.9.0-ზე CVE-2026-128089-ს პოულობს, fix 2.9.2.
+  step-ი ნებისმიერ მიგნებაზე ვარდება, ასე რომ backend-ის ყოველი run წითელია.
+- **გამოსწორება:** მხოლოდ dnspython → 2.9.2 ორივე lock-ში, Linux container-ში, `--upgrade-package dnspython`-ით
+  (`backend/README.md`, „დამოკიდებულებების lock“); container-ში მხოლოდ საჭირო ფაილები, `.env`-ის გარეშე. შემოწმება:
+  pip-audit CI-ის ბრძანებით = 0, hashed install + `pip check`, `docker build`.
+- **owner:** task-executor
+- **status:** open
+
+#### A-114 · should-fix · CI-ის image job-ი `app.core.uvicorn_worker`-ს „import-ით მიუღწეველ“ მოდულად თვლის
+- **ფაილი:** `.github/workflows/backend.yml:166-192` („The app must import and expose its full API surface“)
+- **სცენარი (CI run #122):** `not reached by importing app.main: ['app.core.uvicorn_worker']`. მოდულს gunicorn-ი სჭირდება,
+  რომელიც Windows-ზე არ ყენდება, ამიტომ `app.main`-დან მისი import-ი არ შეიძლება (მოდულის docstring-იც ასე ამბობს).
+- **გამოსწორება:** იმავე შემოწმებაში, `missed`-ის გამოთვლამდე, ცალსახად `import app.core.uvicorn_worker` (image Linux-ია და
+  gunicorn-ი მასშია), კომენტარით მიზეზზე. შემოწმება: იგივე `python -c` ლოკალურად აშენებულ `voltbox-api:check`-ში.
+- **owner:** task-executor
+- **status:** open
+
+#### A-115 · should-fix · `test_settings_built_from_another_url_abort_the_run[other-port]` CI-ის ბაზაზე ვარდება
+- **ფაილი:** `backend/tests/test_database_guard.py:162-178`
+- **სცენარი (CI run #122):** „DID NOT RAISE UnsafeTestDatabaseError“ — „სხვა პორტის“ URL `localhost:5432/voltbox_test`
+  ხელითაა ჩაწერილი, CI-ის `TEST_DATABASE_URL` კი სწორედ `localhost:5432/voltbox_test`-ია, ასე რომ CI-ში ის „სხვა“ არ არის.
+  ტესტი მხოლოდ ლოკალურ 55432-ზე იყო მწვანე.
+- **გამოსწორება:** „სხვა“ URL-ები (other-port, other-database და მსგავსი) ტესტების აქტიური URL-იდან გამოითვალოს (მაგ. პორტი ±1),
+  არა ხელით; იმავე ფაილში და სხვა ტესტებში მსგავსი ჩაწერილი 5432/55432 დაშვება არ დარჩეს. შემოწმება: გადის 55432-იანი
+  და 5432-იანი `TEST_DATABASE_URL`-ით; ძველ კოდზე 5432-ით ვარდება.
+- **owner:** backend-dev
+- **status:** open
