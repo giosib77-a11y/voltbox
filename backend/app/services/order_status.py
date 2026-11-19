@@ -36,6 +36,14 @@ TRANSITIONS: dict[str, tuple[str, ...]] = {
     "cancelled": (),
 }
 
+#: Statuses nothing follows. For these the order's stock has either already come
+#: back (`cancelled`) or no longer belongs to the shop (`delivered`), so the
+#: order may leave the system (services/order_trash.py). Derived from the graph,
+#: so a status added there with no way out is final here without a second edit.
+FINAL_STATUSES: frozenset[str] = frozenset(
+    status for status, following in TRANSITIONS.items() if not following
+)
+
 #: The Georgian labels live in the frontend - src/admin/statuses.jsx for the
 #: panel, ORDER_STATUS_LABELS in src/constants for the shop, which word them
 #: differently on purpose. A third copy here said it was "for the admin UI" and
@@ -45,6 +53,11 @@ TRANSITIONS: dict[str, tuple[str, ...]] = {
 def allowed_transitions(status: str) -> list[str]:
     """Where an order in this status may go next."""
     return list(TRANSITIONS.get(status, ()))
+
+
+def is_final(status: str) -> bool:
+    """Whether no status follows this one. An unknown status is not final."""
+    return status in FINAL_STATUSES
 
 
 async def lock_order(db: AsyncSession, order_id: uuid.UUID) -> Order:

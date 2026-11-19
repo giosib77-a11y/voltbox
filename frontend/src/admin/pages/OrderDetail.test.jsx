@@ -1,8 +1,8 @@
 /**
  * Tests for OrderDetail's trash actions.
  *
- * What they cover: moving an order to the trash (with the stock warning where the
- * units are still reserved), the trashed view (purge date, no status buttons,
+ * What they cover: moving an order to the trash (an active order is refused by the
+ * server with ORDER_STILL_ACTIVE), the trashed view (purge date, no status buttons,
  * one-click restore), permanent delete behind a dialog, and the failure paths -
  * a server refusal and a dead network leave the buttons usable.
  */
@@ -54,6 +54,9 @@ const TRASHED = makeOrder({
   allowedTransitions: [],
 });
 
+// The text httpClient resolves for the code from the admin i18n file (ka.json).
+const STILL_ACTIVE = 'ჯერ გააუქმეთ შეკვეთა — ასე მარაგი დაბრუნდება.';
+
 function Where() {
   const location = useLocation();
   return <p data-testid="where">{location.pathname + location.search}</p>;
@@ -76,25 +79,33 @@ beforeEach(() => {
 });
 
 describe('OrderDetail move to trash', () => {
-  it('warns that the units stay reserved for a pending order', async () => {
+  it('no longer claims the units stay reserved: the server refuses an active order', async () => {
     vi.spyOn(adminApi, 'getOrder').mockResolvedValue(makeOrder());
-    renderDetail();
-
-    await userEvent.click(await screen.findByRole('button', { name: 'წაშლა' }));
-
-    expect(screen.getByText(/ერთეულები დარჩება დაკავებული/)).toBeInTheDocument();
-  });
-
-  it('does not show the stock warning for a delivered order', async () => {
-    vi.spyOn(adminApi, 'getOrder').mockResolvedValue(
-      makeOrder({ status: 'delivered', allowedTransitions: [] }),
-    );
     renderDetail();
 
     await userEvent.click(await screen.findByRole('button', { name: 'წაშლა' }));
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.queryByText(/ერთეულები დარჩება დაკავებული/)).not.toBeInTheDocument();
+  });
+
+  it('shows ORDER_STILL_ACTIVE when trashing an active order is refused, and stays on the page', async () => {
+    vi.spyOn(adminApi, 'getOrder').mockResolvedValue(makeOrder());
+    vi.spyOn(adminApi, 'trashOrder').mockRejectedValue(
+      new ConflictError(STILL_ACTIVE, {
+        code: 'ORDER_STILL_ACTIVE',
+        details: { status: 'pending' },
+      }),
+    );
+    renderDetail();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'წაშლა' }));
+    await userEvent.click(screen.getAllByRole('button', { name: 'წაშლა' }).at(-1));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(STILL_ACTIVE);
+    expect(screen.queryByTestId('where')).not.toBeInTheDocument();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'წაშლა' })).toBeEnabled();
   });
 
   it('trashes once on confirm and lands on the list with a toast', async () => {
@@ -180,6 +191,24 @@ describe('OrderDetail trashed order', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('შეკვეთა სანაგვეში არ არის');
     expect(screen.getByRole('button', { name: 'აღდგენა' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'სამუდამოდ წაშლა' })).toBeEnabled();
+  });
+
+  it('shows ORDER_STILL_ACTIVE for a legacy trashed active order and keeps restore usable', async () => {
+    vi.spyOn(adminApi, 'getOrder').mockResolvedValue(TRASHED);
+    vi.spyOn(adminApi, 'deleteOrderForever').mockRejectedValue(
+      new ConflictError(STILL_ACTIVE, {
+        code: 'ORDER_STILL_ACTIVE',
+        details: { status: 'pending' },
+      }),
+    );
+    renderDetail();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'სამუდამოდ წაშლა' }));
+    await userEvent.click(screen.getAllByRole('button', { name: 'სამუდამოდ წაშლა' }).at(-1));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(STILL_ACTIVE);
+    expect(screen.queryByTestId('where')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'აღდგენა' })).toBeEnabled();
   });
 
   it('shows the message and re-enables restore when restoring fails', async () => {

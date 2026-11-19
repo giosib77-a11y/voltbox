@@ -7,10 +7,16 @@ in place with `order_id` NULL; opening the order list purges every order trashed
 more than 30 days ago and nothing younger; neither path touches stock; each
 deletion leaves one `order.purge` audit row with no customer data in it; and a
 purge racing a restore never deletes an order the restore got to first.
+Both paths only delete an order in a final status (cancelled, delivered): a
+trashed order that is still active (trashed before that rule) is 409
+`ORDER_STILL_ACTIVE` for the manual delete and is skipped by the automatic
+purge, because deleting it would lose its stock (A-116).
 
 The refusal and the 31-day tests are the ones that fail on code without the
 feature: before it the route did not exist (405) and an expired order stayed in
-the trash for ever.
+the trash for ever. The ORDER_STILL_ACTIVE and "skipped by the purge" tests fail
+on code without the status rule. A trashed active order cannot be made through
+the route any more, so those tests write `deleted_at` directly.
 
 The two race tests use separate sessions, as tests/test_orders_concurrency.py
 does, because a row lock only shows between independent connections; they
@@ -59,6 +65,15 @@ CUSTOMER = {
 }
 
 
+#: The way from `pending` to each active status.
+ACTIVE_PATHS = {
+    "pending": (),
+    "confirmed": ("confirmed",),
+    "processing": ("confirmed", "processing"),
+    "shipped": ("confirmed", "processing", "shipped"),
+}
+
+
 @pytest.fixture
 async def admin(db: AsyncSession) -> User:
     return await make_user(db, email="purge-admin@voltbox.ge", role=ROLE_ADMIN)
@@ -80,6 +95,20 @@ async def _order(db: AsyncSession, *, slug: str, stock: int = 10, qty: int = 2) 
         payment_method="cash",
         user=None,
     )
+
+
+async def _cancelled(db: AsyncSession, *, slug: str, stock: int = 10, qty: int = 2) -> Order:
+    """An order in a final status: cancelled, so its stock is already back."""
+    order = await _order(db, slug=slug, stock=stock, qty=qty)
+    await transition(db, order.id, "cancelled", actor_id=None)
+    return order
+
+
+async def _delivered(db: AsyncSession, *, slug: str, stock: int = 10, qty: int = 2) -> Order:
+    order = await _order(db, slug=slug, stock=stock, qty=qty)
+    for step in ("confirmed", "processing", "shipped", "delivered"):
+        await transition(db, order.id, step, actor_id=None)
+    return order
 
 
 async def _trashed(db: AsyncSession, order: Order, *, days_ago: float) -> None:
@@ -159,16 +188,15 @@ async def test_deleting_an_unknown_order_is_404(
 async def test_deleting_a_trashed_order_removes_it_and_keeps_the_stock_ledger(
     client: httpx.AsyncClient, headers: dict[str, str], admin: User, db: AsyncSession
 ) -> None:
-    order = await _order(db, slug="delete-trashed", stock=10, qty=4)
+    order = await _cancelled(db, slug="delete-trashed", stock=10, qty=4)
     order_id, product_id = order.id, order.items[0].product_id
     number, total = order.order_number, order.total
-    await transition(db, order_id, "confirmed", actor_id=None)
     await client.post(f"{ADMIN}/orders/{order_id}/trash", headers=headers)
     assert len(await _items(db, order_id)) == 1
-    assert len(await _history(db, order_id)) == 2
+    assert len(await _history(db, order_id)) == 2  # created, then cancelled
     before = {m.id for m in await _movements(db, product_id)}
-    assert before, "checkout wrote a ledger row for the order"
-    assert await _stock(db, product_id) == 6
+    assert len(before) == 2, "checkout and the cancellation each wrote a ledger row"
+    assert await _stock(db, product_id) == 10
 
     response = await _delete(client, headers, order_id)
 
@@ -181,14 +209,14 @@ async def test_deleting_a_trashed_order_removes_it_and_keeps_the_stock_ledger(
     after = await _movements(db, product_id)
     assert {m.id for m in after} == before
     assert all(m.order_id is None for m in after)
-    assert await _stock(db, product_id) == 6
+    assert await _stock(db, product_id) == 10
     rows = await _purge_rows(db, order_id)
     assert len(rows) == 1
     assert rows[0].actor_id == admin.id
     assert rows[0].entity_type == "order"
     assert rows[0].changes == {
         "orderNumber": number,
-        "status": "confirmed",
+        "status": "cancelled",
         "total": str(total),
         "automatic": False,
     }
@@ -197,7 +225,7 @@ async def test_deleting_a_trashed_order_removes_it_and_keeps_the_stock_ledger(
 async def test_deleting_twice_is_404_the_second_time(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:
-    order = await _order(db, slug="delete-twice")
+    order = await _cancelled(db, slug="delete-twice")
     order_id = order.id
     await client.post(f"{ADMIN}/orders/{order_id}/trash", headers=headers)
     await _delete(client, headers, order_id)
@@ -212,7 +240,7 @@ async def test_deleting_twice_is_404_the_second_time(
 async def test_the_purge_audit_row_holds_no_customer_data(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:
-    order = await _order(db, slug="delete-privacy")
+    order = await _cancelled(db, slug="delete-privacy")
     order_id = order.id
     await client.post(f"{ADMIN}/orders/{order_id}/trash", headers=headers)
     await _delete(client, headers, order_id)
@@ -226,6 +254,80 @@ async def test_the_purge_audit_row_holds_no_customer_data(
         assert value not in dumped
 
 
+@pytest.mark.parametrize("status", ["confirmed", "processing", "shipped"])
+async def test_deleting_a_trashed_active_order_is_refused_and_the_order_is_intact(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession, status: str
+) -> None:
+    """The state of a row trashed before the status rule: its stock is still out,
+    so deleting it would lose it for good."""
+    order = await _order(db, slug=f"delete-active-{status}", qty=3)
+    order_id, product_id = order.id, order.items[0].product_id
+    for step in ACTIVE_PATHS[status]:
+        await transition(db, order_id, step, actor_id=None)
+    await _trashed(db, order, days_ago=1)
+    movements = len(await _movements(db, product_id))
+
+    response = await _delete(client, headers, order_id)
+
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "ORDER_STILL_ACTIVE"
+    assert error["details"] == {"status": status}
+    assert await _exists(db, order_id)
+    assert len(await _items(db, order_id)) == 1
+    assert await _stock(db, product_id) == 7
+    assert len(await _movements(db, product_id)) == movements
+    assert all(m.order_id == order_id for m in await _movements(db, product_id))
+    assert await _purge_rows(db, order_id) == []
+
+
+async def test_a_live_active_order_still_answers_not_in_trash_before_the_status_rule(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+) -> None:
+    order = await _order(db, slug="delete-live-pending")
+
+    response = await _delete(client, headers, order.id)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "ORDER_NOT_IN_TRASH"
+
+
+@pytest.mark.parametrize("final", ["cancelled", "delivered"])
+async def test_a_trashed_final_order_can_be_deleted(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession, final: str
+) -> None:
+    make = _cancelled if final == "cancelled" else _delivered
+    order = await make(db, slug=f"delete-final-{final}")
+    order_id = order.id
+    await client.post(f"{ADMIN}/orders/{order_id}/trash", headers=headers)
+
+    response = await _delete(client, headers, order_id)
+
+    assert response.status_code == 204
+    assert not await _exists(db, order_id)
+    (row,) = await _purge_rows(db, order_id)
+    assert row.changes["status"] == final
+
+
+async def test_cancelling_a_legacy_trashed_order_after_a_restore_lets_it_be_deleted(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+) -> None:
+    order = await _order(db, slug="delete-after-cancel", qty=3)
+    order_id, product_id = order.id, order.items[0].product_id
+    await _trashed(db, order, days_ago=1)
+    assert (await _delete(client, headers, order_id)).status_code == 409
+
+    await client.post(f"{ADMIN}/orders/{order_id}/restore", headers=headers)
+    await client.post(
+        f"{ADMIN}/orders/{order_id}/status", headers=headers, json={"to": "cancelled"}
+    )
+    await client.post(f"{ADMIN}/orders/{order_id}/trash", headers=headers)
+    response = await _delete(client, headers, order_id)
+
+    assert response.status_code == 204
+    assert await _stock(db, product_id) == 10
+
+
 # --- the 30-day purge ---------------------------------------------------------
 
 
@@ -236,13 +338,12 @@ async def test_opening_the_list_purges_an_order_trashed_31_days_ago(
     db: AsyncSession,
     params: dict[str, str],
 ) -> None:
-    old = await _order(db, slug="purge-old", stock=10, qty=3)
+    old = await _cancelled(db, slug="purge-old", stock=10, qty=3)
     old_id, product_id = old.id, old.items[0].product_id
     number, total = old.order_number, old.total
-    await transition(db, old_id, "confirmed", actor_id=None)
     await _trashed(db, old, days_ago=31)
     before = {m.id for m in await _movements(db, product_id)}
-    assert await _stock(db, product_id) == 7
+    assert await _stock(db, product_id) == 10
 
     response = await client.get(f"{ADMIN}/orders", headers=headers, params=params)
 
@@ -250,7 +351,7 @@ async def test_opening_the_list_purges_an_order_trashed_31_days_ago(
     assert not await _exists(db, old_id)
     assert await _items(db, old_id) == []
     assert await _history(db, old_id) == []
-    assert await _stock(db, product_id) == 7
+    assert await _stock(db, product_id) == 10
     after = await _movements(db, product_id)
     assert {m.id for m in after} == before
     assert all(m.order_id is None for m in after)
@@ -258,7 +359,7 @@ async def test_opening_the_list_purges_an_order_trashed_31_days_ago(
     assert row.actor_id is None
     assert row.changes == {
         "orderNumber": number,
-        "status": "confirmed",
+        "status": "cancelled",
         "total": str(total),
         "automatic": True,
     }
@@ -269,9 +370,9 @@ async def test_the_purge_leaves_younger_trashed_orders_and_live_orders(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:
     live = await _order(db, slug="purge-live")
-    young = await _order(db, slug="purge-young")
-    edge = await _order(db, slug="purge-edge")
-    old = await _order(db, slug="purge-gone")
+    young = await _cancelled(db, slug="purge-young")
+    edge = await _cancelled(db, slug="purge-edge")
+    old = await _cancelled(db, slug="purge-gone")
     await _trashed(db, young, days_ago=29)
     # An hour inside the retention: not eligible yet, whichever way the boundary rounds.
     await _trashed(db, edge, days_ago=TRASH_RETENTION.days - 1 / 24)
@@ -298,7 +399,7 @@ async def test_the_purge_leaves_younger_trashed_orders_and_live_orders(
 async def test_a_sweep_that_finds_nothing_writes_nothing(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:
-    order = await _order(db, slug="purge-nothing")
+    order = await _cancelled(db, slug="purge-nothing")
     await _trashed(db, order, days_ago=5)
     audit_before = await db.scalar(select(func.count()).select_from(AdminAuditLog))
 
@@ -310,8 +411,8 @@ async def test_a_sweep_that_finds_nothing_writes_nothing(
 
 
 async def test_the_purge_takes_every_expired_order_in_one_call(db: AsyncSession) -> None:
-    first = await _order(db, slug="purge-many-1")
-    second = await _order(db, slug="purge-many-2")
+    first = await _cancelled(db, slug="purge-many-1")
+    second = await _delivered(db, slug="purge-many-2")
     await _trashed(db, first, days_ago=40)
     await _trashed(db, second, days_ago=90)
     ids = (first.id, second.id)
@@ -323,6 +424,52 @@ async def test_the_purge_takes_every_expired_order_in_one_call(db: AsyncSession)
         (row,) = await _purge_rows(db, order_id)
         assert row.actor_id is None
         assert row.changes["automatic"] is True
+
+
+@pytest.mark.parametrize("status", ["pending", "confirmed", "processing", "shipped"])
+async def test_the_purge_leaves_an_expired_trashed_active_order_and_takes_a_final_one(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession, status: str
+) -> None:
+    """The same sweep: the cancelled order goes, the active one (trashed before
+    the status rule) stays, with its stock out and no audit row."""
+    active = await _order(db, slug=f"purge-active-{status}", qty=3)
+    active_id, product_id = active.id, active.items[0].product_id
+    for step in ACTIVE_PATHS[status]:
+        await transition(db, active_id, step, actor_id=None)
+    final = await _cancelled(db, slug=f"purge-final-{status}")
+    final_id = final.id
+    await _trashed(db, active, days_ago=45)
+    await _trashed(db, final, days_ago=45)
+    movements = len(await _movements(db, product_id))
+    audit_before = int(await db.scalar(select(func.count()).select_from(AdminAuditLog)) or 0)
+
+    assert await order_trash.purge_expired(db) == 1
+    await client.get(f"{ADMIN}/orders", headers=headers)
+
+    assert await _exists(db, active_id)
+    assert not await _exists(db, final_id)
+    assert await _purge_rows(db, active_id) == []
+    (row,) = await _purge_rows(db, final_id)
+    assert row.changes["automatic"] is True
+    assert await db.scalar(select(func.count()).select_from(AdminAuditLog)) == audit_before + 1
+    assert await _stock(db, product_id) == 7
+    assert len(await _movements(db, product_id)) == movements
+    assert all(m.order_id == active_id for m in await _movements(db, product_id))
+    # Still in the trash, still listed there until someone cancels it.
+    trash_list = await client.get(f"{ADMIN}/orders", headers=headers, params={"trash": "true"})
+    assert [row["id"] for row in trash_list.json()["items"]] == [str(active_id)]
+
+
+async def test_the_purge_takes_an_expired_delivered_order(db: AsyncSession) -> None:
+    order = await _delivered(db, slug="purge-delivered")
+    order_id = order.id
+    await _trashed(db, order, days_ago=40)
+
+    assert await order_trash.purge_expired(db) == 1
+
+    assert not await _exists(db, order_id)
+    (row,) = await _purge_rows(db, order_id)
+    assert row.changes["status"] == "delivered"
 
 
 # --- racing a restore ---------------------------------------------------------
@@ -344,6 +491,8 @@ async def committed_order() -> AsyncGenerator[Order]:
             payment_method="cash",
             user=None,
         )
+        # Final status first: the purge leaves an active order alone.
+        await transition(setup, order.id, "cancelled", actor_id=None)
         order.deleted_at = datetime.now(UTC) - timedelta(days=31)
         await setup.commit()
         order_id, product_id = order.id, product.id
@@ -449,10 +598,10 @@ async def test_a_purge_holding_the_row_makes_the_restore_a_404(committed_order: 
 async def test_nothing_in_the_purge_path_writes_the_stock_ledger(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:
-    order = await _order(db, slug="ledger-untouched", stock=10, qty=2)
+    order = await _cancelled(db, slug="ledger-untouched", stock=10, qty=2)
     product_id = order.items[0].product_id
     await _trashed(db, order, days_ago=31)
-    spare = await _order(db, slug="ledger-spare", stock=10, qty=1)
+    spare = await _cancelled(db, slug="ledger-spare", stock=10, qty=1)
     spare_id = spare.id
     await client.post(f"{ADMIN}/orders/{spare_id}/trash", headers=headers)
     movements = await db.scalar(select(func.count()).select_from(InventoryMovement))
@@ -460,5 +609,7 @@ async def test_nothing_in_the_purge_path_writes_the_stock_ledger(
     await client.get(f"{ADMIN}/orders", headers=headers)
     await _delete(client, headers, spare_id)
 
+    assert not await _exists(db, order.id)
+    assert not await _exists(db, spare_id)
     assert await db.scalar(select(func.count()).select_from(InventoryMovement)) == movements
-    assert await _stock(db, product_id) == 8
+    assert await _stock(db, product_id) == 10

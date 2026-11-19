@@ -95,8 +95,6 @@ export default function OrderDetail() {
 
   const customer = order.customer || {};
   const isTrashed = Boolean(order.deletedAt);
-  // These statuses still hold reserved units; trashing does not release them.
-  const holdsStock = ['pending', 'confirmed', 'processing'].includes(order.status);
 
   return (
     <div>
@@ -266,11 +264,7 @@ export default function OrderDetail() {
       <ConfirmDialog
         open={trashDialog === 'trash'}
         title="შეკვეთის წაშლა"
-        description={`შეკვეთა გადავა სანაგვეში და 30 დღის შემდეგ სამუდამოდ წაიშლება; ამ ხნის განმავლობაში მისი აღდგენა შეიძლება.${
-          holdsStock
-            ? ' მარაგი არ შეიცვლება: ამ შეკვეთის ერთეულები დარჩება დაკავებული. თუ მარაგი უნდა დაბრუნდეს, ჯერ გააუქმეთ შეკვეთა.'
-            : ''
-        }`}
+        description="შეკვეთა გადავა სანაგვეში და 30 დღის შემდეგ სამუდამოდ წაიშლება; ამ ხნის განმავლობაში მისი აღდგენა შეიძლება."
         confirmLabel="წაშლა"
         variant="danger"
         onConfirm={moveToTrash}

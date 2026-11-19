@@ -105,8 +105,10 @@ export default function OrderList() {
       setDeleting(null);
       setReloadToken((token) => token + 1);
     } catch (caught) {
-      if (caught.status === 404 || caught.status === 409) {
+      const notInTrash = caught.status === 409 && caught.details?.code === 'ORDER_NOT_IN_TRASH';
+      if (caught.status === 404 || notInTrash) {
         // Another admin or the purge got there first: a retry can only fail again.
+        // Any other 409 (ORDER_STILL_ACTIVE) is a refusal the admin has to read.
         setDeleting(null);
         setReloadToken((token) => token + 1);
         return;

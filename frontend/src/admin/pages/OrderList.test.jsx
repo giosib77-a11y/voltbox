@@ -174,6 +174,24 @@ describe('OrderList row actions in the trash', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('keeps the dialog open and shows ORDER_STILL_ACTIVE instead of silently reloading', async () => {
+    const list = vi.spyOn(adminApi, 'listOrders').mockResolvedValue(pageOf([trashed()]));
+    vi.spyOn(adminApi, 'deleteOrderForever').mockRejectedValue(
+      new ConflictError('ჯერ გააუქმეთ შეკვეთა — ასე მარაგი დაბრუნდება.', {
+        code: 'ORDER_STILL_ACTIVE',
+        details: { status: 'pending' },
+      }),
+    );
+    renderList('/admin/orders?trash=true');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'VB-1001 — სამუდამოდ წაშლა' }));
+    await userEvent.click(screen.getByRole('button', { name: 'სამუდამოდ წაშლა' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('ჯერ გააუქმეთ შეკვეთა');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(1);
+  });
+
   it('shows the message and keeps row buttons enabled when restore hits the network error', async () => {
     vi.spyOn(adminApi, 'listOrders').mockResolvedValue(pageOf([trashed()]));
     vi.spyOn(adminApi, 'restoreOrder').mockRejectedValue(new ApiError('ქსელის შეცდომა', 0));

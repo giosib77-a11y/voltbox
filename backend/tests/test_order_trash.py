@@ -1,15 +1,21 @@
 """The admin order trash: trash, restore, the frozen status and the trash list.
 
-What it covers (PROJECT.md -> Business Rules -> Order trash): trashing sets
-`deleted_at` and writes one audit row, repeating it changes nothing, restore
-returns the order with the status it had, a trashed order refuses every status
-change (409 `ORDER_IN_TRASH`) without touching stock or history, trash and
-restore never write the stock ledger, and the live list, the trash list and the
-dashboard counts each see only their own side.
+What it covers (PROJECT.md -> Business Rules -> Order trash): only an order in a
+final status (cancelled, delivered) can be trashed - an active one is 409
+`ORDER_STILL_ACTIVE`, because its stock comes back only on a cancellation and
+trash/purge would lose it (A-116); trashing sets `deleted_at` and writes one
+audit row, repeating it changes nothing, restore returns the order with the
+status it had, a trashed order refuses every status change (409
+`ORDER_IN_TRASH`) without touching stock or history, trash and restore never
+write the stock ledger, and the live list, the trash list and the dashboard
+counts each see only their own side.
 
 The refusal tests are the ones that fail on code without the freeze: before it a
 trashed order could still be cancelled, which restocks from a place the admin
-does not look at.
+does not look at. The ORDER_STILL_ACTIVE tests fail on code without the status
+rule. A trashed active order can no longer be made through the route, so tests
+about one (the freeze, restore) write `deleted_at` directly, which is also how a
+row trashed before the rule looks.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -27,7 +33,13 @@ from app.db.models import (
     User,
 )
 from app.services import order as order_service
-from app.services.order_status import counts_by_status, transition
+from app.services.order_status import (
+    FINAL_STATUSES,
+    TRANSITIONS,
+    counts_by_status,
+    is_final,
+    transition,
+)
 from app.services.order_trash import TRASH_RETENTION
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,6 +82,31 @@ async def _order(db: AsyncSession, *, slug: str, stock: int = 10, qty: int = 2) 
     )
 
 
+async def _cancelled(db: AsyncSession, *, slug: str, stock: int = 10, qty: int = 2) -> Order:
+    """An order in a final status: cancelled, so its stock is already back."""
+    order = await _order(db, slug=slug, stock=stock, qty=qty)
+    await transition(db, order.id, "cancelled", actor_id=None)
+    return order
+
+
+async def _delivered(db: AsyncSession, *, slug: str, stock: int = 10, qty: int = 2) -> Order:
+    order = await _order(db, slug=slug, stock=stock, qty=qty)
+    for step in ("confirmed", "processing", "shipped", "delivered"):
+        await transition(db, order.id, step, actor_id=None)
+    return order
+
+
+async def _legacy_trashed(db: AsyncSession, order: Order) -> None:
+    """An active order in the trash - what the route can no longer produce."""
+    order.deleted_at = datetime.now(UTC)
+    await db.flush()
+
+
+async def _stock(db: AsyncSession, product_id: object) -> int | None:
+    stock: int | None = await db.scalar(select(Product.stock).where(Product.id == product_id))
+    return stock
+
+
 async def _audit_rows(db: AsyncSession, order: Order, action: str) -> list[AdminAuditLog]:
     stmt = select(AdminAuditLog).where(
         AdminAuditLog.entity_id == str(order.id), AdminAuditLog.action == action
@@ -98,7 +135,7 @@ async def _restore(
 async def test_trashing_sets_deleted_at_purge_at_and_one_audit_row(
     client: httpx.AsyncClient, headers: dict[str, str], admin: User, db: AsyncSession
 ) -> None:
-    order = await _order(db, slug="trash-basic")
+    order = await _cancelled(db, slug="trash-basic")
     before = datetime.now(UTC)
 
     response = await _trash(client, headers, order)
@@ -114,14 +151,14 @@ async def test_trashing_sets_deleted_at_purge_at_and_one_audit_row(
     assert len(rows) == 1
     assert rows[0].actor_id == admin.id
     assert rows[0].entity_type == "order"
-    assert rows[0].changes["status"] == "pending"
+    assert rows[0].changes["status"] == "cancelled"
     assert rows[0].changes["deletedAt"]
 
 
 async def test_trashing_twice_keeps_the_first_deleted_at_and_one_audit_row(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:
-    order = await _order(db, slug="trash-twice")
+    order = await _cancelled(db, slug="trash-twice")
     first = (await _trash(client, headers, order)).json()
 
     second_response = await _trash(client, headers, order)
@@ -135,9 +172,11 @@ async def test_trashing_twice_keeps_the_first_deleted_at_and_one_audit_row(
 async def test_restore_returns_the_status_it_had_and_writes_one_audit_row(
     client: httpx.AsyncClient, headers: dict[str, str], admin: User, db: AsyncSession
 ) -> None:
+    # A confirmed order in the trash is the state of a row trashed before the
+    # status rule: the route no longer produces it, restore still has to cope.
     order = await _order(db, slug="restore-basic")
     await transition(db, order.id, "confirmed", actor_id=None)
-    await _trash(client, headers, order)
+    await _legacy_trashed(db, order)
 
     response = await _restore(client, headers, order)
 
@@ -153,6 +192,19 @@ async def test_restore_returns_the_status_it_had_and_writes_one_audit_row(
     assert len(rows) == 1
     assert rows[0].actor_id == admin.id
     assert rows[0].changes == {"status": "confirmed", "deletedAt": None}
+
+
+async def test_a_trashed_final_order_restores_with_its_status(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+) -> None:
+    order = await _delivered(db, slug="restore-delivered")
+    await _trash(client, headers, order)
+
+    body = (await _restore(client, headers, order)).json()
+
+    assert body["status"] == "delivered"
+    assert body["deletedAt"] is None
+    assert body["allowedTransitions"] == []
 
 
 async def test_restoring_a_live_order_changes_nothing_and_writes_no_audit_row(
@@ -171,7 +223,7 @@ async def test_restoring_a_live_order_changes_nothing_and_writes_no_audit_row(
 async def test_restore_then_trash_again_starts_a_new_retention_period(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:
-    order = await _order(db, slug="trash-again")
+    order = await _cancelled(db, slug="trash-again")
     await _trash(client, headers, order)
     # Age the first deletion, so a kept value would be visibly old.
     order.deleted_at = datetime.now(UTC) - timedelta(days=20)
@@ -199,7 +251,7 @@ async def test_a_status_change_on_a_trashed_order_is_refused_and_changes_nothing
 ) -> None:
     order = await _order(db, stock=10, qty=3, slug="frozen")
     product_id = order.items[0].product_id
-    await _trash(client, headers, order)
+    await _legacy_trashed(db, order)
     stock = await db.scalar(select(Product.stock).where(Product.id == product_id))
     movements = await _count(db, InventoryMovement)
     history = await _count(db, OrderStatusHistory)
@@ -236,18 +288,19 @@ async def test_a_trashed_order_reports_in_trash_even_for_a_move_the_graph_forbid
 async def test_trashing_and_restoring_leave_stock_and_the_ledger_alone(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:
-    order = await _order(db, stock=10, qty=4, slug="stock-untouched")
+    order = await _cancelled(db, stock=10, qty=4, slug="stock-untouched")
     product_id = order.items[0].product_id
     movements = await _count(db, InventoryMovement)
     history = await _count(db, OrderStatusHistory)
-    assert await db.scalar(select(Product.stock).where(Product.id == product_id)) == 6
+    # The cancellation already returned the four units.
+    assert await _stock(db, product_id) == 10
 
     await _trash(client, headers, order)
-    assert await db.scalar(select(Product.stock).where(Product.id == product_id)) == 6
+    assert await _stock(db, product_id) == 10
     assert await _count(db, InventoryMovement) == movements
 
     await _restore(client, headers, order)
-    assert await db.scalar(select(Product.stock).where(Product.id == product_id)) == 6
+    assert await _stock(db, product_id) == 10
     assert await _count(db, InventoryMovement) == movements
     # Neither is a status change, so the timeline has no entry for them.
     assert await _count(db, OrderStatusHistory) == history
@@ -256,8 +309,9 @@ async def test_trashing_and_restoring_leave_stock_and_the_ledger_alone(
 async def test_the_detail_of_a_trashed_order_opens_with_no_allowed_moves(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:
+    # A legacy active order: the one whose moves would be non-empty without the freeze.
     order = await _order(db, slug="trashed-detail")
-    await _trash(client, headers, order)
+    await _legacy_trashed(db, order)
 
     response = await client.get(f"{ADMIN}/orders/{order.id}", headers=headers)
 
@@ -272,7 +326,7 @@ async def test_the_default_list_hides_a_trashed_order(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:
     live = await _order(db, slug="list-live")
-    gone = await _order(db, slug="list-gone")
+    gone = await _cancelled(db, slug="list-gone")
     await _trash(client, headers, gone)
 
     body = (await client.get(f"{ADMIN}/orders", headers=headers)).json()
@@ -290,8 +344,8 @@ async def test_the_trash_list_has_only_trashed_orders_newest_deletion_first(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:
     await _order(db, slug="trash-list-live")
-    older = await _order(db, slug="trash-list-older")
-    newer = await _order(db, slug="trash-list-newer")
+    older = await _cancelled(db, slug="trash-list-older")
+    newer = await _cancelled(db, slug="trash-list-newer")
     await _trash(client, headers, older)
     await _trash(client, headers, newer)
     # Explicit instants: two requests in one test can land on the same clock tick.
@@ -315,22 +369,21 @@ async def test_the_trash_list_has_only_trashed_orders_newest_deletion_first(
 async def test_the_trash_list_still_applies_q_and_status(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:
-    pending = await _order(db, slug="trash-filter-pending")
-    confirmed = await _order(db, slug="trash-filter-confirmed")
-    await transition(db, confirmed.id, "confirmed", actor_id=None)
-    await _trash(client, headers, pending)
-    await _trash(client, headers, confirmed)
+    cancelled = await _cancelled(db, slug="trash-filter-cancelled")
+    delivered = await _delivered(db, slug="trash-filter-delivered")
+    await _trash(client, headers, cancelled)
+    await _trash(client, headers, delivered)
     params = {"trash": "true"}
 
     by_status = await client.get(
-        f"{ADMIN}/orders", headers=headers, params={**params, "status": "confirmed"}
+        f"{ADMIN}/orders", headers=headers, params={**params, "status": "delivered"}
     )
     by_number = await client.get(
-        f"{ADMIN}/orders", headers=headers, params={**params, "q": pending.order_number}
+        f"{ADMIN}/orders", headers=headers, params={**params, "q": cancelled.order_number}
     )
 
-    assert [row["orderNumber"] for row in by_status.json()["items"]] == [confirmed.order_number]
-    assert [row["orderNumber"] for row in by_number.json()["items"]] == [pending.order_number]
+    assert [row["orderNumber"] for row in by_status.json()["items"]] == [delivered.order_number]
+    assert [row["orderNumber"] for row in by_number.json()["items"]] == [cancelled.order_number]
 
 
 async def test_a_bad_trash_flag_is_a_validation_error(
@@ -346,14 +399,153 @@ async def test_counts_by_status_excludes_the_trash(
     client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
 ) -> None:
     await _order(db, slug="count-live")
-    gone = await _order(db, slug="count-gone")
+    gone = await _cancelled(db, slug="count-gone")
     await _trash(client, headers, gone)
 
     counts = await counts_by_status(db)
     dashboard = (await client.get(f"{ADMIN}/dashboard", headers=headers)).json()
 
     assert counts["pending"] == 1
-    assert dashboard["ordersByStatus"]["pending"] == 1
+    assert counts["cancelled"] == 0
+    assert dashboard["ordersByStatus"]["cancelled"] == 0
 
     await _restore(client, headers, gone)
-    assert (await counts_by_status(db))["pending"] == 2
+    assert (await counts_by_status(db))["cancelled"] == 1
+
+
+# --- only a final order may be trashed (A-116) --------------------------------
+
+#: The way from `pending` to each active status.
+ACTIVE_PATHS = {
+    "pending": (),
+    "confirmed": ("confirmed",),
+    "processing": ("confirmed", "processing"),
+    "shipped": ("confirmed", "processing", "shipped"),
+}
+
+
+def test_the_final_statuses_are_the_ones_the_graph_leaves_nowhere_from() -> None:
+    dead_ends = {status for status, following in TRANSITIONS.items() if not following}
+    assert set(FINAL_STATUSES) == dead_ends
+    assert sorted(FINAL_STATUSES) == ["cancelled", "delivered"]
+    assert all(is_final(s) for s in FINAL_STATUSES)
+    # `shipped` still has a move; an unknown status is not final.
+    assert not is_final("shipped")
+    assert not is_final("no-such-status")
+
+
+@pytest.mark.parametrize("status", list(ACTIVE_PATHS))
+async def test_trashing_an_active_order_is_refused_and_changes_nothing(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession, status: str
+) -> None:
+    order = await _order(db, slug=f"active-{status}", qty=3)
+    for step in ACTIVE_PATHS[status]:
+        await transition(db, order.id, step, actor_id=None)
+    product_id = order.items[0].product_id
+    assert order.status == status
+    stock = await _stock(db, product_id)
+    movements = await _count(db, InventoryMovement)
+    history = await _count(db, OrderStatusHistory)
+
+    response = await _trash(client, headers, order)
+
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "ORDER_STILL_ACTIVE"
+    assert error["details"] == {"status": status}
+    await db.refresh(order)
+    assert order.deleted_at is None
+    assert order.status == status
+    assert await _stock(db, product_id) == stock == 7
+    assert await _count(db, InventoryMovement) == movements
+    assert await _count(db, OrderStatusHistory) == history
+    assert await _audit_rows(db, order, "order.trash") == []
+
+
+@pytest.mark.parametrize("status", ["cancelled", "delivered"])
+async def test_a_final_order_can_be_trashed(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession, status: str
+) -> None:
+    make = _cancelled if status == "cancelled" else _delivered
+    order = await make(db, slug=f"final-{status}")
+    product_id = order.items[0].product_id
+    stock = await _stock(db, product_id)
+    movements = await _count(db, InventoryMovement)
+
+    response = await _trash(client, headers, order)
+
+    assert response.status_code == 200
+    assert response.json()["deletedAt"] is not None
+    assert response.json()["status"] == status
+    assert len(await _audit_rows(db, order, "order.trash")) == 1
+    # Trashing writes no stock: the cancellation already returned it, a
+    # delivered order's stock has left the shop.
+    assert await _stock(db, product_id) == stock
+    assert await _count(db, InventoryMovement) == movements
+
+
+async def test_cancelling_first_makes_an_active_order_trashable_and_returns_its_stock(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+) -> None:
+    order = await _order(db, slug="cancel-then-trash", qty=4)
+    product_id = order.items[0].product_id
+    refused = await _trash(client, headers, order)
+    assert refused.json()["error"]["code"] == "ORDER_STILL_ACTIVE"
+    assert await _stock(db, product_id) == 6
+
+    cancelled = await client.post(
+        f"{ADMIN}/orders/{order.id}/status", headers=headers, json={"to": "cancelled"}
+    )
+    trashed = await _trash(client, headers, order)
+
+    assert cancelled.status_code == 200
+    assert trashed.status_code == 200
+    assert await _stock(db, product_id) == 10
+
+
+async def test_trashing_an_already_trashed_active_order_is_still_a_no_op(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+) -> None:
+    """Repeating trash stays a retry-safe no-op even for a legacy active order:
+    the status rule is for a fresh trash, not a 409 on a double click."""
+    order = await _order(db, slug="trash-retry-legacy")
+    await _legacy_trashed(db, order)
+
+    response = await _trash(client, headers, order)
+
+    assert response.status_code == 200
+    assert await _audit_rows(db, order, "order.trash") == []
+
+
+async def test_a_legacy_trashed_active_order_restores_and_cancelling_returns_its_stock(
+    client: httpx.AsyncClient, headers: dict[str, str], db: AsyncSession
+) -> None:
+    order = await _order(db, slug="legacy-restore-cancel", qty=3)
+    await transition(db, order.id, "confirmed", actor_id=None)
+    order_id, product_id = order.id, order.items[0].product_id
+    await _legacy_trashed(db, order)
+    assert await _stock(db, product_id) == 7
+
+    restored = await _restore(client, headers, order)
+    cancelled = await client.post(
+        f"{ADMIN}/orders/{order_id}/status", headers=headers, json={"to": "cancelled"}
+    )
+
+    assert restored.status_code == 200
+    assert cancelled.status_code == 200
+    assert await _stock(db, product_id) == 10
+    returned = list(
+        (
+            await db.scalars(
+                select(InventoryMovement).where(
+                    InventoryMovement.product_id == product_id,
+                    InventoryMovement.reason == "order_cancelled",
+                )
+            )
+        ).all()
+    )
+    assert len(returned) == 1
+    assert returned[0].change == 3
+    assert returned[0].order_id == order_id
+    # Now that its stock is back it may go to the trash.
+    assert (await _trash(client, headers, order)).status_code == 200
