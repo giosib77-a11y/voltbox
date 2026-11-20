@@ -861,6 +861,14 @@ Unverified (check before acting):
 - Failed attempts: —
 
 ## Last Session
+- 2026-11-20 — `fix/pip-audit-msgpack` (from `agent-system` at `cc58a9b`, verified with git — the earlier chain is merged;
+  Dependabot #29, no new audit, Tasks and Run State untouched). Commit 1f1960c A-130 (nit): msgpack 1.2.2 → 1.2.3 in
+  `.github/pip-audit/requirements.txt` only (pip-compile as `requirements.in` documents, `--upgrade-package`; one hunk,
+  hashes 88 → 91 = PyPI's set). msgpack is in no backend lock and not in the image (`Dockerfile:33`). Checked in a clean
+  `python:3.14-slim` (`--rm`, only the needed files read-only): hashed install passes, CI audit over the backend locks 0,
+  tool lock 0 (old: CVE-2026-114613, exit 1); no image pulled or created. Review: code-reviewer — nothing found. Final
+  gates: ruff, format 191, mypy 171, pytest 2078 passed / 1 skipped, alembic upgrade + check, eslint, vitest 852/852,
+  both builds.
 - 2026-11-20 — `fix/checkout-mobile` (from `fix/delivery-fees` at `0a3f5ac`: `agent-system` is still at `46b3f3e` locally
   and on origin, so neither `feat/card-and-info`, `fix/info-texts` nor `fix/delivery-fees` is merged; owner's request,
   no new audit, Tasks and Run State untouched). Commits: d6c4cd0 A-126 (`min-w-0` on the page grids' children in
