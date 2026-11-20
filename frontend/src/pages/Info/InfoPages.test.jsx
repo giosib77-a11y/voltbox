@@ -30,6 +30,9 @@ import { createOrder, register } from '../../services/httpApi.js';
 
 vi.mock('virtual:api-impl', () => import('../../services/httpApi.js'));
 
+// The owner's sentence, literal: the same on the returns page and in the product tab.
+const SHOP_WARRANTY_KA = `ამას გარდა, ყველა პროდუქტზე მოქმედებს მაღაზიის გარანტია — ${WARRANTY_MONTHS} თვე მიწოდებიდან. საგარანტიო შემთხვევაში დაგვიკავშირდით: პროდუქტს ჩვენ ჩავიბარებთ და შეგიკეთებთ ან შეგიცვლით.`;
+
 const PAGES = [
   ['delivery', DeliveryTerms],
   ['returns', ReturnsWarranty],
@@ -360,6 +363,24 @@ describe('the returns page', () => {
       }
     });
 
+    it('states the owner\'s exact sentence, in Georgian', async () => {
+      answer(rules());
+      await mount(ReturnsWarranty);
+
+      expect(screen.getByText(SHOP_WARRANTY_KA)).toBeInTheDocument();
+    });
+
+    it('states the courier sentence with the delivery-price wording', async () => {
+      answer(rules());
+      await mount(ReturnsWarranty);
+
+      expect(
+        screen.getByText(
+          /^კურიერს ჩვენ გამოგიგზავნით; მომსახურების ღირებულება უდრის თქვენს ქალაქში მიწოდების საფასურს: /,
+        ),
+      ).toBeInTheDocument();
+    });
+
     it('the exclusions are the shop warranty, and leave the legal 2 years alone', async () => {
       answer(rules());
       await mount(ReturnsWarranty);
@@ -680,7 +701,10 @@ describe('storefront texts: who gives the warranty, and for how long', () => {
   });
 
   it('the shop warranty on the delivery tab and the returns page reads the constant', () => {
-    expect(t('deliveryInfo.warrantyText', { months: WARRANTY_MONTHS })).toContain(`${WARRANTY_MONTHS} თვე`);
+    const tab = t('deliveryInfo.warrantyText', { months: WARRANTY_MONTHS });
+    expect(tab).toBe(`კანონით გარანტია 2 წელია მიწოდებიდან. ${SHOP_WARRANTY_KA}`);
+    expect(tab).toContain(`${WARRANTY_MONTHS} თვე`);
+    expect(t('info.returns.shopWarranty', { months: WARRANTY_MONTHS })).toBe(SHOP_WARRANTY_KA);
     expect(t('product.warranty', { months: WARRANTY_MONTHS })).toBe(`${WARRANTY_MONTHS} თვის გარანტია`);
   });
 });

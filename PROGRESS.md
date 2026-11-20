@@ -436,6 +436,21 @@ final-check rule "new findings go to Blockers because the rounds are spent" did 
 
 ## Backlog (needs user decision)
 
+- Owner to check (2026-11-20, `fix/info-texts`): the live catalogue may still say what the storefront code no
+  longer does — a category or product `description` / `shortDescription` with „ორიგინალი“, „ოფიციალური
+  გარანტიით“ or "MFi", and a warranty spec under a key other than `warranty` (e.g. `გარანტია: 24 თვე` — the
+  specs table hides only the exact `warranty` key). Look through the admin panel's categories and products and
+  edit those texts there.
+- Owner / lawyer (2026-11-20): the returns page now names the shop's paid courier as the way to return a product
+  (the old text also allowed sending it back yourself). The law puts the return and its direct cost on the buyer;
+  whether the shop may make its paid courier the only way is a legal question. Also unsaid on the page: the
+  courier costs the city fee even when the order had free delivery (≥ 100 ₾) — Decision Log 2026-11-20. Add a
+  clause to `info.returns.returnShipping*` (ka/en) if the owner wants it said.
+- Mock data still tags two Lightning cables `'mfi'` (2026-11-20, nit, mock mode only): `frontend/src/data/products.js`
+  ~210 and ~246, shown as a `#mfi` chip on the description tab — the same unverified certification hint the
+  texts dropped. Remove `'mfi'` from both `tags`.
+- `cityFees` lives in `pages/Info/cardCities.js` and `ProductDetails.jsx` imports it too (2026-11-20, nit): the
+  file name no longer describes all of it. Rename (e.g. `deliveryRules.js`) when the file is next touched.
 - Two test pins missing (2026-11-19, nit): the en "seal" exception test checks only the substring `seal` (also in
   "sealed"); and nothing ties the privacy page's "IP at most 24 hours" (`info.privacy.collectTech`) to
   `app/core/rate_limit.py` — a longer IP-keyed window would make the page wrong silently. Fix: assert

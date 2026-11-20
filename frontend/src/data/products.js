@@ -203,7 +203,7 @@ const cables = [
   {
     id: 'cb-004', slug: 'apple-usb-c-lightning-1m', name: 'Apple USB-C — Lightning კაბელი 1მ',
     brand: 'Apple', category: 'cables',
-    shortDescription: 'MFi, 1 მეტრი',
+    shortDescription: '1 მეტრი, Lightning',
     description: 'Apple-ის კაბელი iPhone-ისა და iPad-ის სწრაფი დატენვისთვის. სრული თავსებადობა iOS-ის ყველა ვერსიასთან.',
     price: 79, oldPrice: 89, rating: 4.7, reviewsCount: 342, stock: 22,
     specs: { connector: 'USB-C — Lightning', length: '1 მ', fastCharge: true, material: 'სილიკონი', color: 'თეთრი', power: '20 W' },
@@ -239,8 +239,8 @@ const cables = [
   {
     id: 'cb-008', slug: 'anker-usb-a-lightning-1m', name: 'Anker PowerLine USB-A — Lightning კაბელი 1მ',
     brand: 'Anker', category: 'cables',
-    shortDescription: 'MFi სერტიფიცირებული, 1 მეტრი',
-    description: 'MFi სერტიფიცირებული Lightning კაბელი Anker-ისგან. გამაგრებული ბოლოები და უწყვეტი კავშირი iOS-ის განახლებების შემდეგაც.',
+    shortDescription: 'Lightning, 1 მეტრი',
+    description: 'Lightning კაბელი Anker-ისგან. გამაგრებული ბოლოები და უწყვეტი კავშირი iOS-ის განახლებების შემდეგაც.',
     price: 35, rating: 4.6, reviewsCount: 221, stock: 54,
     specs: { connector: 'USB-A — Lightning', length: '1 მ', fastCharge: false, material: 'TPE', color: 'თეთრი', power: '12 W' },
     tags: ['lightning', 'mfi', 'iphone'], created: '2025-07-22',

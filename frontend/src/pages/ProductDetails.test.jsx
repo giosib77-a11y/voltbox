@@ -109,8 +109,10 @@ describe('the product page tabs', () => {
     await user.click(screen.getByRole('tab', { name: t('product.tabs.delivery') }));
 
     const panel = screen.getByRole('tabpanel');
-    expect(panel).toHaveTextContent(t('deliveryInfo.warrantyText', { months: WARRANTY_MONTHS }));
-    expect(panel).toHaveTextContent('2 წელია');
+    expect(panel).toHaveTextContent('კანონით გარანტია 2 წელია მიწოდებიდან.');
+    expect(panel).toHaveTextContent(
+      `ამას გარდა, ყველა პროდუქტზე მოქმედებს მაღაზიის გარანტია — ${WARRANTY_MONTHS} თვე მიწოდებიდან. საგარანტიო შემთხვევაში დაგვიკავშირდით: პროდუქტს ჩვენ ჩავიბარებთ და შეგიკეთებთ ან შეგიცვლით.`,
+    );
     expect(panel).toHaveTextContent(`თბილისი — ${formatPrice(8)}, რუსთავი — ${formatPrice(5)}`);
     expect(panel.textContent).not.toMatch(/მწარმოებლ|აღწერაშია|\{\{/);
   });

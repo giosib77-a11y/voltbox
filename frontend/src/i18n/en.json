@@ -246,7 +246,7 @@
     "returnsTitle": "Returns",
     "returnsText": "You can return a product within 14 calendar days of receiving it, without giving a reason.",
     "warrantyTitle": "Warranty",
-    "warrantyText": "By law the guarantee is 2 years from delivery. In addition, every product carries the shop's warranty — {{months}} months: we take a defective product in and repair or replace it."
+    "warrantyText": "By law the guarantee is 2 years from delivery. In addition, every product is covered by the shop's warranty — {{months}} months from delivery. For a warranty claim, contact us: we will take the product in and repair or replace it."
   },
   "layout": {
     "skipToContent": "Skip to main content",
