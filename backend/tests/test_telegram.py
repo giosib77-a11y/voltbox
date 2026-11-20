@@ -229,11 +229,11 @@ class TestAPlacedOrder:
 
         [request] = fake_telegram.requests
         lines = json.loads(request.content)["text"].splitlines()
-        # 40.00 of goods to Tbilisi: below 100, so its 8.00 fee is charged.
+        # 40.00 of goods to Tbilisi: below 100, so its 11.00 fee is charged.
         assert lines[1:4] == [
             "პროდუქტები: 40.00 GEL",
-            "მიწოდება: 8.00 GEL",
-            "ჯამი: 48.00 GEL",
+            "მიწოდება: 11.00 GEL",
+            "ჯამი: 51.00 GEL",
         ]
 
     async def test_the_message_carries_no_customer_details(

@@ -3,7 +3,7 @@
  *
  * The rules are passed in as `GET /delivery` returns them; nothing here reads a
  * number of the frontend's own. RULES below is the owner's current table written
- * out - Tbilisi 8, Rustavi 5, free from 100 - so these tests check the arithmetic,
+ * out - Tbilisi 11, Rustavi 7, free from 100 - so these tests check the arithmetic,
  * and backend/tests/test_orders.py checks the same numbers against the server.
  *
  * The case that mattered is the threshold. A basket of 0.05 × 12 and 9.94 × 10 is
@@ -22,18 +22,18 @@ import {
 
 const RULES = {
   cities: [
-    { name: 'თბილისი', fee: 8 },
-    { name: 'რუსთავი', fee: 5 },
+    { name: 'თბილისი', fee: 11 },
+    { name: 'რუსთავი', fee: 7 },
   ],
   freeFrom: 100,
 };
 
 describe('deliveryFee', () => {
   it.each([
-    ['თბილისი', 40, 8],
-    ['რუსთავი', 40, 5],
-    ['თბილისი', 99.99, 8],
-    ['რუსთავი', 99.99, 5],
+    ['თბილისი', 40, 11],
+    ['რუსთავი', 40, 7],
+    ['თბილისი', 99.99, 11],
+    ['რუსთავი', 99.99, 7],
     ['თბილისი', 100, 0],
     ['რუსთავი', 100, 0],
     ['თბილისი', 200, 0],
@@ -80,8 +80,8 @@ describe('the threshold, to the tetri', () => {
   it('one tetri short still pays for delivery', () => {
     const { subtotal } = calcTotals([{ price: 99.99, qty: 1 }]);
 
-    expect(deliveryFee(subtotal, RULES, 'თბილისი')).toBe(8);
-    expect(totalWithDelivery(subtotal, 8)).toBe(107.99);
+    expect(deliveryFee(subtotal, RULES, 'თბილისი')).toBe(11);
+    expect(totalWithDelivery(subtotal, 11)).toBe(110.99);
   });
 });
 
@@ -103,8 +103,8 @@ describe('amountToFreeDelivery', () => {
 
 describe('totalWithDelivery', () => {
   it('adds in whole tetri', () => {
-    expect(totalWithDelivery(40.1, 8)).toBe(48.1);
-    expect(totalWithDelivery(0.1 + 0.2, 5)).toBe(5.3);
+    expect(totalWithDelivery(40.1, 11)).toBe(51.1);
+    expect(totalWithDelivery(0.1 + 0.2, 7)).toBe(7.3);
   });
 
   it('is unknown while the fee is', () => {

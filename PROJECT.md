@@ -105,9 +105,10 @@ Deployment state, as far as the repository shows (2026-10-10):
 - **Prices and totals are computed only on the server**, from the database;
   the client never sends a price (`extra="forbid"` — ASSUMPTIONS §8.6). Money is
   `Numeric`/`Decimal`, never float.
-- **Delivery fee** by city: Tbilisi 8 ₾, Rustavi 5 ₾, free when the items total
-  is ≥ 100 ₾ (100.00 included; was 50 until 2026-11-19); other cities are refused
-  (`app/services/delivery.py`).
+- **Delivery fee** by city: Tbilisi 11 ₾, Rustavi 7 ₾ (8 and 5 until 2026-11-20), free when
+  the items total is ≥ 100 ₾ (100.00 included; was 50 until 2026-11-19); other cities are
+  refused. The one source is `CITY_FEES` in `app/services/delivery.py`; the storefront
+  shows fees only from `GET /delivery`, and a stored order keeps the fee it was charged.
 - **Payment** (2026-11-19): on delivery only — `cash` everywhere, `card_on_delivery` in the cities
   `delivery.py` marks as accepting card (Tbilisi and Rustavi today); card elsewhere → 400
   `PAYMENT_METHOD_UNAVAILABLE`. `GET /delivery` says per city (`cardOnDelivery`); the checkout
@@ -381,6 +382,25 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
+
+### 2026-11-20 — Delivery costs 11 ₾ in Tbilisi and 7 ₾ in Rustavi
+- Decision (owner, branch `fix/delivery-fees`): `CITY_FEES` Tbilisi 11.00, Rustavi 7.00 (were 8.00 and
+  5.00); free from 100.00 unchanged. `CITY_FEES` stays the only source: GET /delivery, POST /orders, the order
+  email and the Telegram notice read it; the storefront (checkout, cart, delivery page, product tab, the
+  returns page's courier sentence) shows only what GET /delivery returns, so no storefront text changed.
+- Choices that are not obvious:
+  - No migration and no data change: an order stores the fee it was charged (`orders.shipping`), so orders
+    placed before the change keep 8.00 / 5.00 in the account, the admin panel and any resent email.
+  - The mock rules (`frontend/src/data/delivery.js`, mock mode's fake GET /delivery) are a copy, and it is
+    the one copy left: a backend test now compares it with `CITY_FEES`, `CARD_ON_DELIVERY_CITIES` and
+    `FREE_FROM`, so it cannot go stale silently.
+  - Test fixtures that stand for the shop's real rules were moved to 11 / 7, so a grep for the old fees
+    finds only history (this log, ASSUMPTIONS §4.5, the pre-deployment checklist's recorded run, the stored
+    historical order in `test_orders.py`).
+- What still holds: money is Decimal and computed on the server only; the return courier costs the city's
+  delivery fee (Decision Log 2026-11-20, warranty entry) and follows this change by itself.
+- Changes if: a fee changes again (one line in `CITY_FEES` plus the mock, which the test enforces), or a
+  city is added.
 
 ### 2026-11-20 — The warranty is the shop's own, 12 months on every product; the return courier costs the city's delivery fee
 - Decision (owner's facts, branch `fix/info-texts`): product originality is not confirmed (a distributor now, own

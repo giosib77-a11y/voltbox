@@ -132,8 +132,8 @@ describe('Header free-delivery strip', () => {
   it('names the threshold GET /delivery sends, not a number of its own', async () => {
     vi.spyOn(api, 'getDeliveryRules').mockResolvedValue({
       cities: [
-        { name: 'თბილისი', fee: 8 },
-        { name: 'რუსთავი', fee: 5 },
+        { name: 'თბილისი', fee: 11 },
+        { name: 'რუსთავი', fee: 7 },
       ],
       freeFrom: 100,
       currency: 'GEL',

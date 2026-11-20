@@ -24,6 +24,8 @@ import Privacy from './Privacy.jsx';
 import Faq from './Faq.jsx';
 import { CONTACT, SHOP_FACTS, STORAGE_KEYS, WARRANTY_MONTHS } from '../../constants/index.js';
 import { formatPrice } from '../../utils/format.js';
+import { cityFees } from './cardCities.js';
+import { deliveryRules } from '../../data/delivery.js';
 import { i18n, t } from '../../i18n/index.js';
 import { forgetDeliveryRules, loadDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { createOrder, register } from '../../services/httpApi.js';
@@ -42,8 +44,8 @@ const PAGES = [
 
 const TBILISI_RUSTAVI = {
   cities: [
-    { name: 'თბილისი', fee: '8.00', cardOnDelivery: true },
-    { name: 'რუსთავი', fee: '5.00', cardOnDelivery: true },
+    { name: 'თბილისი', fee: '11.00', cardOnDelivery: true },
+    { name: 'რუსთავი', fee: '7.00', cardOnDelivery: true },
   ],
   freeFrom: '100.00',
 };
@@ -99,7 +101,7 @@ const returnSteps = () => screen.getByRole('list', { name: t('info.returns.steps
 
 const MIXED = {
   cities: [
-    { name: 'თბილისი', fee: '8.00', cardOnDelivery: true },
+    { name: 'თბილისი', fee: '11.00', cardOnDelivery: true },
     { name: 'ბათუმი', fee: '12.50', cardOnDelivery: false },
   ],
   freeFrom: '100.00',
@@ -121,8 +123,8 @@ describe('delivery prices', () => {
       'Tbilisi and Rustavi',
       TBILISI_RUSTAVI,
       [
-        ['თბილისი', '8 ₾'],
-        ['რუსთავი', '5 ₾'],
+        ['თბილისი', '11 ₾'],
+        ['რუსთავი', '7 ₾'],
         ['შეკვეთა 100 ₾-დან', 'უფასო'],
       ],
     ],
@@ -336,6 +338,28 @@ describe('the returns page', () => {
       const second = await mount(ReturnsWarranty);
       expect(second.container.textContent).toContain(feesOf(BATUMI));
       expect(second.container.textContent).not.toContain('რუსთავი');
+    });
+
+    it('reads the owner\'s fees literally: Tbilisi 11 GEL, Rustavi 7 GEL', async () => {
+      answer(rules(TBILISI_RUSTAVI));
+      await mount(ReturnsWarranty);
+
+      expect(
+        screen.getByText(
+          'კურიერს ჩვენ გამოგიგზავნით; მომსახურების ღირებულება უდრის თქვენს ქალაქში მიწოდების საფასურს: თბილისი — 11 ₾, რუსთავი — 7 ₾.',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('mock mode\'s rules (data/delivery.js) read the same fees', async () => {
+      expect(cityFees(deliveryRules)).toBe('თბილისი — 11 ₾, რუსთავი — 7 ₾');
+
+      answer(deliveryRules);
+      await mount(ReturnsWarranty);
+
+      expect(
+        screen.getByText(t('info.returns.returnShipping', { fees: 'თბილისი — 11 ₾, რუსთავი — 7 ₾' })),
+      ).toBeInTheDocument();
     });
 
     it('names no fee, and does not break, when GET /delivery fails', async () => {
@@ -594,8 +618,8 @@ describe('in English', () => {
   const GEORGIAN = /[ა-ჿ]/;
   const ENGLISH_CITIES = {
     cities: [
-      { name: 'Tbilisi', fee: '8.00', cardOnDelivery: true },
-      { name: 'Rustavi', fee: '5.00', cardOnDelivery: true },
+      { name: 'Tbilisi', fee: '11.00', cardOnDelivery: true },
+      { name: 'Rustavi', fee: '7.00', cardOnDelivery: true },
     ],
     freeFrom: '100.00',
   };
@@ -624,8 +648,8 @@ describe('in English', () => {
       screen.getByRole('table', { name: 'Delivery cost by city' }),
     ).toBeInTheDocument();
     expect(tableRows()).toEqual([
-      ['თბილისი', '8 ₾'],
-      ['რუსთავი', '5 ₾'],
+      ['თბილისი', '11 ₾'],
+      ['რუსთავი', '7 ₾'],
       ['Orders from 100 ₾', 'Free'],
     ]);
   });

@@ -35,7 +35,7 @@ const reply = (body, status = 200) => ({
 
 const RULES = {
   cities: [
-    { name: 'თბილისი', fee: '8.00' },
+    { name: 'თბილისი', fee: '11.00' },
     { name: 'ბათუმი', fee: '12.00' },
   ],
   freeFrom: '100.00',

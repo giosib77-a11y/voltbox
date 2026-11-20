@@ -6,7 +6,7 @@ the header strip and the home page read it from there and keep no copy of their
 own, so the price a customer is shown and the price they are charged cannot
 disagree.
 
-Set by the owner: Tbilisi 8 GEL, Rustavi 5 GEL, free from 100 GEL of goods, and
+Set by the owner: Tbilisi 11 GEL, Rustavi 7 GEL, free from 100 GEL of goods, and
 the courier takes a card in both cities. A city is served when it is a key of
 `CITY_FEES` - adding one back is one line here, and the checkout's city list
 follows it. Whether the courier takes a card there is `CARD_ON_DELIVERY_CITIES`,
@@ -25,8 +25,8 @@ from app.core.errors import ValidationError
 #: Fee per city, in the order the checkout lists them. The keys are compared
 #: with what the checkout sends, which is one of these strings.
 CITY_FEES: dict[str, Decimal] = {
-    "თბილისი": Decimal("8.00"),
-    "რუსთავი": Decimal("5.00"),
+    "თბილისი": Decimal("11.00"),
+    "რუსთავი": Decimal("7.00"),
 }
 
 #: The cities where the courier carries a card terminal. A subset of the served

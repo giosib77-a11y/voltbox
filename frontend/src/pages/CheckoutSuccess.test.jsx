@@ -100,14 +100,14 @@ describe('the amounts on the order page', () => {
   it('shows the goods, the delivery fee and the total, as the API sends them', async () => {
     vi.spyOn(api, 'getOrderByNumber').mockResolvedValue({
       ...order('pending'),
-      totals: { subtotal: '40.00', shipping: '8.00', total: '48.00' },
+      totals: { subtotal: '40.00', shipping: '11.00', total: '51.00' },
     });
     renderPage();
 
     await screen.findByText('შეკვეთა მიღებულია!');
     expect(row('ჯამი')).toHaveTextContent('40 ₾');
-    expect(row('მიწოდება')).toHaveTextContent('8 ₾');
-    expect(row('სულ გადასახდელი')).toHaveTextContent('48 ₾');
+    expect(row('მიწოდება')).toHaveTextContent('11 ₾');
+    expect(row('სულ გადასახდელი')).toHaveTextContent('51 ₾');
   });
 
   it('calls a free delivery free, though the API sends "0.00"', async () => {

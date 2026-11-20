@@ -65,9 +65,9 @@ const cart = (items, subtotal = 80) => ({
 /** GET /delivery as the API sends it: money as strings. */
 const DELIVERY = {
   cities: [
-    { name: 'თბილისი', fee: '8.00', cardOnDelivery: true },
+    { name: 'თბილისი', fee: '11.00', cardOnDelivery: true },
     // A city that takes cash only, to show the card option follows the rules
-    { name: 'რუსთავი', fee: '5.00', cardOnDelivery: false },
+    { name: 'რუსთავი', fee: '7.00', cardOnDelivery: false },
   ],
   freeFrom: '100.00',
   currency: 'GEL',
@@ -524,19 +524,19 @@ describe('the delivery fee before ordering', () => {
       .getAllByRole('option')
       .filter((option) => option.value)
       .map((option) => option.textContent);
-    expect(cities).toEqual(['თბილისი — 8 ₾', 'რუსთავი — 5 ₾']);
+    expect(cities).toEqual(['თბილისი — 11 ₾', 'რუსთავი — 7 ₾']);
   });
 
   it.each([
-    ['თბილისი', '8 ₾', '48 ₾'],
-    ['რუსთავი', '5 ₾', '45 ₾'],
+    ['თბილისი', '11 ₾', '51 ₾'],
+    ['რუსთავი', '7 ₾', '47 ₾'],
   ])('charges %s its fee below the threshold', async (city, fee, total) => {
     cartValue = cart(ITEMS, 40);
     renderPage();
     await screen.findByRole('option', { name: new RegExp(`^${city}`) });
 
     // Before a city is chosen: each city's fee, and the total without delivery.
-    expect(summaryRow('მიწოდება')).toHaveTextContent('თბილისი 8 ₾ · რუსთავი 5 ₾');
+    expect(summaryRow('მიწოდება')).toHaveTextContent('თბილისი 11 ₾ · რუსთავი 7 ₾');
     expect(screen.getByText('ჯამი მიწოდების გარეშე')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/^ქალაქი/), { target: { value: city } });

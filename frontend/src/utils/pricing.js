@@ -84,7 +84,7 @@ export function calcTotals(lines = []) {
 /**
  * A stored order's amounts as numbers, with `null` for any the order lacks.
  *
- * The API sends money as strings ("8.00"), so `shipping === 0` was never true
+ * The API sends money as strings ("11.00"), so `shipping === 0` was never true
  * over http and a free delivery showed as "0 ₾". And an order saved without a
  * separate fee - an old mock-mode order in localStorage - has only a total; it
  * shows that, rather than a delivery line reading "0 ₾" it never had.

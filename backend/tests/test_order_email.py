@@ -305,8 +305,8 @@ class TestAConfirmation:
         assert response.status_code == 201, response.text
 
         lines = fake_resend.sent()["text"].splitlines()
-        # 40.00 of goods to Tbilisi: below 100, so its 8.00 fee is charged.
-        assert lines[7:10] == ["პროდუქტები სულ: 40.00 ₾", "მიწოდება: 8.00 ₾", "ჯამი: 48.00 ₾"]
+        # 40.00 of goods to Tbilisi: below 100, so its 11.00 fee is charged.
+        assert lines[7:10] == ["პროდუქტები სულ: 40.00 ₾", "მიწოდება: 11.00 ₾", "ჯამი: 51.00 ₾"]
 
     async def test_goes_to_a_signed_in_customer_at_their_account_address(
         self,

@@ -41,8 +41,8 @@ beforeEach(() => {
   forgetDeliveryRules();
   vi.spyOn(api, 'getDeliveryRules').mockResolvedValue({
     cities: [
-      { name: 'თბილისი', fee: 8 },
-      { name: 'რუსთავი', fee: 5 },
+      { name: 'თბილისი', fee: 11 },
+      { name: 'რუსთავი', fee: 7 },
     ],
     freeFrom: 100,
     currency: 'GEL',

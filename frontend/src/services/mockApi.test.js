@@ -10,8 +10,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../data/delivery.js', () => ({
   deliveryRules: {
     cities: [
-      { name: 'თბილისი', fee: 8, cardOnDelivery: true },
-      { name: 'რუსთავი', fee: 5, cardOnDelivery: false },
+      { name: 'თბილისი', fee: 11, cardOnDelivery: true },
+      { name: 'რუსთავი', fee: 7, cardOnDelivery: false },
     ],
     freeFrom: 100,
     currency: 'GEL',

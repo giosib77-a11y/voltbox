@@ -25,8 +25,8 @@ vi.mock('../hooks/useCart.js', () => ({ useCart: () => ({ addItem: () => {}, qua
 vi.mock('../hooks/useToast.js', () => ({ useToast: () => ({ success: () => {}, error: () => {} }) }));
 
 const CITIES = [
-  { name: 'თბილისი', fee: 8 },
-  { name: 'რუსთავი', fee: 5 },
+  { name: 'თბილისი', fee: 11 },
+  { name: 'რუსთავი', fee: 7 },
 ];
 
 const PRODUCT = {
@@ -113,7 +113,7 @@ describe('the product page tabs', () => {
     expect(panel).toHaveTextContent(
       `ამას გარდა, ყველა პროდუქტზე მოქმედებს მაღაზიის გარანტია — ${WARRANTY_MONTHS} თვე მიწოდებიდან. საგარანტიო შემთხვევაში დაგვიკავშირდით: პროდუქტს ჩვენ ჩავიბარებთ და შეგიკეთებთ ან შეგიცვლით.`,
     );
-    expect(panel).toHaveTextContent(`თბილისი — ${formatPrice(8)}, რუსთავი — ${formatPrice(5)}`);
+    expect(panel).toHaveTextContent(`თბილისი — ${formatPrice(11)}, რუსთავი — ${formatPrice(7)}`);
     expect(panel.textContent).not.toMatch(/მწარმოებლ|აღწერაშია|\{\{/);
   });
 });

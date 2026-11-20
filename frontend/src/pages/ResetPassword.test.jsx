@@ -20,7 +20,7 @@ import { ToastProvider } from '../context/ToastContext.jsx';
 const TOKEN = 'k3Y-_tOkEn0123456789abcdefghijklmnopqrstuvw';
 
 const rules = (email) => ({
-  cities: [{ name: 'თბილისი', fee: '8.00' }],
+  cities: [{ name: 'თბილისი', fee: '11.00' }],
   freeFrom: '100.00',
   currency: 'GEL',
   features: { email },

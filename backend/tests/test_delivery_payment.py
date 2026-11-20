@@ -5,12 +5,32 @@ The table is `delivery.CARD_ON_DELIVERY_CITIES`. POST /orders enforces it
 which cities to offer card for, so the two cannot disagree.
 """
 
+import re
 from decimal import Decimal
+from pathlib import Path
 
 import httpx
 import pytest
 from app.core.errors import ValidationError
 from app.services import delivery
+
+MOCK_RULES = Path(__file__).resolve().parents[2] / "frontend" / "src" / "data" / "delivery.js"
+_MOCK_CITY = re.compile(
+    r"\{\s*name:\s*'([^']+)'\s*,\s*fee:\s*(\d+(?:\.\d+)?)\s*,\s*cardOnDelivery:\s*(true|false)\s*\}"
+)
+_MOCK_FREE_FROM = re.compile(r"freeFrom:\s*(\d+(?:\.\d+)?)")
+
+
+def test_the_mock_mode_rules_equal_the_servers() -> None:
+    """frontend/src/data/delivery.js is mock mode's fake GET /delivery; it went stale once."""
+    text = MOCK_RULES.read_text(encoding="utf-8")
+    cities = _MOCK_CITY.findall(text)
+    free_from = _MOCK_FREE_FROM.findall(text)
+
+    assert [name for name, _, _ in cities] == list(delivery.CITY_FEES)
+    assert [Decimal(fee) for _, fee, _ in cities] == list(delivery.CITY_FEES.values())
+    assert {name for name, _, card in cities if card == "true"} == delivery.CARD_ON_DELIVERY_CITIES
+    assert [Decimal(value) for value in free_from] == [delivery.FREE_FROM]
 
 
 def test_every_card_city_is_a_served_city() -> None:

@@ -117,10 +117,10 @@ async def test_the_ten_thousand_and_first_order_of_a_day_gets_a_number_of_its_ow
 async def test_totals_are_computed_from_database_prices(
     client: httpx.AsyncClient, shop: dict[str, Product]
 ) -> None:
-    # 1 × 40.00 → 100-ზე ნაკლებია, თბილისში მიწოდება 8.00
+    # 1 × 40.00 → 100-ზე ნაკლებია, თბილისში მიწოდება 11.00
     body = (await _place(client, [{"productId": str(shop["cheap"].id), "qty": 1}])).json()
 
-    assert body["totals"] == {"subtotal": "40.00", "shipping": "8.00", "total": "48.00"}
+    assert body["totals"] == {"subtotal": "40.00", "shipping": "11.00", "total": "51.00"}
 
 
 async def test_free_shipping_above_the_threshold(
@@ -469,7 +469,7 @@ async def test_snapshot_survives_a_later_price_change(
 
     assert stored["items"][0]["snapshot"]["price"] == "40.00"
     assert stored["items"][0]["snapshot"]["name"] == "Cheap Phone"
-    assert stored["totals"]["total"] == "48.00"
+    assert stored["totals"]["total"] == "51.00"
 
 
 async def _lookup(client: httpx.AsyncClient, number: str, token: str) -> httpx.Response:
@@ -1037,7 +1037,8 @@ class TestPaymentMethod:
         assert [o["paymentMethod"] for o in listed.json()] == ["card_on_delivery"]
         assert one.status_code == 200, one.text
         assert one.json()["paymentMethod"] == "card_on_delivery"
-        # Kept as stored: the old flat fee and a city no longer served.
+        # Kept as stored: the old flat fee and a city no longer served. The 5.00 is a
+        # historical stored fee, not a current one (today: Tbilisi 11.00, Rustavi 7.00).
         assert one.json()["totals"] == {"subtotal": "80.00", "shipping": "5.00", "total": "85.00"}
         assert admin_view.status_code == 200, admin_view.text
         assert admin_view.json()["paymentMethod"] == "card_on_delivery"
@@ -1087,7 +1088,7 @@ class TestPaymentMethod:
 class TestDelivery:
     """The fee comes from the city and the goods, and from nothing the client says.
 
-    The owner's rules: Tbilisi 8, Rustavi 5, free from 100 of goods, and no other
+    The owner's rules: Tbilisi 11, Rustavi 7, free from 100 of goods, and no other
     city. They live in app/services/delivery.py; these tests write the numbers
     out rather than reading them from there, so a change to the table has to
     change a test too.
@@ -1109,7 +1110,7 @@ class TestDelivery:
 
     @pytest.mark.parametrize(
         ("city", "fee", "total"),
-        [("თბილისი", "8.00", "48.00"), ("რუსთავი", "5.00", "45.00")],
+        [("თბილისი", "11.00", "51.00"), ("რუსთავი", "7.00", "47.00")],
     )
     async def test_each_city_pays_its_own_fee(
         self,
@@ -1134,6 +1135,76 @@ class TestDelivery:
             Decimal(fee),
             Decimal(total),
         )
+
+    @pytest.mark.parametrize(
+        ("city", "fee", "total"),
+        [("თბილისი", "11.00", "61.00"), ("რუსთავი", "7.00", "57.00")],
+    )
+    async def test_fifty_of_goods_pays_the_fee_on_top(
+        self,
+        client: httpx.AsyncClient,
+        db: AsyncSession,
+        city: str,
+        fee: str,
+        total: str,
+    ) -> None:
+        product = await make_product(
+            db,
+            await make_category(db, "fifty"),
+            await make_brand(db, "Fifty"),
+            slug="fifty",
+            name="Fifty",
+            price="50.00",
+            stock=1,
+        )
+
+        response = await self._checkout(client, product, customer={**CUSTOMER, "city": city})
+
+        assert response.status_code == 201, response.text
+        assert response.json()["totals"] == {"subtotal": "50.00", "shipping": fee, "total": total}
+
+    @pytest.mark.parametrize("city", ["თბილისი", "რუსთავი"])
+    async def test_one_hundred_of_goods_ships_free(
+        self, client: httpx.AsyncClient, db: AsyncSession, city: str
+    ) -> None:
+        product = await make_product(
+            db,
+            await make_category(db, "hundred"),
+            await make_brand(db, "Hundred"),
+            slug="hundred",
+            name="Hundred",
+            price="100.00",
+            stock=1,
+        )
+
+        response = await self._checkout(client, product, customer={**CUSTOMER, "city": city})
+
+        assert response.status_code == 201, response.text
+        assert response.json()["totals"] == {
+            "subtotal": "100.00",
+            "shipping": "0.00",
+            "total": "100.00",
+        }
+
+    async def test_an_order_keeps_the_fee_it_was_charged_when_the_table_changes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        client: httpx.AsyncClient,
+        shop: dict[str, Product],
+    ) -> None:
+        """A later fee change reaches new orders only; a stored order is read back as charged."""
+        from app.services import delivery
+
+        placed = (await self._checkout(client, shop["cheap"])).json()
+        assert placed["totals"]["shipping"] == "11.00"
+
+        monkeypatch.setitem(delivery.CITY_FEES, "თბილისი", Decimal("20.00"))
+        stored = (await _lookup(client, placed["orderNumber"], placed["lookupToken"])).json()
+        fresh = (await self._checkout(client, shop["cheap"])).json()
+
+        assert stored["totals"] == {"subtotal": "40.00", "shipping": "11.00", "total": "51.00"}
+        # Sanity: the patch is live, so a new order pays the new fee.
+        assert fresh["totals"]["shipping"] == "20.00"
 
     @pytest.mark.parametrize("city", ["თბილისი", "რუსთავი"])
     @pytest.mark.parametrize(
@@ -1164,7 +1235,7 @@ class TestDelivery:
 
         assert response.status_code == 201, response.text
         shipping = Decimal(response.json()["totals"]["shipping"])
-        fees = {"თბილისი": Decimal("8"), "რუსთავი": Decimal("5")}
+        fees = {"თბილისი": Decimal("11"), "რუსთავი": Decimal("7")}
         expected = Decimal("0") if free else fees[city]
         assert shipping == expected
         assert Decimal(response.json()["totals"]["total"]) == Decimal(price) + expected
@@ -1206,7 +1277,7 @@ class TestDelivery:
         """The other half: a body with no fee at all is charged the city's."""
         response = await self._checkout(client, shop["cheap"])
 
-        assert response.json()["totals"]["shipping"] == "8.00"
+        assert response.json()["totals"]["shipping"] == "11.00"
 
     @pytest.mark.parametrize("city", ["ბათუმი", "ქუთაისი", "Tbilisi", "თბილისი, ვაკე"])
     async def test_a_city_the_shop_does_not_serve_is_refused(
@@ -1234,8 +1305,8 @@ class TestDelivery:
         assert response.status_code == 200
         assert response.json() == {
             "cities": [
-                {"name": "თბილისი", "fee": "8.00", "cardOnDelivery": True},
-                {"name": "რუსთავი", "fee": "5.00", "cardOnDelivery": True},
+                {"name": "თბილისი", "fee": "11.00", "cardOnDelivery": True},
+                {"name": "რუსთავი", "fee": "7.00", "cardOnDelivery": True},
             ],
             "freeFrom": "100.00",
             "currency": "GEL",

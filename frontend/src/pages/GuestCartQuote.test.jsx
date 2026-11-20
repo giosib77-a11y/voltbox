@@ -32,7 +32,7 @@ const GUEST = { user: null, isAuthenticated: false, initializing: false };
 const SIGNED_IN = { user: { id: 'u1' }, isAuthenticated: true, initializing: false };
 
 const DELIVERY = {
-  cities: [{ name: 'თბილისი', fee: '8.00' }],
+  cities: [{ name: 'თბილისი', fee: '11.00' }],
   freeFrom: '100.00',
   currency: 'GEL',
   features: { email: false },

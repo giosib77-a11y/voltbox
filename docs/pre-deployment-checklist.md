@@ -518,6 +518,8 @@ search e2e: 22/23 გაიარა (ერთი ჩავარდნა ჩ�
 - [x] server-side validation არსებობს — `extra="forbid"` + Field-ები
 - [x] **frontend price-ს backend არ ენდობა** — `price` ხაზში → 400
 - [x] **backend ხელახლა ითვლის total-ს** — 80.00 + 5.00 = 85.00, სერვერზე
+  (ფასები შემოწმების დროისაა; 2026-11-20-დან თბილისი 11.00, რუსთავი 7.00 —
+  `app/services/delivery.py`, `CITY_FEES`)
 - [x] მიმდინარე ფასი გამოიყენება — snapshot შეკვეთის მომენტისაა
 - [x] stock checkout-ზე ხელახლა მოწმდება — 409 + `available`
 - [x] stock race condition ტესტირებულია — 8 concurrency ტესტი რეალურ Postgres-ზე
