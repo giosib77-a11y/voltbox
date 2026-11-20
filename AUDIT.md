@@ -1768,6 +1768,10 @@ A-102 security-auditor-მა იპოვა და მფლობელის
 ნაპოვნია `fix/delivery-fees`-ის საბოლოო ბრაუზერულ შემოწმებაში (browser-tester, mock რეჟიმი); ახალი აუდიტი არ გაშვებულა. ბრენჩი
 `fix/checkout-mobile`.
 
+საბოლოო შემოწმება (`3e3c5b1`, tester + ორკესტრატორი): ruff ✅ · format 191 ✅ · mypy 171 ✅ · **pytest 2078 passed, 1 skipped**
+(უცვლელი — ცვლილება მხოლოდ frontend-ია) · alembic upgrade head + check ✅ · eslint ✅ · vitest **852 / 74** (ბრენჩამდე 848 / 73)
+· build http ✅ · build mock ✅.
+
 #### A-126 · should-fix · ტელეფონზე checkout ეკრანს 20px-ით სცდება, როცა კალათაში გრძელი სახელის პროდუქტია
 - **ფაილი:** `frontend/src/pages/Checkout.jsx:268` (`<form className="grid gap-6 lg:grid-cols-[1fr_22rem] …">`) და მისი შვილები;
   იგივე ნიმუში — `frontend/src/pages/Cart.jsx:78`, `frontend/src/admin/pages/OrderDetail.jsx:175`

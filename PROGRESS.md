@@ -861,6 +861,14 @@ Unverified (check before acting):
 - Failed attempts: —
 
 ## Last Session
+- 2026-11-20 — `fix/checkout-mobile` (from `fix/delivery-fees` at `0a3f5ac`: `agent-system` is still at `46b3f3e` locally
+  and on origin, so neither `feat/card-and-info`, `fix/info-texts` nor `fix/delivery-fees` is merged; owner's request,
+  no new audit, Tasks and Run State untouched). Commits: d6c4cd0 A-126 (`min-w-0` on the page grids' children in
+  checkout, cart, admin order detail; old checkout +50/+20 px at 360/390, admin detail +403/+373 → 0); 3e3c5b1 A-127
+  (the admin dashboard's Panel, +341/+311 → 0, found by the re-review) and two test nits. Reviews: code-reviewer —
+  A-126 and A-127 closed, A-128/A-129 nits open in AUDIT.md; browser-tester (42 runs, 360/390/1440, light/dark,
+  ka/en, admin on a stubbed API) — 0 px everywhere, prices whole. Final gates: ruff, format 191, mypy 171, pytest 2078
+  passed / 1 skipped, alembic upgrade + check, eslint, vitest 852/852, both builds.
 - 2026-11-20 — `fix/delivery-fees` (from `fix/info-texts` at `b0c424b`; neither it nor `feat/card-and-info` is merged
   into `agent-system` yet — fast-forwards; owner's request, no new audit, Tasks and Run State untouched). Commit
   8d53f33: `CITY_FEES` Tbilisi 11.00 / Rustavi 7.00 (free from 100 unchanged), tests 50 → 61 / 57, 100 → free,
