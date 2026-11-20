@@ -436,6 +436,12 @@ final-check rule "new findings go to Blockers because the rounds are spent" did 
 
 ## Backlog (needs user decision)
 
+- The mock-rules drift guard reads one shape only (2026-11-20, `fix/delivery-fees`, nit, mock mode only):
+  `backend/tests/test_delivery_payment.py` ~129-131 matches `{ name: '…', fee: N, cardOnDelivery: … }` on one
+  line in that key order; a city written another way (multi-line with a trailing comma, an extra key, double
+  quotes) is skipped, so an extra mock city the server refuses would pass. Fix: count every `name:` in the file
+  and assert it equals the number of parsed cities.
+
 - Owner to check (2026-11-20, `fix/info-texts`): the live catalogue may still say what the storefront code no
   longer does — a category or product `description` / `shortDescription` with „ორიგინალი“, „ოფიციალური
   გარანტიით“ or "MFi", and a warranty spec under a key other than `warranty` (e.g. `გარანტია: 24 თვე` — the
@@ -836,6 +842,15 @@ Unverified (check before acting):
   there is lost while the legal deadlines (14 days to refund, the data-subject reply) still run. Create the
   mailbox or a forward to an inbox that is read, then send a test message to it from an outside address.
 
+- **2026-11-20, should-fix (browser check of `fix/delivery-fees`, not caused by it) — checkout overflows by 20 px
+  at 390 px with a long product name in the cart.** Mock mode, `/checkout` at 390x844, cart with „Anker
+  PowerLine III USB-C — USB-C კაბელი 2მ“: `scrollWidth − innerWidth = 20`, the form fieldsets and the order
+  block end at right=410 (reproduced twice; a cart with a short name overflows 0). Likely a truncated name in a
+  grid/flex column without `min-w-0` in `frontend/src/pages/Checkout.jsx`'s order block. `Checkout.jsx` is
+  unchanged on `fix/info-texts` and `fix/delivery-fees`, so it is probably older; not checked on an earlier
+  commit. Evidence: `frontend/test-results/browser-check/delivery-fees/overflow-anker-0.png`. Next: a
+  frontend-dev task with a test at 390 px (or `/fix`).
+
 ## Run State
 - Stage: Stage 3 — Storefront redesign
 - Finish-check this stage: done (2026-10-21; code-reviewer, security-auditor, browser-tester) → T42, T43
@@ -843,6 +858,15 @@ Unverified (check before acting):
 - Failed attempts: —
 
 ## Last Session
+- 2026-11-20 — `fix/delivery-fees` (from `fix/info-texts` at `b0c424b`; neither it nor `feat/card-and-info` is merged
+  into `agent-system` yet — fast-forwards; owner's request, no new audit, Tasks and Run State untouched). Commit
+  8d53f33: `CITY_FEES` Tbilisi 11.00 / Rustavi 7.00 (free from 100 unchanged), tests 50 → 61 / 57, 100 → free,
+  a stored order keeps its fee after a table change, a backend drift guard on the mock rules
+  (`frontend/src/data/delivery.js`), fixtures moved to 11 / 7; docs and ASSUMPTIONS annotated. Review: code-reviewer
+  — 0 critical / 0 should-fix, 2 nits (Decision Log wording fixed; drift-guard regex → Backlog). Browser check (mock
+  dev server, 1440/390): fees right on /delivery, /returns, the product tab and checkout (45+11=56, 45+7=52, 124 →
+  free); one older should-fix found, the checkout's 20 px overflow at 390 → Blockers. Final gates: ruff, format 191,
+  mypy 171, pytest 2078 passed / 1 skipped, alembic upgrade + check, eslint, vitest 848/848, both builds.
 - 2026-11-20 — `fix/info-texts` (from `feat/card-and-info` at `face19f`, which is not yet merged into `agent-system`
   — a fast-forward; owner's request, no new audit, Tasks and Run State untouched). Commits: e555b77 the shop's own
   12-month warranty on every product (`WARRANTY_MONTHS`), no official/original/manufacturer claims on the

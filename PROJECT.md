@@ -385,12 +385,13 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
 ### 2026-11-20 — Delivery costs 11 ₾ in Tbilisi and 7 ₾ in Rustavi
 - Decision (owner, branch `fix/delivery-fees`): `CITY_FEES` Tbilisi 11.00, Rustavi 7.00 (were 8.00 and
-  5.00); free from 100.00 unchanged. `CITY_FEES` stays the only source: GET /delivery, POST /orders, the order
-  email and the Telegram notice read it; the storefront (checkout, cart, delivery page, product tab, the
-  returns page's courier sentence) shows only what GET /delivery returns, so no storefront text changed.
+  5.00); free from 100.00 unchanged. `CITY_FEES` stays the only source: GET /delivery returns it and
+  POST /orders charges from it into `orders.shipping`, which the order email, the Telegram notice, the account
+  and the admin panel read; the storefront (checkout, cart, delivery page, product tab, the returns page's
+  courier sentence) shows only what GET /delivery returns, so no storefront text changed.
 - Choices that are not obvious:
   - No migration and no data change: an order stores the fee it was charged (`orders.shipping`), so orders
-    placed before the change keep 8.00 / 5.00 in the account, the admin panel and any resent email.
+    placed before the change keep 8.00 / 5.00 in the account and the admin panel.
   - The mock rules (`frontend/src/data/delivery.js`, mock mode's fake GET /delivery) are a copy, and it is
     the one copy left: a backend test now compares it with `CITY_FEES`, `CARD_ON_DELIVERY_CITIES` and
     `FREE_FROM`, so it cannot go stale silently.
@@ -399,8 +400,9 @@ Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
     historical order in `test_orders.py`).
 - What still holds: money is Decimal and computed on the server only; the return courier costs the city's
   delivery fee (Decision Log 2026-11-20, warranty entry) and follows this change by itself.
-- Changes if: a fee changes again (one line in `CITY_FEES` plus the mock, which the test enforces), or a
-  city is added.
+- Changes if: a fee changes again — `CITY_FEES` and the mock (the test enforces the pair), and, on purpose,
+  the tests that pin the live fee (`TestDelivery` in `test_orders.py`, the email and Telegram fee lines,
+  the frontend fixtures standing for the real rules) — or a city is added.
 
 ### 2026-11-20 — The warranty is the shop's own, 12 months on every product; the return courier costs the city's delivery fee
 - Decision (owner's facts, branch `fix/info-texts`): product originality is not confirmed (a distributor now, own
