@@ -1825,3 +1825,27 @@ A-102 security-auditor-მა იპოვა და მფლობელის
 - **გამოსწორება:** `items-start` მოხსნა, ან მხოლოდ მარცხენა ბარათზე `self-start`.
 - **owner:** frontend-dev
 - **status:** open
+
+### Dependabot (2026-11-20)
+
+GitHub-ის Dependabot alert #29; ახალი აუდიტი არ გაშვებულა. ბრენჩი `fix/pip-audit-msgpack` (`agent-system`-იდან, `cc58a9b`).
+
+#### A-130 · nit · CI-ის pip-audit-ის lock-ში msgpack 1.2.2-ია (CVE-2026-114613, GHSA-j586-36cw-2gc2)
+- **ფაილი:** `.github/pip-audit/requirements.txt:223` (`msgpack==1.2.2`, pip-audit → cachecontrol-ის გავლით)
+- **სცენარი:** msgpack 1.2.2-ზე გამოქვეყნდა სისუსტე, fix 1.2.3-შია. msgpack მხოლოდ CI-ის ხელსაწყოს (pip-audit) დამოკიდებულებაა:
+  backend.yml-ის audit step მას ცალკე venv-ში აყენებს და მხოლოდ ჩვენს lock ფაილებს კითხულობს.
+- **რატომ nit:** production image-ში msgpack არ არის. `backend/requirements.txt`, `requirements-dev.txt` და
+  `requirements-build.txt`-ში `msgpack` არ გვხვდება (grep, 2026-11-20), და `backend/Dockerfile:33` image-ში მხოლოდ
+  `requirements.txt`-სა და `requirements-build.txt`-ს აკოპირებს — `.github/pip-audit/` იქ არ ხვდება. ხელსაწყო არასანდო
+  msgpack მონაცემს არ ამუშავებს: cachecontrol მას PyPI-ის პასუხების ლოკალური cache-ისთვის იყენებს, CI-ის დროებით runner-ზე.
+- **გამოსწორება:** მხოლოდ msgpack → 1.2.3, hash-ებით, იმავე პროცედურით, რითაც lock შეიქმნა (`requirements.in`-ის თავში:
+  `python:3.14-slim` container, `pip-tools==7.6.1`, `pip-compile --generate-hashes --allow-unsafe --strip-extras`) +
+  `--upgrade-package msgpack==1.2.3`; diff-ში მხოლოდ msgpack-ის ვერსია და hash-ები.
+- **owner:** task-executor
+- **status:** fixed (verified) — იხ. commit `fix(A-130)`. lock-ის diff ერთი hunk-ია: `msgpack==1.2.2` → `1.2.3`, hash-ები
+  88 → 91; სხვა პაკეტი, header ან `# via` არ შეცვლილა. 91 hash ზუსტად ემთხვევა PyPI-ის msgpack 1.2.3-ის ფაილების
+  sha256-ს. `python:3.14-slim`-ში (`--rm`, mount-ით მხოლოდ `.github/pip-audit` და backend-ის სამი lock, read-only;
+  task-executor-მა და ორკესტრატორმა ცალ-ცალკე): სუფთა venv-ში `pip install --require-hashes --only-binary=:all:` გადის,
+  msgpack 1.2.3; CI-ის ბრძანებით backend-ის სამ lock-ზე — „No known vulnerabilities found“, exit 0; ხელსაწყოს ახალ
+  lock-ზე — 0, exit 0; ძველ lock-ზე — `msgpack 1.2.2 CVE-2026-114613 (fix 1.2.3)`, exit 1 (GHSA-ID pip-audit-ის output-ში
+  არ ჩანს, მხოლოდ CVE). image არ შექმნილა და არ ჩამოტვირთულა; დროებითი container არ დარჩა.
