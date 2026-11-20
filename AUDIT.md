@@ -1782,4 +1782,42 @@ A-102 security-auditor-მა იპოვა და მფლობელის
   დადასტურების/lookup გვერდზე (`CheckoutSuccess.jsx`) და ადმინის შეკვეთის დეტალში. კალათის ცალკე panel (drawer) პროექტში არ
   არსებობს — კალათა მხოლოდ `/cart` გვერდია.
 - **owner:** frontend-dev
+- **status:** fixed (verified) — `d6c4cd0`. მიზეზი დადასტურდა: grid-ის შვილებს `min-w-0` დაემატა `Checkout.jsx`-ში,
+  `Cart.jsx`-ში (თავდაცვით — ძველზეც 0 იყო) და ადმინის `OrderDetail.jsx`-ში (+ ხაზის ჯამს `shrink-0`); lg-ის სვეტები
+  უცვლელია. გაზომვა (mock, გრძელი სახელი, `scrollWidth − innerWidth`): ძველი `/checkout` 360 → 50, 390 → 20 (ფასები
+  მოჭრილი), ადმინის დეტალი 360 → 403, 390 → 373; ახალი — 0 ყველგან. საბოლოო ბრაუზერული გავლა (browser-tester, 42
+  გაშვება: `/cart`, `/checkout`, დადასტურება × 360/390/1440 × ღია/მუქი × ka/en, ადმინის დეტალი × 3 სიგანე × 2 თემა, stub
+  API-ით) — 0 px ყველგან, ყველა ფასი სრულად ჩანს, console-ის შეცდომა 0. `CheckoutLongName.test.jsx` (3 ტესტი) ძველ
+  ფაილებზე ვარდება (3 failed). re-review (code-reviewer): დახურულია; იპოვა A-127–A-129.
+
+### A-126-ის re-review-ის მიგნებები (2026-11-20)
+
+#### A-127 · should-fix · ადმინის dashboard ტელეფონზე იგივე მიზეზით სცდება ეკრანს
+- **ფაილი:** `frontend/src/admin/pages/AdminDashboard.jsx:34` (`Panel`-ის `section`), `:105`, `:134`, `:154`, `:176`
+- **სცენარი (კოდით, code-reviewer):** `grid gap-4 lg:grid-cols-2` lg-ზე დაბლა ერთი `auto` სვეტია, `Panel`-ს `min-w-0` არ აქვს,
+  შიგნით `li.flex`-ში `truncate` სახელია nowrap ფასის/„N ცალი · ფასი“-ს გვერდით. 360px-ზე ხელმისაწვდომია ≈294px, „Anker
+  PowerLine III USB-C — USB-C კაბელი 2მ“ text-sm-ით ≈300px+ — სვეტი ფართოვდება, `truncate` არ მოქმედებს. A-126-მდეც ასე იყო.
+- **გამოსწორება:** `Panel`-ის `section`-ზე `min-w-0`; სახელის გვერდით მდგომ ელემენტებს `shrink-0`; ტესტი
+  `CheckoutLongName.test.jsx`-ის ფორმით; გაზომვა ბრაუზერში.
+- **owner:** frontend-dev
+- **status:** fixed (verified) — იხ. commit `fix(A-127)`. `Panel`-ის `section`-ს `min-w-0` (ოთხივე panel ერთად), სახელის
+  გვერდით მდგომ სამ ციფრს `shrink-0`; desktop უცვლელია. გაზომვა (http dev server, dashboard API stub-ით, გრძელი სახელი
+  სამივე სიაში): ძველი — 360 → 341 px, 390 → 311 px (მარაგის ციფრი და ფასი ეკრანს მიღმა); ახალი — 0 px 360/390/1440-ზე,
+  ეკრანის მიღმა ელემენტი არცერთი. ახალი ტესტი ძველ ფაილზე ვარდება (1 failed). იმავე რაუნდში `CheckoutLongName.test.jsx`-ის
+  ორი re-review nit: კალათის ხაზის ჯამი `li`-ში იძებნება, grid-ის ძებნა `grid` კლასსაც ამოწმებს.
+
+#### A-128 · nit · ადმინში გრძელი email ტელეფონზე არ წყდება
+- **ფაილი:** `frontend/src/admin/pages/OrderDetail.jsx:~245`, `frontend/src/admin/pages/CustomerDetail.jsx:65-67`
+- **სცენარი (კოდით, code-reviewer):** ~40 სიმბოლოზე გრძელ email-ს `break-words`/`overflow-wrap:anywhere` არ აქვს; 360px-ზე
+  ბარათის საზღვარს სცდება. A-126-მდეც ასე იყო.
+- **გამოსწორება:** ამ `<p>`-ებზე `[overflow-wrap:anywhere]` ან `break-words`.
+- **owner:** frontend-dev
+- **status:** open
+
+#### A-129 · nit · კალათის შეჯამების `lg:sticky` არ მუშაობს
+- **ფაილი:** `frontend/src/pages/Cart.jsx:~80`, `:~95`
+- **სცენარი (კოდით, code-reviewer):** grid-ს `items-start` აქვს, ამიტომ sticky-ს wrapper შეჯამების სიმაღლისაა და გადასაადგილებელი
+  ადგილი არ რჩება; desktop-ზე ბევრი ნივთით შეჯამება scroll-ით მიდის (checkout-ზე მუშაობს). `c2d5a871`-დან.
+- **გამოსწორება:** `items-start` მოხსნა, ან მხოლოდ მარცხენა ბარათზე `self-start`.
+- **owner:** frontend-dev
 - **status:** open

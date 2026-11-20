@@ -28,10 +28,15 @@ function Kpi({ label, value, hint }) {
   );
 }
 
-/** A titled panel with an optional link to the full view. */
+/**
+ * A titled panel with an optional link to the full view.
+ * A-127: `min-w-0` lets the panel shrink below its content. Below `lg` the page
+ * grid is one implicit auto column, so without it a long product name beside a
+ * nowrap figure widened the column past the phone screen.
+ */
 function Panel({ title, to, linkLabel, children }) {
   return (
-    <section className="rounded-xl border border-ink-200 bg-white p-4">
+    <section className="min-w-0 rounded-xl border border-ink-200 bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-ink-900">{title}</h2>
         {to ? (
@@ -132,7 +137,7 @@ export default function AdminDashboard() {
               {data.lowStock.map((product) => (
                 <li key={product.id} className="flex items-center justify-between gap-2 py-2">
                   <span className="truncate text-ink-900">{product.name}</span>
-                  <span className="tabular-nums text-danger-700">
+                  <span className="shrink-0 tabular-nums text-danger-700">
                     {product.stock} / {product.threshold}
                   </span>
                 </li>
@@ -152,7 +157,7 @@ export default function AdminDashboard() {
                   className="flex items-center justify-between gap-2 py-2"
                 >
                   <span className="truncate text-ink-900">{product.name}</span>
-                  <span className="whitespace-nowrap text-ink-600">
+                  <span className="shrink-0 whitespace-nowrap text-ink-600">
                     <span className="tabular-nums font-medium text-ink-900">
                       {product.quantity}
                     </span>{' '}
@@ -177,7 +182,7 @@ export default function AdminDashboard() {
                   >
                     {product.name}
                   </Link>
-                  <span className="tabular-nums text-ink-600">{money(product.price)}</span>
+                  <span className="shrink-0 tabular-nums text-ink-600">{money(product.price)}</span>
                 </li>
               ))}
             </ul>

@@ -523,6 +523,8 @@ final-check rule "new findings go to Blockers because the rounds are spent" did 
   `UPDATE 1` check (the owner confirmed head 0015, same pattern as Stage 1); after a restore/delete that empties the
   last page of the trash list, the page shows "სანაგვე ცარიელია" until the admin goes back a page (only with 20+
   trashed orders); the order detail page is 393px wide at 390px (3px overflow, pre-existing, live orders too).
+  (2026-11-20: after A-126 / `d6c4cd0` the browser check measured the admin order detail at 0 px overflow at 360
+  and 390 with a stubbed order; probably closed — confirm on a live order.)
 
 - `frontend/` has no Prettier config, so a plain `prettier --write` rewrites the code style (T22 hit it and
   reverted by hand); a `.prettierrc` matching the current style (single quotes, width 100, trailing commas) (low).
@@ -842,7 +844,8 @@ Unverified (check before acting):
   there is lost while the legal deadlines (14 days to refund, the data-subject reply) still run. Create the
   mailbox or a forward to an inbox that is read, then send a test message to it from an outside address.
 
-- **2026-11-20, should-fix (browser check of `fix/delivery-fees`, not caused by it) — checkout overflows by 20 px
+- (2026-11-20: resolved — AUDIT.md A-126, `d6c4cd0` on `fix/checkout-mobile`; kept below for the record.)
+- ~~**2026-11-20, should-fix (browser check of `fix/delivery-fees`, not caused by it) — checkout overflows by 20 px~~
   at 390 px with a long product name in the cart.** Mock mode, `/checkout` at 390x844, cart with „Anker
   PowerLine III USB-C — USB-C კაბელი 2მ“: `scrollWidth − innerWidth = 20`, the form fieldsets and the order
   block end at right=410 (reproduced twice; a cart with a short name overflows 0). Likely a truncated name in a

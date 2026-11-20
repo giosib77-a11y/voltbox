@@ -12,7 +12,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 vi.mock('virtual:api-impl', () => import('../services/httpApi.js'));
@@ -30,6 +30,7 @@ vi.mock('../hooks/useToast.js', () => ({
 import Checkout from './Checkout.jsx';
 import Cart from './Cart.jsx';
 import OrderDetail from '../admin/pages/OrderDetail.jsx';
+import AdminDashboard from '../admin/pages/AdminDashboard.jsx';
 import * as adminApi from '../admin/adminApi.js';
 import { forgetDeliveryRules, loadDeliveryRules } from '../hooks/useDeliveryRules.js';
 import { formatPrice } from '../utils/format.js';
@@ -114,12 +115,14 @@ describe('cart with a long product name', () => {
     const name = screen.getByText(LONG_NAME, { selector: 'a' });
     // li -> ul -> bordered card -> grid
     const grid = name.closest('ul').parentElement.parentElement;
+    expect(classes(grid)).toContain('grid');
     expectAllMinW0(grid);
 
     expect(classes(name).some((c) => c.startsWith('line-clamp-2'))).toBe(true);
     expect(classes(name.parentElement)).toContain('min-w-0');
 
-    expect(screen.getAllByText(formatPrice(64.95 * 2)).length).toBeGreaterThan(0);
+    // Inside the line: the subtotal and total in the summary show the same amount.
+    expect(within(name.closest('li')).getByText(formatPrice(129.9))).toBeInTheDocument();
   });
 });
 
@@ -165,6 +168,43 @@ describe('admin order detail with a long product name', () => {
     expect(classes(total)).toContain('shrink-0');
 
     const grid = row.closest('section').parentElement.parentElement;
+    expect(classes(grid)).toContain('grid');
     expectAllMinW0(grid);
+  });
+});
+
+describe('admin dashboard with a long product name (A-127)', () => {
+  it('lets every panel shrink and keeps the figures beside the names fixed', async () => {
+    vi.spyOn(adminApi, 'getDashboard').mockResolvedValue({
+      salesToday: '250.00',
+      ordersToday: 3,
+      salesTotal: '9000.00',
+      activeProducts: 42,
+      lowStockCount: 1,
+      ordersByStatus: { pending: 5 },
+      latestOrders: [{ id: 'o-1', orderNumber: 'VB-1001', status: 'pending', total: '10.00' }],
+      lowStock: [{ id: 'p-1', name: LONG_NAME, stock: 1, threshold: 5 }],
+      topProducts: [{ productId: 'p-2', name: LONG_NAME, quantity: 9, revenue: '1290.00' }],
+      latestProducts: [{ id: 'p-3', name: LONG_NAME, price: '1235.00' }],
+    });
+    render(
+      <MemoryRouter>
+        <AdminDashboard />
+      </MemoryRouter>,
+    );
+
+    const names = await screen.findAllByText(LONG_NAME);
+    expect(names).toHaveLength(3);
+    for (const name of names) {
+      expect(classes(name)).toContain('truncate');
+      const row = name.closest('li');
+      // the figure next to the name must not shrink
+      const figure = [...row.children].find((el) => el !== name);
+      expect(classes(figure)).toContain('shrink-0');
+      // the panel is a grid child: it must be allowed to shrink below its content
+      const panel = row.closest('section');
+      expect(classes(panel)).toContain('min-w-0');
+    }
+    expect(classes(names[0].closest('section').parentElement)).toContain('grid');
   });
 });
