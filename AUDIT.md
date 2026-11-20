@@ -1762,3 +1762,24 @@ A-102 security-auditor-მა იპოვა და მფლობელის
 - **გამოსწორება:** `TRASHED` → `cancelled`; legacy ტესტში `{...TRASHED, status: 'pending', purgeAt: null}`; სახელების შესწორება.
 - **owner:** frontend-dev
 - **status:** open
+
+### ბრაუზერის შემოწმებაში ნაპოვნი (`fix/delivery-fees`, 2026-11-20)
+
+ნაპოვნია `fix/delivery-fees`-ის საბოლოო ბრაუზერულ შემოწმებაში (browser-tester, mock რეჟიმი); ახალი აუდიტი არ გაშვებულა. ბრენჩი
+`fix/checkout-mobile`.
+
+#### A-126 · should-fix · ტელეფონზე checkout ეკრანს 20px-ით სცდება, როცა კალათაში გრძელი სახელის პროდუქტია
+- **ფაილი:** `frontend/src/pages/Checkout.jsx:268` (`<form className="grid gap-6 lg:grid-cols-[1fr_22rem] …">`) და მისი შვილები;
+  იგივე ნიმუში — `frontend/src/pages/Cart.jsx:78`, `frontend/src/admin/pages/OrderDetail.jsx:175`
+- **სცენარი (ბრაუზერი):** mock რეჟიმი, `/checkout` 390×844-ზე, კალათაში „Anker PowerLine III USB-C — USB-C კაბელი 2მ“:
+  `document.documentElement.scrollWidth − innerWidth = 20`, ფორმის fieldset-ები და შეკვეთის ბლოკი right=410-ზე მთავრდება
+  (ორჯერ გამეორდა; მოკლე სახელის კალათა — 0). გვერდი ტელეფონზე გვერდულად მოძრაობს, ფორმის კიდე ეკრანს მიღმაა.
+- **მიზეზი (კოდით, გადასამოწმებელი):** შეკვეთის ხაზში სახელს უკვე აქვს `min-w-0` + `truncate` (`Checkout.jsx:~431`), მაგრამ
+  lg-ზე დაბლა form-ის grid ერთ ავტომატურ სვეტს ქმნის და მის შვილებს `min-width: auto` აქვთ. ამიტომ `truncate`-ის (nowrap)
+  ტექსტის სრული სიგანე სვეტს ეკრანზე ფართოს ხდის და `truncate` ვერ მოქმედებს.
+- **გამოსწორება:** grid-ის შვილებს `min-w-0` (ან სვეტი `minmax(0,1fr)`) — ის ხერხი, რომელიც პროექტში უკვე გამოიყენება
+  (`min-w-0` 19 ადგილას), ისე რომ სახელი შემოკლდეს და ფასი ყოველთვის ჩანდეს. იგივე შემოწმდეს `/cart`-ზე, შეკვეთის
+  დადასტურების/lookup გვერდზე (`CheckoutSuccess.jsx`) და ადმინის შეკვეთის დეტალში. კალათის ცალკე panel (drawer) პროექტში არ
+  არსებობს — კალათა მხოლოდ `/cart` გვერდია.
+- **owner:** frontend-dev
+- **status:** open

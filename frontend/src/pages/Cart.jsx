@@ -75,8 +75,10 @@ export default function Cart() {
         </Button>
       </div>
 
+      {/* min-w-0 on both grid children: below lg the single auto column would
+          otherwise grow to the widest unbreakable line (A-126, same as checkout). */}
       <div className="grid items-start gap-6 lg:grid-cols-[1fr_22.5rem] lg:gap-7">
-        <div className="rounded-card border border-line bg-surface px-4 sm:px-6">
+        <div className="min-w-0 rounded-card border border-line bg-surface px-4 sm:px-6">
           <ul className="divide-y divide-line">
             {items.map((item) => (
               <CartItem
@@ -89,7 +91,7 @@ export default function Cart() {
           </ul>
         </div>
 
-        <div>
+        <div className="min-w-0">
           <div className="lg:sticky lg:top-[8.75rem]">
             <CartSummary
               subtotal={subtotal}

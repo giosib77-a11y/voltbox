@@ -172,8 +172,10 @@ export default function OrderDetail() {
         </div>
       )}
 
+      {/* min-w-0 on the grid children: below lg the single auto column would
+          grow to a long nowrap product name and `truncate` would never apply (A-126). */}
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <section className="rounded-xl border border-ink-200 bg-white p-4">
             <h2 className="mb-3 text-sm font-semibold text-ink-900">პოზიციები</h2>
             <ul className="divide-y divide-ink-100">
@@ -192,7 +194,7 @@ export default function OrderDetail() {
                       {money(item.unitPrice)} × {item.quantity}
                     </span>
                   </div>
-                  <span className="tabular-nums text-ink-900">{money(item.lineTotal)}</span>
+                  <span className="shrink-0 tabular-nums text-ink-900">{money(item.lineTotal)}</span>
                 </li>
               ))}
             </ul>
@@ -235,7 +237,7 @@ export default function OrderDetail() {
           </section>
         </div>
 
-        <aside className="space-y-4">
+        <aside className="min-w-0 space-y-4">
           <section className="rounded-xl border border-ink-200 bg-white p-4 text-sm">
             <h2 className="mb-2 text-sm font-semibold text-ink-900">მყიდველი</h2>
             <p className="text-ink-900">{order.customerName}</p>

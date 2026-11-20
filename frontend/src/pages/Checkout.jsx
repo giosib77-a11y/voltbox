@@ -265,8 +265,12 @@ export default function Checkout() {
         </div>
       )}
 
+      {/* min-w-0 on both grid children: below lg the grid is one implicit auto
+          column and its children default to min-width:auto, so a long, nowrap
+          product name in the order block widened the column past the screen
+          and its `truncate` never applied (A-126). */}
       <form onSubmit={handleSubmit} noValidate className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:gap-7">
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <fieldset className="rounded-card border border-line bg-surface p-5 sm:p-6">
             <legend className="px-1 font-serif text-lg font-normal text-fg">{t('checkout.recipient')}</legend>
 
@@ -414,7 +418,7 @@ export default function Checkout() {
           </fieldset>
         </div>
 
-        <div>
+        <div className="min-w-0">
           <div className="lg:sticky lg:top-[8.5rem]">
             <div className="mb-4 rounded-card border border-line bg-surface p-4 sm:p-5">
               <h2 className="font-serif text-base font-medium text-fg">{t('checkout.orderUnits', { count: itemsCount })}</h2>
