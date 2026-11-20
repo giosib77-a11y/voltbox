@@ -843,6 +843,15 @@ Unverified (check before acting):
 - Failed attempts: —
 
 ## Last Session
+- 2026-11-20 — `fix/info-texts` (from `feat/card-and-info` at `face19f`, which is not yet merged into `agent-system`
+  — a fast-forward; owner's request, no new audit, Tasks and Run State untouched). Commits: e555b77 the shop's own
+  12-month warranty on every product (`WARRANTY_MONTHS`), no official/original/manufacturer claims on the
+  storefront, the return courier priced as the city's delivery fee from GET /delivery (`cityFees`); 65c063b fix
+  round 1 (the product tab's warranty card = the owner's sentence, literal test pins, mock MFi claims). Reviews:
+  code-reviewer — 1 should-fix closed in round 1, re-review closed; browser-tester (mock dev server, 1440/390,
+  light/dark, 32 runs) — nothing found. Final gates: ruff, format 191, mypy 171, pytest 2072 passed / 1 skipped,
+  alembic upgrade + check, eslint, vitest 846/846, both builds. New Blocker: the info@voltbox.ge mailbox. Backlog:
+  live catalogue texts, the paid return courier (legal), `#mfi` mock tags, `cardCities.js` name.
 - 2026-11-19 — `feat/card-and-info` (from `agent-system` at `46b3f3e`; owner's request, not a Stage, no new audit —
   Tasks and Run State untouched). Commits: 8fc0f8d card on delivery per city (`CARD_ON_DELIVERY_CITIES`,
   `cardOnDelivery` in GET /delivery, 400 `PAYMENT_METHOD_UNAVAILABLE`), free delivery from 100, new phone/hours,
