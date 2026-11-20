@@ -436,18 +436,10 @@ final-check rule "new findings go to Blockers because the rounds are spent" did 
 
 ## Backlog (needs user decision)
 
-- Warranty claims outside the info pages (2026-11-19, `feat/card-and-info`, nit): `home.heroText` („ორიგინალი
-  პროდუქცია ოფიციალური გარანტიით“), `home.benefits.warranty` („ოფიციალური გარანტია — ყველა პროდუქტზე“) and the
-  demo products' `warranty: '24 თვე'` were left as they are. Not false (the legal 2-year guarantee covers every
-  product), but they read as a manufacturer's promise next to the returns page's "manufacturer's warranty, usually
-  12 months, per product". Owner: keep, or reword to the legal guarantee.
 - Two test pins missing (2026-11-19, nit): the en "seal" exception test checks only the substring `seal` (also in
   "sealed"); and nothing ties the privacy page's "IP at most 24 hours" (`info.privacy.collectTech`) to
   `app/core/rate_limit.py` — a longer IP-keyed window would make the page wrong silently. Fix: assert
   `the seal was opened`; a test in `test_rate_limit.py` that every IP-keyed limit's window is ≤ 86 400 s.
-- Owner to confirm (2026-11-19): who pays for the courier when a change-of-mind return is picked up
-  (`info.returns.stepPickup` "we send a courier" next to `returnShipping` "the direct cost is yours"). The law puts
-  the direct cost on the buyer unless the shop takes it; the page currently implies the buyer pays either way.
 - `PAYMENT_METHOD_UNAVAILABLE`'s `details.cities` is alphabetical (`sorted`), `CITY_NOT_SERVED`'s follows
   `CITY_FEES` (2026-11-19, nit): no reader depends on the order.
 
@@ -821,6 +813,13 @@ Unverified (check before acting):
   confirm what "our logs" covers: the app's own log lines carry only a pseudonym of the IP, but Render's
   platform request logs (if enabled) and Cloudflare see the real IP. The site makes no promise either way;
   change the text (`info.privacy.*` in both i18n files) once decided.
+
+- **2026-11-20, owner — the info@voltbox.ge mailbox (or a forward) must work before sales start
+  (`fix/info-texts`).** The site names `info@voltbox.ge` (`CONTACT.email`) as the address for the withdrawal
+  notice (the returns page's copyable form), warranty claims and personal-data requests (privacy page). The
+  domain is the owner's, but no mailbox exists yet: until one does, a buyer's withdrawal or data request sent
+  there is lost while the legal deadlines (14 days to refund, the data-subject reply) still run. Create the
+  mailbox or a forward to an inbox that is read, then send a test message to it from an outside address.
 
 ## Run State
 - Stage: Stage 3 — Storefront redesign

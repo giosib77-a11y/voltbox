@@ -13,6 +13,7 @@ import * as api from '../services/api.js';
 import { useDeliveryRules } from '../hooks/useDeliveryRules.js';
 import { formatItemsCount, formatPrice } from '../utils/format.js';
 import { rootCategories } from '../utils/categoryTree.js';
+import { WARRANTY_MONTHS } from '../constants/index.js';
 import { t } from '../i18n/index.js';
 import Rich from '../i18n/Rich.jsx';
 
@@ -26,7 +27,12 @@ const BENEFITS = [
     text: (rules) =>
       rules ? t('home.benefits.freeDeliveryText', { price: formatPrice(rules.freeFrom) }) : ' ',
   },
-  { icon: ShieldCheck, title: 'home.benefits.warranty', text: 'home.benefits.warrantyText' },
+  {
+    icon: ShieldCheck,
+    title: 'home.benefits.warranty',
+    titleValues: { months: WARRANTY_MONTHS },
+    text: 'home.benefits.warrantyText',
+  },
   { icon: BadgePercent, title: 'home.benefits.price', text: 'home.benefits.priceText' },
   { icon: Headphones, title: 'home.benefits.advice', text: 'contact.workHours' },
 ];
@@ -122,7 +128,7 @@ function Hero({ categories }) {
             />
           </h1>
           <p className="mt-5 text-sm leading-[1.8] text-ink-700 sm:mt-6 sm:text-base">
-            {t('site.description')} {t('home.heroText')}
+            {t('site.description')} {t('home.heroText', { months: WARRANTY_MONTHS })}
           </p>
 
           <div className="mt-6 flex min-h-[54px] flex-col gap-3 sm:mt-7 sm:flex-row sm:flex-wrap">
@@ -200,7 +206,7 @@ function Benefits() {
         >
           <benefit.icon className="icon-fine h-7 w-7 shrink-0 text-primary-500" aria-hidden="true" />
           <span className="min-w-0">
-            <span className="block font-serif text-[15px] font-medium text-fg">{t(benefit.title)}</span>
+            <span className="block font-serif text-[15px] font-medium text-fg">{t(benefit.title, benefit.titleValues)}</span>
             <span className="mt-0.5 block text-xs text-fg-muted">
               {typeof benefit.text === 'function' ? benefit.text(rules) : t(benefit.text)}
             </span>

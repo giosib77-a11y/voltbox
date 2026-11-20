@@ -12,6 +12,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 
 import { t } from '../i18n/index.js';
+import { WARRANTY_MONTHS } from '../constants/index.js';
 
 import Home from './Home.jsx';
 import * as api from '../services/api.js';
@@ -165,5 +166,19 @@ describe('Home benefits', () => {
     );
 
     expect(await screen.findByText('100 ₾-ზე მეტ შეკვეთაზე')).toBeInTheDocument();
+  });
+
+  it('names the shop warranty from WARRANTY_MONTHS, and no official or original claim', async () => {
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(`${WARRANTY_MONTHS} თვის გარანტია`)).toBeInTheDocument();
+    expect(screen.getByText(/ტექნიკა .* თვის გარანტიით და კურიერით მიწოდებით/)).toHaveTextContent(
+      `ტექნიკა ${WARRANTY_MONTHS} თვის გარანტიით და კურიერით მიწოდებით.`,
+    );
+    expect(document.body.textContent).not.toMatch(/ორიგინალ|ოფიციალ|მთელ საქართველოში/);
   });
 });

@@ -382,6 +382,36 @@ Connection budget `workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 30`.
 ## Decision Log
 Decisions before 2026-10-10: [ASSUMPTIONS.md](./ASSUMPTIONS.md).
 
+### 2026-11-20 — The warranty is the shop's own, 12 months on every product; the return courier costs the city's delivery fee
+- Decision (owner's facts, branch `fix/info-texts`): product originality is not confirmed (a distributor now, own
+  import later) and no brand or manufacturer warranty is offered. VoltBox gives its own warranty, 12 months from
+  delivery on every product, own import included: a defective product is taken in and repaired or replaced. The
+  storefront no longer says "official", "original" or "manufacturer's warranty" (home hero and benefit, product
+  badges, the delivery tab, the returns page, mock and example data); "the term is in the product description" is
+  gone. The term is one constant, `WARRANTY_MONTHS` in `frontend/src/constants/index.js`, read by every text as
+  `{{months}}`. A change-of-mind return: we send the courier, and the service costs the delivery fee of the buyer's
+  city, listed from `GET /delivery` (`cityFees(rules)`, the same source as the delivery page and the product tab).
+- Choices that are not obvious:
+  - `WARRANTY_MONTHS` sits next to `SHOP_FACTS`, not inside it: there `null` means "not known yet, the sentence
+    hides", and the term is known.
+  - The product badge no longer reads `specs.warranty`, and the specs table skips a `warranty` key: a per-product
+    term entered in the admin panel (or the old mock "24 თვე") would contradict "12 months on every product". Such
+    a value stays in the database, only unshown.
+  - The return courier costs the city fee even when the order had free delivery (≥ 100 ₾): the owner tied it to
+    the city's delivery fee, not to what the order paid. While `GET /delivery` has not answered or failed, the
+    sentence shows without the list (it stays true).
+  - The fourth product badge ("original products") became „გადახდა მიღებისას“ / "Pay on delivery" — cash is
+    accepted in every city. The hero no longer says "delivery across Georgia" (only the cities in `CITY_FEES`
+    are served).
+- What still holds: the legal 2-year guarantee with the 6-month presumption and its remedies, word for word;
+  the exclusions (misuse, mechanical impact, liquid) apply to the shop's warranty only and the text says they do
+  not limit the legal 2 years; 14 days to withdraw, product back within 7 days of the notice, refund within 14
+  days incl. the standard delivery fee. Supersedes "manufacturer's warranty (usually 12 months, per product)" of
+  2026-11-19 below.
+- Changes if: the term changes (one line, `WARRANTY_MONTHS`); a product needs a different term (then a
+  per-product field, and the specs filter goes); the shop starts paying the return courier itself, or the fee
+  stops following the delivery fee (the `info.returns.returnShipping*` texts).
+
 ### 2026-11-19 — Card on delivery is offered again, per city; free delivery from 100 ₾; new contact data
 - Decision (owner's request, branch `feat/card-and-info`): `card_on_delivery` is offered on new orders
   (`OFFERED_PAYMENT_METHODS = PAYMENT_METHODS`). Which cities accept it lives in `app/services/delivery.py`

@@ -1,3 +1,10 @@
+import { formatPrice } from '../../utils/format.js';
+
+/** Every city of GET /delivery with its fee, as "City — 8,00 ₾, City — 5,00 ₾". */
+export function cityFees(rules) {
+  return (rules?.cities || []).map((c) => `${c.name} — ${formatPrice(c.fee)}`).join(', ');
+}
+
 /**
  * Which payment sentence is true for the rules in GET /delivery.
  *

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { Check, RotateCcw, ShieldCheck, ShoppingCart, Truck } from 'lucide-react';
+import { Banknote, Check, RotateCcw, ShieldCheck, ShoppingCart, Truck } from 'lucide-react';
 import Breadcrumbs from '../components/common/Breadcrumbs.jsx';
 import Button from '../components/common/Button.jsx';
 import EmptyState from '../components/common/EmptyState.jsx';
@@ -20,7 +20,8 @@ import { useToast } from '../hooks/useToast.js';
 import { formatPrice, formatSpecValue } from '../utils/format.js';
 import { useDeliveryRules } from '../hooks/useDeliveryRules.js';
 import { cartLimitMessage } from '../utils/cartLimit.js';
-import { MAX_LINE_QTY } from '../constants/index.js';
+import { MAX_LINE_QTY, WARRANTY_MONTHS } from '../constants/index.js';
+import { cityFees } from './Info/cardCities.js';
 import { i18n, t } from '../i18n/index.js';
 
 // Each tab's label is `product.tabs.<id>`.
@@ -186,15 +187,15 @@ export default function ProductDetails() {
             </li>
             <li className="flex items-start gap-2.5">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
-              {t('product.warranty', { period: formatSpecValue(product.specs?.warranty || t('product.defaultWarranty')) })}
+              {t('product.warranty', { months: WARRANTY_MONTHS })}
             </li>
             <li className="flex items-start gap-2.5">
               <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
               {t('product.returns')}
             </li>
             <li className="flex items-start gap-2.5">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
-              {t('product.original')}
+              <Banknote className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
+              {t('product.payOnDelivery')}
             </li>
           </ul>
         </div>
@@ -216,20 +217,24 @@ function ProductTabs({ product, tab, onTabChange }) {
   // Where the shop delivers and for how much, from GET /delivery - the table the
   // checkout charges by. The static entries after it hold no prices.
   const { rules } = useDeliveryRules();
-  const translatedInfo = DELIVERY_INFO.map((info) => ({ title: t(info.title), text: t(info.text) }));
+  const translatedInfo = DELIVERY_INFO.map((info) => ({
+    title: t(info.title),
+    text: t(info.text, { months: WARRANTY_MONTHS }),
+  }));
   const deliveryInfo = rules
     ? [
         {
           title: t('product.courierTitle'),
           text: t('product.courierText', {
-            cities: rules.cities.map((c) => `${c.name} — ${formatPrice(c.fee)}`).join(', '),
+            cities: cityFees(rules),
             price: formatPrice(rules.freeFrom),
           }),
         },
         ...translatedInfo,
       ]
     : translatedInfo;
-  const specEntries = Object.entries(product.specs || {});
+  // `warranty` is skipped: the shop's own term is the only one (WARRANTY_MONTHS), so a per-product spec must not contradict it.
+  const specEntries = Object.entries(product.specs || {}).filter(([key]) => key !== 'warranty');
 
   return (
     <section className="mt-10 rounded-card border border-line bg-surface">

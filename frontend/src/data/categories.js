@@ -19,7 +19,7 @@ export const categories = [
     slug: 'phones',
     icon: 'Smartphone',
     shortName: 'ტელეფონები',
-    description: 'სმარტფონები ოფიციალური გარანტიით — Apple, Samsung, Xiaomi და სხვა.',
+    description: 'სმარტფონები —Apple, Samsung, Xiaomi და სხვა.',
     filters: [
       { key: 'brand', label: 'ბრენდი', type: 'checkbox' },
       { key: 'specs.ram', label: 'ოპერატიული მეხსიერება', type: 'checkbox' },

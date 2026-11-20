@@ -48,12 +48,13 @@
       "exceptionText": "A hermetically sealed product that cannot be returned for health or hygiene reasons, if the seal was opened after delivery — for example in-ear earphones. We have no other exception.",
       "steps": "How to return:",
       "stepContact": "Tell us you want to return the product — using the form below, by email or by phone: {{contact}}. Give your order number.",
-      "stepPickup": "Contact us — we will agree whether we send a courier or you send it to us yourself.",
-      "stepSend": "Return the product to us within 7 days of your notice.",
+      "stepPickup": "We send a courier to you — we agree the time together.",
+      "stepSend": "Hand the product to the courier within 7 days of your notice.",
       "stepRefund": "We will refund the money within 14 days of your notice. We may wait until we have received the product or you show that you have sent it.",
       "refundIncludes": "You get back the price of the product and the standard delivery fee you paid.",
       "refundMethod": "The refund goes back by the same means of payment: paid by card — to the same card; paid in cash — with your agreement, by bank transfer to the account you give us.",
-      "returnShipping": "The direct cost of sending the product back is yours.",
+      "returnShipping": "We send the courier; the service costs the same as delivery to your city: {{fees}}.",
+      "returnShippingNoFees": "We send the courier; the service costs the same as delivery to your city.",
       "damagedLabel": "Damaged or wrong product:",
       "damagedText": "If the product is damaged or differs from your order, you can refuse it at the courier or contact us. We will replace it and we bear the cost of transport.",
       "formTitle": "Sample withdrawal notice",
@@ -67,8 +68,8 @@
       "warrantyTitle": "Defective products and warranty",
       "defective": "By law a product has a guarantee of 2 years from delivery. A defect that shows within the first 6 months is presumed to have existed from the start.",
       "defectRemedy": "If there is a defect, you have the right to demand a free repair or replacement. If that is impossible or cannot be done in a reasonable time — a price reduction or a refund. A minor defect does not end the contract.",
-      "manufacturerWarranty": "Separately, the product may carry the manufacturer's warranty, usually 12 months. The exact term is in the product description.",
-      "warrantyExclusions": "The manufacturer's warranty does not cover damage caused by improper use, mechanical impact or liquid."
+      "shopWarranty": "In addition, every product is covered by the shop's warranty — {{months}} months from delivery. For a warranty claim, contact us: we will take the product in and repair or replace it.",
+      "warrantyExclusions": "The shop's warranty does not cover damage caused by improper use, mechanical impact or liquid. This does not limit the legal 2-year guarantee."
     },
     "privacy": {
       "description": "What personal data we collect, what we use it for, who we share it with and what rights you have.",
@@ -166,7 +167,6 @@
     "compatibility": "Compatibility",
     "protection": "Protection",
     "weight": "Weight",
-    "warranty": "Warranty",
     "origin": "Brand origin"
   },
   "payment": {
@@ -230,12 +230,12 @@
     "heroBadge": "Seasonal sale — up to 30% off",
     "heroTitle": "Tech you need {{highlight}}",
     "heroHighlight": "every day",
-    "heroText": "Original products with an official warranty and delivery across Georgia.",
+    "heroText": "Tech with a {{months}}-month warranty and courier delivery.",
     "benefits": {
       "label": "Why shop with us",
       "freeDelivery": "Free delivery",
       "freeDeliveryText": "on orders over {{price}}",
-      "warranty": "Official warranty",
+      "warranty": "{{months}}-month warranty",
       "warrantyText": "on every product",
       "price": "Best prices",
       "priceText": "regular discounts",
@@ -246,7 +246,7 @@
     "returnsTitle": "Returns",
     "returnsText": "You can return a product within 14 calendar days of receiving it, without giving a reason.",
     "warrantyTitle": "Warranty",
-    "warrantyText": "By law the guarantee is 2 years from delivery. In addition, a product may carry the manufacturer's warranty — its term is in the product description."
+    "warrantyText": "By law the guarantee is 2 years from delivery. In addition, every product carries the shop's warranty — {{months}} months: we take a defective product in and repair or replace it."
   },
   "layout": {
     "skipToContent": "Skip to main content",
@@ -391,10 +391,9 @@
     "inCartUnits_one": "{{count}} in your cart",
     "inCartUnits_other": "{{count}} in your cart",
     "delivery": "Delivery in {{eta}}",
-    "warranty": "{{period}} warranty",
-    "defaultWarranty": "12 months",
+    "warranty": "{{months}}-month warranty",
     "returns": "Returns within 14 days",
-    "original": "Original products",
+    "payOnDelivery": "Pay on delivery",
     "related": "Similar products",
     "courierTitle": "Courier delivery",
     "courierText": "{{cities}}. Delivery is free from {{price}}. We don't deliver to other cities yet.",

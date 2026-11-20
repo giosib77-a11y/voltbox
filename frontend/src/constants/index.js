@@ -50,6 +50,14 @@ export const SHOP_FACTS = {
   legalEntity: null,
 };
 
+/**
+ * The shop's own warranty, in months, on every product (owner, 2026-11-20).
+ * VoltBox gives it, not a brand or manufacturer: a defective product is taken
+ * in and repaired or replaced. The legal 2-year guarantee holds besides it.
+ * Every text that names the term reads it from here as `{{months}}`.
+ */
+export const WARRANTY_MONTHS = 12;
+
 /* -------------------------------------------------------------------------- */
 /*  localStorage გასაღებები (ვერსიით — მიგრაციისთვის)                          */
 /* -------------------------------------------------------------------------- */

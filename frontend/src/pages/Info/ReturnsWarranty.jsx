@@ -1,5 +1,7 @@
 import { useId } from 'react';
-import { CONTACT, INFO_PAGES } from '../../constants/index.js';
+import { CONTACT, INFO_PAGES, WARRANTY_MONTHS } from '../../constants/index.js';
+import { useDeliveryRules } from '../../hooks/useDeliveryRules.js';
+import { cityFees } from './cardCities.js';
 import { t } from '../../i18n/index.js';
 import Rich from '../../i18n/Rich.jsx';
 import InfoPage, { InfoSection } from './InfoPage.jsx';
@@ -14,10 +16,13 @@ const FORM_LINES = ['formStatement', 'formOrder', 'formReceived', 'formName', 'f
  * What the page says follows the Georgian consumer law: 14 calendar days to
  * withdraw without a reason (the product may be inspected as in a shop, and the
  * packaging is only a request), the only exception the sealed hygiene product,
- * and the legal 2-year guarantee next to the manufacturer's warranty.
+ * and the legal 2-year guarantee next to the shop's own warranty. The return
+ * courier is priced like delivery, so the city fees come from GET /delivery.
  */
 export default function ReturnsWarranty() {
   const stepsId = useId();
+  const { rules } = useDeliveryRules();
+  const fees = cityFees(rules);
   const form = [
     t('info.returns.formTo', { email: CONTACT.email }),
     ...FORM_LINES.map((line) => t(`info.returns.${line}`)),
@@ -53,7 +58,8 @@ export default function ReturnsWarranty() {
 
         <p>{t('info.returns.refundMethod')}</p>
 
-        <p>{t('info.returns.returnShipping')}</p>
+        {/* Until GET /delivery answers (or when it fails) the sentence without the list stays true. */}
+        <p>{fees ? t('info.returns.returnShipping', { fees }) : t('info.returns.returnShippingNoFees')}</p>
 
         <p>
           <strong className="font-semibold text-ink-900">{t('info.returns.damagedLabel')}</strong>{' '}
@@ -76,7 +82,7 @@ export default function ReturnsWarranty() {
 
         <p>{t('info.returns.defectRemedy')}</p>
 
-        <p>{t('info.returns.manufacturerWarranty')}</p>
+        <p>{t('info.returns.shopWarranty', { months: WARRANTY_MONTHS })}</p>
 
         <p>{t('info.returns.warrantyExclusions')}</p>
       </InfoSection>

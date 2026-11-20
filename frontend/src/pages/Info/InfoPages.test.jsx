@@ -22,7 +22,8 @@ import DeliveryTerms from './DeliveryTerms.jsx';
 import ReturnsWarranty from './ReturnsWarranty.jsx';
 import Privacy from './Privacy.jsx';
 import Faq from './Faq.jsx';
-import { CONTACT, SHOP_FACTS, STORAGE_KEYS } from '../../constants/index.js';
+import { CONTACT, SHOP_FACTS, STORAGE_KEYS, WARRANTY_MONTHS } from '../../constants/index.js';
+import { formatPrice } from '../../utils/format.js';
 import { i18n, t } from '../../i18n/index.js';
 import { forgetDeliveryRules, loadDeliveryRules } from '../../hooks/useDeliveryRules.js';
 import { createOrder, register } from '../../services/httpApi.js';
@@ -294,10 +295,85 @@ describe('the returns page', () => {
     const steps = within(returnSteps()).getAllByRole('listitem');
     expect(steps).toHaveLength(4);
     expect(steps[1]).toHaveTextContent(
-      'დაგვიკავშირდით — შევათანხმებთ, კურიერს გამოვგზავნით თუ თავად გამოგვიგზავნით.',
+      'კურიერს ჩვენ გამოგიგზავნით — მისი მოსვლის დროს ერთად შევათანხმებთ.',
+    );
+    expect(steps[2]).toHaveTextContent(
+      'პროდუქტი კურიერს გადაეცით შეტყობინებიდან 7 დღის განმავლობაში.',
     );
     expect(screen.getByText(/გარანტია 2 წელია მიწოდებიდან/)).toBeInTheDocument();
-    expect(screen.getByText(/მწარმოებლის გარანტია, როგორც წესი 12 თვის/)).toBeInTheDocument();
+  });
+
+  describe('the return courier costs what delivery to the city costs', () => {
+    const feesOf = (fixture) =>
+      fixture.cities.map((c) => `${c.name} — ${formatPrice(Number(c.fee))}`).join(', ');
+
+    it.each([
+      ['Tbilisi and Rustavi', TBILISI_RUSTAVI],
+      ['Batumi alone', BATUMI],
+    ])('lists each city with its fee from GET /delivery: %s', async (_, fixture) => {
+      answer(rules(fixture));
+      await mount(ReturnsWarranty);
+
+      const expected = t('info.returns.returnShipping', { fees: feesOf(fixture) });
+      expect(screen.getByText(expected)).toBeInTheDocument();
+      for (const city of fixture.cities) {
+        expect(expected).toContain(`${city.name} — ${formatPrice(Number(city.fee))}`);
+      }
+    });
+
+    it('a different answer draws a different list', async () => {
+      answer(rules(TBILISI_RUSTAVI));
+      const first = await mount(ReturnsWarranty);
+      expect(first.container.textContent).toContain(feesOf(TBILISI_RUSTAVI));
+      expect(first.container.textContent).not.toContain('ბათუმი');
+      first.unmount();
+
+      forgetDeliveryRules();
+      answer(rules(BATUMI));
+      const second = await mount(ReturnsWarranty);
+      expect(second.container.textContent).toContain(feesOf(BATUMI));
+      expect(second.container.textContent).not.toContain('რუსთავი');
+    });
+
+    it('names no fee, and does not break, when GET /delivery fails', async () => {
+      global.fetch = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) }));
+      const { container } = await mount(ReturnsWarranty);
+
+      expect(screen.getByText(t('info.returns.returnShippingNoFees'))).toBeInTheDocument();
+      expect(container.textContent).not.toContain('₾');
+      expect(container.textContent).not.toContain('{{');
+    });
+  });
+
+  describe('the shop gives the warranty', () => {
+    it.each(['ka', 'en'])('says the term from WARRANTY_MONTHS, in %s', async (lng) => {
+      await i18n.changeLanguage(lng);
+      try {
+        answer(rules());
+        const { container } = await mount(ReturnsWarranty);
+
+        const sentence = screen.getByText(t('info.returns.shopWarranty', { months: WARRANTY_MONTHS }));
+        expect(sentence).toHaveTextContent(String(WARRANTY_MONTHS));
+        expect(container.textContent).not.toContain('{{');
+      } finally {
+        await i18n.changeLanguage('ka');
+      }
+    });
+
+    it('the exclusions are the shop warranty, and leave the legal 2 years alone', async () => {
+      answer(rules());
+      await mount(ReturnsWarranty);
+
+      const exclusions = screen.getByText(/^მაღაზიის გარანტია არ ვრცელდება დაზიანებაზე/);
+      expect(exclusions).toHaveTextContent('ეს კანონით დადგენილ 2 წლის გარანტიას არ ზღუდავს.');
+    });
+
+    it('names no manufacturer and sends nobody to a product description', async () => {
+      answer(rules());
+      const { container } = await mount(ReturnsWarranty);
+
+      expect(container.textContent).not.toMatch(/მწარმოებლ|აღწერაშია|ოფიციალ|ორიგინალ/);
+    });
   });
 
   it('shows the withdrawal form as copyable text, with the shop email from CONTACT', async () => {
@@ -584,5 +660,27 @@ describe('in English', () => {
     await mount(ReturnsWarranty);
 
     expect(screen.getByText(/in-ear earphones/).textContent).toContain('seal');
+  });
+});
+
+describe('storefront texts: who gives the warranty, and for how long', () => {
+  const FILES = ['ka', 'en'].map((lng) => [
+    lng,
+    readFileSync(join(process.cwd(), 'src', 'i18n', `${lng}.json`), 'utf8'),
+  ]);
+
+  it.each(FILES)('%s.json names no official, original or manufacturer claim', (_, source) => {
+    expect(source).not.toMatch(/ოფიციალ|ორიგინალ|მწარმოებლ|აღწერაშია/);
+    expect(source).not.toMatch(/official|original|manufacturer|product description/i);
+  });
+
+  it.each(FILES)('%s.json holds no literal warranty term: it is {{months}}', (_, source) => {
+    expect(source).not.toMatch(/12[\s-]*(თვ|month)/i);
+    expect(source).toContain('{{months}}');
+  });
+
+  it('the shop warranty on the delivery tab and the returns page reads the constant', () => {
+    expect(t('deliveryInfo.warrantyText', { months: WARRANTY_MONTHS })).toContain(`${WARRANTY_MONTHS} თვე`);
+    expect(t('product.warranty', { months: WARRANTY_MONTHS })).toBe(`${WARRANTY_MONTHS} თვის გარანტია`);
   });
 });
